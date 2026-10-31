@@ -53,7 +53,7 @@
 - 新增 `test/public-access-http.test.js`
 - 更新 `test/ui-unification.test.js`、`feeds.test.js`、`sync-v3-http.test.js`、`auth-store.test.js`
 - `docs/API.md`：公开只读接口与管理权限说明
-- `docs/liquid-glass-remaining-fixes/**`：本报告与前后截图
+- `docs/liquid-glass-remaining-fixes/README.md`：本报告（截图未随仓库提交）
 
 ## 3. 关键实现
 
@@ -115,33 +115,18 @@
 - 发现并修复了密度切换不重新触发 `ensureFill` 的问题；现在切换后立即补充加载新列。
 - 发现登录自动化连续失败会触发 10 分钟限速；测试后重启一次性演示服务清除内存限速，生产逻辑未改。
 
-## 5. 前后截图
+## 5. 浏览器截图
 
-目录：`docs/liquid-glass-remaining-fixes/`。改动前来自 `8b0ec0d` 的独立 worktree；改动后来自最终源码的一次性演示库。
+验收在真实 Chrome 中完成，改动前来自 `8b0ec0d` 的独立 worktree，改动后来自最终源码的一次性演示库。覆盖场景：
 
-| 场景 | 修改前 | 修改后 |
-| --- | --- | --- |
-| 390 资料库头部 | [before/sidebar-390.png](before/sidebar-390.png) | [after/sidebar-390.png](after/sidebar-390.png) |
-| 390 资料库滚动后 | — | [after/sidebar-390-scrolled.png](after/sidebar-390-scrolled.png) |
-| 768 资料库 | — | [after/sidebar-768.png](after/sidebar-768.png) |
-| 登录页 1440 | [before/login-1440.png](before/login-1440.png) | [after/login-1440.png](after/login-1440.png) |
-| 登录页 390 | [before/login-390.png](before/login-390.png) | [after/login-390.png](after/login-390.png) |
-| 已登录设备页 | — | [after/login-devices-1440.png](after/login-devices-1440.png) / [390](after/login-devices-390.png) |
-| dotnav 1440 | [before/dotnav-1440.png](before/dotnav-1440.png) | [after/dotnav-1440.png](after/dotnav-1440.png) |
-| dotnav 390 | [before/dotnav-390.png](before/dotnav-390.png) | [after/dotnav-390.png](after/dotnav-390.png) |
-| 编辑 Sheet 1440 | [before/add-1440.png](before/add-1440.png) | [after/add-1440.png](after/add-1440.png) |
-| 编辑 Sheet 390 | [before/add-390.png](before/add-390.png) | [after/add-390.png](after/add-390.png) |
-| 编辑 Sheet 932 | [before/add-932.png](before/add-932.png) | [after/add-932.png](after/add-932.png) |
-| 详情标签/分类输入 | [before/detail-tags.png](before/detail-tags.png) | [after/detail-tags.png](after/detail-tags.png) |
-| 1280 紧凑/标准/宽松 | [前](before/density-1280-compact.png) / [前](before/density-1280-standard.png) / [前](before/density-1280-large.png) | [后](after/density-1280-compact.png) / [后](after/density-1280-standard.png) / [后](after/density-1280-large.png) |
-| 1440 紧凑/标准/宽松 | [前](before/density-1440-compact.png) / [前](before/density-1440-standard.png) / [前](before/density-1440-large.png) | [后](after/density-1440-compact.png) / [后](after/density-1440-standard.png) / [后](after/density-1440-large.png) |
-| 1920 紧凑/标准/宽松 | [前](before/density-1920-compact.png) / [前](before/density-1920-standard.png) / [前](before/density-1920-large.png) | [后](after/density-1920-compact.png) / [后](after/density-1920-standard.png) / [后](after/density-1920-large.png) |
-| 390 三档 | — | [紧凑](after/density-390-compact.png) / [标准](after/density-390-standard.png) / [宽松](after/density-390-large.png) |
-| 1024 Inspector 悬浮 | — | [after/overlay-1024.png](after/overlay-1024.png) |
-| 932 横屏 | — | [after/landscape-932.png](after/landscape-932.png) |
-| 1920 侧栏开关 | — | [after/shelf-1920-sidebar-toggle.png](after/shelf-1920-sidebar-toggle.png) |
-| 公开首页/榜单/统计 | — | [home](after/public-home.png) / [rank](after/public-rank.png) / [stats](after/public-stats.png) |
-| 公开只读详情 | — | [after/public-detail.png](after/public-detail.png) |
+- 资料库：390 头部与滚动后、768、1024 Inspector 悬浮、932 横屏、1920 侧栏开关。
+- 书架密度：1280/1440/1920 的紧凑/标准/宽松三档，以及 390 三档。
+- 登录：1440/390 登录页、已登录设备页。
+- 首页 dotnav：1440/390。
+- 编辑 Sheet：1440/390/932，以及详情标签/分类输入。
+- 公开页：首页、榜单、统计、只读详情。
+
+截图仅用于本轮核对，未随仓库提交。
 
 ## 6. 测试结果
 

@@ -123,7 +123,7 @@
 
 ```text
 npm test                 572 tests / 572 pass / 0 fail
-npm run check:public     pass — 205 text files checked, 111 binary/large skipped
+npm run check:public     pass — 205 text files checked, 46 binary/large skipped
 ```
 
 新增/更新的组件测试覆盖：

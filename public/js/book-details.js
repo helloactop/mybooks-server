@@ -45,16 +45,104 @@
       : `${esc(x.label)}:${esc(x.value)}`)).join(' · ')}</span></div>`;
   }
 
-  function valueRows(book, readOnly) {
-    const pub = [book.publisher, book.pub_year].filter(Boolean).join(' · ');
-    return `
-      <div class="bd-row"><span class="bd-k">出版</span><span class="bd-v">${pub ? esc(pub) : '未设置'}</span></div>
-      <div class="bd-row"><span class="bd-k">ISBN</span><span class="bd-v">${book.isbn ? esc(book.isbn) : '未设置'}</span></div>
-      ${book.douban_id ? `<div class="bd-row"><span class="bd-k">豆瓣</span><span class="bd-v"><a class="bd-link" href="https://book.douban.com/subject/${esc(book.douban_id)}/" target="_blank" rel="noopener noreferrer">查看豆瓣条目 ↗</a></span></div>` : ''}
-      ${readOnly ? '' : identifierRows(book)}`;
+  const statusLabel = (value) => (STATUS.find(([v]) => v === value) || ['', '未设置'])[1];
+  const seriesText = (book) => book.series
+    ? `${esc(book.series)}${book.series_index ? ' #' + esc(String(book.series_index)) : ''}`
+    : '';
+  const missing = () => '<span class="bd-missing">未设置</span>';
+
+  function metaRow(label, value) {
+    return `<div class="bd-row"><span class="bd-k">${esc(label)}</span><span class="bd-v">${value}</span></div>`;
   }
 
-  const statusLabel = (value) => (STATUS.find(([v]) => v === value) || ['', '未设置'])[1];
+  function copyButton(value) {
+    return `<button type="button" class="bd-copy" data-bd-copy="${esc(value)}" aria-label="复制 ISBN">复制</button>`;
+  }
+
+  function inlineError(state) {
+    const error = state.inlineEdit && state.inlineEdit.error;
+    return error ? `<span class="bd-inline-error" role="alert">${esc(error)}</span>` : '';
+  }
+
+  function ratingBlock(book, state, readOnly) {
+    const rating = Number(book.rating) > 0 ? book.rating : '';
+    if (readOnly) {
+      return metaRow('评分', rating
+        ? `${esc(String(rating))} <span class="bd-unit">/ 10</span>`
+        : '<span class="bd-missing">未评分</span>');
+    }
+    if (state.inlineEdit && state.inlineEdit.field === 'rating') {
+      return `<div class="bd-row bd-row-editing">
+        <span class="bd-k">评分</span>
+        <span class="bd-v bd-quick-editor" data-bd-inline-editor="rating">
+          <input class="bd-quick-input bd-quick-rating" type="number" min="0" max="10" step="0.1"
+            value="${esc(state.inlineEdit.draft || '')}" placeholder="0–10"
+            data-bd-inline="rating" aria-label="评分（满分 10）">
+          <span class="bd-unit">/ 10</span>
+          ${inlineError(state)}
+        </span>
+      </div>`;
+    }
+    return metaRow('评分', `<button type="button" class="bd-static-value${rating ? '' : ' is-empty'}"
+      data-bd-edit-rating aria-label="${rating ? '编辑评分' : '添加评分'}">${rating
+      ? `${esc(String(rating))} <span class="bd-unit">/ 10</span>` : '添加评分'}</button>`);
+  }
+
+  function seriesBlock(book, state, readOnly) {
+    const editing = state.inlineEdit && state.inlineEdit.field === 'series';
+    if (readOnly) {
+      return book.series ? metaRow('系列', seriesText(book)) : '';
+    }
+    if (editing) {
+      return `<div class="bd-row bd-row-editing">
+        <span class="bd-k">系列</span>
+        <span class="bd-v bd-quick-editor bd-series-editor" data-bd-inline-editor="series">
+          <input class="bd-quick-input" type="text" value="${esc(state.inlineEdit.name || '')}"
+            placeholder="系列名" maxlength="200" data-bd-inline="series-name" aria-label="系列名">
+          <input class="bd-quick-input bd-quick-index" type="text" value="${esc(state.inlineEdit.index || '')}"
+            placeholder="序号" maxlength="20" data-bd-inline="series-index" aria-label="系列序号">
+          ${inlineError(state)}
+        </span>
+      </div>`;
+    }
+    if (!book.series) return '';
+    return metaRow('系列', `<button type="button" class="bd-static-value" data-bd-edit-series aria-label="编辑系列">${seriesText(book)}</button>`);
+  }
+
+  function primaryInfoHtml(book, state, readOnly) {
+    const pub = [book.publisher, book.pub_year].filter(Boolean).join(' · ');
+    let rows = ratingBlock(book, state, readOnly) + seriesBlock(book, state, readOnly);
+    if (pub) rows += metaRow('出版', esc(pub));
+    if (book.isbn) rows += metaRow('ISBN', `<span class="bd-copy-value"><span>${esc(book.isbn)}</span>${copyButton(book.isbn)}</span>`);
+    if (book.douban_id) {
+      rows += metaRow('豆瓣', `<a class="bd-link" href="https://book.douban.com/subject/${esc(book.douban_id)}/" target="_blank" rel="noopener noreferrer">查看豆瓣条目 ↗</a>`);
+    }
+    return rows;
+  }
+
+  function moreInfoHtml(book, state, readOnly, custom) {
+    if (readOnly) return '';
+    const pub = [book.publisher, book.pub_year].filter(Boolean).join(' · ');
+    let rows = '';
+    if (!pub) rows += metaRow('出版', missing());
+    if (!book.isbn) rows += metaRow('ISBN', missing());
+    if (!book.douban_id) rows += metaRow('豆瓣', missing());
+    if (!book.series && !(state.inlineEdit && state.inlineEdit.field === 'series')) {
+      rows += metaRow('系列', '<button type="button" class="bd-static-value is-empty" data-bd-edit-series>添加系列</button>');
+    }
+    rows += identifierRows(book) || metaRow('标识符', missing());
+    const customEntries = Object.entries(custom);
+    const customHtml = customEntries.length
+      ? `<div class="bd-more-subtitle">自定义字段</div><div class="bd-meta">${customEntries.map(([key, value]) => metaRow(key, esc(value))).join('')}</div>`
+      : '';
+    return `<section class="bd-section">
+      <button type="button" class="bd-more-toggle" data-bd-more aria-expanded="${state.moreExpanded}">
+        <span>更多信息</span>
+        <svg width="10" height="6" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      ${state.moreExpanded ? `<div class="bd-more-panel"><div class="bd-meta">${rows}</div>${customHtml}<p class="bd-more-note">空字段可在「编辑全部」中补充。</p></div>` : ''}
+    </section>`;
+  }
 
   function summaryHtml(book, state) {
     if (!book.summary) return '';
@@ -95,7 +183,6 @@
     const readOnly = !!state.readOnly;
     const tags = tagsOf(book);
     const visibleTags = state.tagsExpanded ? tags : tags.slice(0, TAG_PREVIEW);
-    const rating = Number(book.rating) > 0 ? book.rating : '';
     const custom = book.custom_display && typeof book.custom_display === 'object' ? book.custom_display : {};
     const memberships = Array.isArray(book.collections) ? book.collections : [];
     const available = (state.collections || []).filter((c) => !memberships.some((m) => String(m.id) === String(c.id)));
@@ -116,32 +203,18 @@
         <div class="bd-intro">
           <h2 class="bd-title">${esc(book.title)}</h2>
           <p class="bd-author">${book.author ? esc(book.author) : '未设置作者'}</p>
-          ${readOnly
-            ? `<p class="bd-status-static">阅读状态 · <span>${esc(statusLabel(book.status))}</span></p>`
-            : `<div class="seg seg--track bd-status" role="group" aria-label="阅读状态">
-                ${STATUS.map(([value, label]) => `<button type="button" class="${book.status === value ? 'active' : ''}" data-bd-status="${value}">${label}</button>`).join('')}
-              </div>`}
         </div>
       </div>
+      ${readOnly
+        ? `<p class="bd-status-static">阅读状态 · <span>${esc(statusLabel(book.status))}</span></p>`
+        : `<div class="seg seg--track bd-status" role="group" aria-label="阅读状态">
+            ${STATUS.map(([value, label]) => `<button type="button" class="${book.status === value ? 'active' : ''}" data-bd-status="${value}">${label}</button>`).join('')}
+          </div>`}
 
-      <div class="bd-meta">
-        <div class="bd-row">
-          <span class="bd-k">评分</span>
-          <span class="bd-v${readOnly ? '' : ' bd-rating-line'}">${readOnly
-            ? (rating ? `${esc(String(rating))} / 10` : '未评分')
-            : `<input class="bd-input bd-rating-input" type="number" min="0" max="10" step="0.1" value="${esc(String(rating))}" placeholder="未设置" data-bd-rating aria-label="评分（满分 10）"><span class="bd-unit">/ 10</span>`}</span>
-        </div>
-        ${readOnly
-          ? (book.series ? `<div class="bd-row"><span class="bd-k">系列</span><span class="bd-v">${esc(book.series)}${book.series_index ? ' #' + esc(String(book.series_index)) : ''}</span></div>` : '')
-          : `<div class="bd-row">
-              <span class="bd-k">系列</span>
-              <span class="bd-v bd-series">
-                <input class="bd-input" type="text" value="${esc(book.series || '')}" placeholder="系列名" data-bd-series-name aria-label="系列名">
-                <input class="bd-input bd-series-index" type="text" value="${esc(book.series_index || '')}" placeholder="序号" data-bd-series-index aria-label="系列序号">
-              </span>
-            </div>`}
-        ${valueRows(book, readOnly)}
-      </div>
+      <section class="bd-section bd-info-section">
+        <h3 class="bd-section-title">书籍信息</h3>
+        <div class="bd-meta">${primaryInfoHtml(book, state, readOnly)}</div>
+      </section>
 
       ${summaryHtml(book, state)}
       ${logsHtml(book)}
@@ -150,7 +223,7 @@
         <h3 class="bd-section-title">标签</h3>
         <div class="bd-chips">
           ${readOnly
-            ? tags.map((t) => `<span class="tag-chip bd-tag">${esc(t)}</span>`).join('')
+            ? (tags.length ? tags.map((t) => `<span class="tag-chip bd-tag">${esc(t)}</span>`).join('') : '<span class="bd-missing">暂无标签</span>')
             : `${visibleTags.map((t) => `<span class="tag-chip bd-tag">${esc(t)}<button type="button" data-bd-remove-tag="${esc(t)}" aria-label="移除标签 ${esc(t)}">✕</button></span>`).join('')}
                ${tags.length > TAG_PREVIEW ? `<button type="button" class="bd-chip-more" data-bd-tags-more>${state.tagsExpanded ? '收起' : `显示更多 (${tags.length - TAG_PREVIEW})`}</button>` : ''}
                <input class="bd-chip-input" type="text" placeholder="+ 标签" data-bd-new-tag aria-label="添加标签">`}
@@ -173,7 +246,7 @@
         ${fileRows(book)}
       </section>
 
-      ${Object.keys(custom).length ? `<section class="bd-section"><h3 class="bd-section-title">自定义字段</h3><div class="bd-meta">${Object.entries(custom).map(([k, v]) => `<div class="bd-row"><span class="bd-k">${esc(k)}</span><span class="bd-v">${esc(v)}</span></div>`).join('')}</div></section>` : ''}
+      ${moreInfoHtml(book, state, readOnly, custom)}
 
       <div class="bd-actions">
         <div class="bd-actions-main">
@@ -214,6 +287,8 @@
       readOnly: !!options.readOnly,
       tagsExpanded: false,
       summaryExpanded: false,
+      moreExpanded: false,
+      inlineEdit: null,
       collectionPop: false,
       collections: null,
       collectionsLoading: false,
@@ -240,13 +315,40 @@
       }
     }
 
+    function captureInlineDrafts() {
+      const inline = state.inlineEdit;
+      if (!inline) return;
+      const rating = host.querySelector('[data-bd-inline="rating"]');
+      if (inline.field === 'rating' && rating) inline.draft = rating.value;
+      if (inline.field === 'series') {
+        const name = host.querySelector('[data-bd-inline="series-name"]');
+        const index = host.querySelector('[data-bd-inline="series-index"]');
+        if (name) inline.name = name.value;
+        if (index) inline.index = index.value;
+      }
+    }
+
+    function restoreInlineFocus() {
+      const inline = state.inlineEdit;
+      if (!inline) return;
+      const selector = inline.field === 'rating'
+        ? '[data-bd-inline="rating"]'
+        : (inline.focus === 'index' ? '[data-bd-inline="series-index"]' : '[data-bd-inline="series-name"]');
+      const input = host.querySelector(selector);
+      if (!input) return;
+      input.focus({ preventScroll: true });
+      try { input.setSelectionRange(input.value.length, input.value.length); } catch { /* ignore */ }
+    }
+
     function render() {
       if (destroyed || !state.book) return;
+      captureInlineDrafts();
       const previous = host.querySelector('.bd-scroll');
       const scrollTop = previous ? previous.scrollTop : 0;
       host.innerHTML = contentHtml(state.book, state);
       const next = host.querySelector('.bd-scroll');
       if (next && scrollTop) next.scrollTop = scrollTop;
+      restoreInlineFocus();
       fitSummary();
       if (!host.getClientRects().length) requestAnimationFrame(fitSummary);
     }
@@ -256,6 +358,8 @@
       if (!state.book || state.book.id !== book.id) {
         state.tagsExpanded = false;
         state.summaryExpanded = false;
+        state.moreExpanded = false;
+        state.inlineEdit = null;
         state.collectionPop = false;
         state.collections = null;
       }
@@ -293,6 +397,119 @@
         }
       } finally {
         state.busy = false;
+      }
+    }
+
+    function startInline(field) {
+      if (state.readOnly || !state.book || state.inlineEdit) return;
+      if (field === 'rating') {
+        state.inlineEdit = {
+          field: 'rating',
+          draft: Number(state.book.rating) > 0 ? String(state.book.rating) : '',
+          error: '',
+          focus: 'rating',
+        };
+      } else if (field === 'series') {
+        state.inlineEdit = {
+          field: 'series',
+          name: state.book.series || '',
+          index: state.book.series_index ? String(state.book.series_index) : '',
+          error: '',
+          focus: 'name',
+        };
+      } else {
+        return;
+      }
+      render();
+    }
+
+    function cancelInline() {
+      if (!state.inlineEdit) return false;
+      const field = state.inlineEdit.field;
+      state.inlineEdit = null;
+      render();
+      const trigger = host.querySelector(field === 'rating' ? '[data-bd-edit-rating]' : '[data-bd-edit-series]');
+      trigger?.focus({ preventScroll: true });
+      return true;
+    }
+
+    async function commitInline() {
+      const inline = state.inlineEdit;
+      if (!inline || state.busy) return;
+      captureInlineDrafts();
+      let payload;
+      let message;
+      if (inline.field === 'rating') {
+        const raw = String(inline.draft || '').trim();
+        if (raw) {
+          const value = Number(raw);
+          if (!Number.isFinite(value) || value < 0 || value > 10) {
+            inline.error = '评分请输入 0 到 10 之间的数字';
+            render();
+            setTimeout(restoreInlineFocus, 0);
+            return;
+          }
+          payload = { rating: value };
+        } else {
+          payload = { rating: 0 };
+        }
+        message = payload.rating ? '评分已更新' : '评分已清除';
+      } else {
+        const name = String(inline.name || '').trim();
+        const index = String(inline.index || '').trim();
+        if (!name && index) {
+          inline.error = '请先填写系列名';
+          render();
+          setTimeout(restoreInlineFocus, 0);
+          return;
+        }
+        if (index && !/^\d+(\.\d+)?$/.test(index)) {
+          inline.error = '系列序号应为数字';
+          render();
+          setTimeout(restoreInlineFocus, 0);
+          return;
+        }
+        payload = { series: name, series_index: index };
+        message = '系列已更新';
+      }
+      state.busy = true;
+      try {
+        const updated = await patchBook(state.book, payload);
+        if (updated) state.book = updated;
+        state.inlineEdit = null;
+        render();
+        toastSafe(message);
+        await options.onChanged?.(state.book, payload);
+      } catch (err) {
+        if (err.code === 'CONFLICT') {
+          try {
+            const fresh = await loadBook(state.book.id);
+            if (fresh) state.book = fresh;
+          } catch { /* keep old book; user can retry */ }
+        }
+        inline.error = err.message || '保存失败，请重试';
+        render();
+        setTimeout(restoreInlineFocus, 0);
+        toastSafe(inline.error, true);
+      } finally {
+        state.busy = false;
+      }
+    }
+
+    async function copyText(value) {
+      try {
+        await navigator.clipboard.writeText(value);
+        toastSafe('ISBN 已复制');
+      } catch {
+        const area = document.createElement('textarea');
+        area.value = value;
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        const ok = document.execCommand && document.execCommand('copy');
+        area.remove();
+        toastSafe(ok ? 'ISBN 已复制' : '复制失败，请手动选择', !ok);
       }
     }
 
@@ -352,7 +569,16 @@
         return;
       }
       if (e.target.closest('[data-bd-close]')) { e.preventDefault(); options.onClose?.(); return; }
+      const copy = e.target.closest('[data-bd-copy]');
+      if (copy) {
+        e.preventDefault();
+        copyText(copy.dataset.bdCopy || '');
+        return;
+      }
       if (state.readOnly) return;
+      if (e.target.closest('[data-bd-edit-rating]')) { startInline('rating'); return; }
+      if (e.target.closest('[data-bd-edit-series]')) { startInline('series'); return; }
+      if (e.target.closest('[data-bd-more]')) { state.moreExpanded = !state.moreExpanded; render(); return; }
       const status = e.target.closest('[data-bd-status]');
       if (status) { patch({ status: status.dataset.bdStatus }, '状态已更新'); return; }
       if (e.target.closest('[data-bd-tags-more]')) { state.tagsExpanded = !state.tagsExpanded; render(); return; }
@@ -381,24 +607,54 @@
       if (e.target.closest('[data-bd-delete]')) { options.onDelete?.(state.book); }
     }
 
-    function onChange(e) {
-      if (!state.book || state.readOnly) return;
-      if (e.target.matches('[data-bd-rating]')) {
-        patch({ rating: e.target.value === '' ? 0 : Number(e.target.value) }, '评分已更新');
-        return;
+    function onInput(e) {
+      if (!state.inlineEdit || !e.target.closest('[data-bd-inline-editor]')) return;
+      captureInlineDrafts();
+      if (state.inlineEdit.error) {
+        state.inlineEdit.error = '';
+        const error = host.querySelector('.bd-inline-error');
+        if (error) {
+          error.textContent = '';
+          error.hidden = true;
+        }
       }
-      if (e.target.matches('[data-bd-series-name], [data-bd-series-index]')) {
-        const name = host.querySelector('[data-bd-series-name]');
-        const index = host.querySelector('[data-bd-series-index]');
-        patch({
-          series: name ? name.value.trim() : '',
-          series_index: index ? index.value.trim() : '',
-        }, '系列已更新');
-      }
+    }
+
+    function onFocusIn(e) {
+      if (!state.inlineEdit || state.inlineEdit.field !== 'series') return;
+      if (e.target.matches('[data-bd-inline="series-index"]')) state.inlineEdit.focus = 'index';
+      else if (e.target.matches('[data-bd-inline="series-name"]')) state.inlineEdit.focus = 'name';
+    }
+
+    function onFocusOut(e) {
+      const inline = state.inlineEdit;
+      if (!inline || !e.target.closest('[data-bd-inline-editor]')) return;
+      const editor = e.target.closest('[data-bd-inline-editor]');
+      if (e.relatedTarget && editor.contains(e.relatedTarget)) return;
+      if (e.relatedTarget && e.relatedTarget.closest(
+        '[data-bd-edit-rating], [data-bd-edit-series], [data-bd-more]'
+      )) return;
+      const field = inline.field;
+      setTimeout(() => {
+        if (state.inlineEdit && state.inlineEdit.field === field && !state.busy) commitInline();
+      }, 0);
     }
 
     function onKeydown(e) {
       if (state.readOnly) return;
+      if (state.inlineEdit && e.target.closest('[data-bd-inline-editor]')) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commitInline();
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          cancelInline();
+          return;
+        }
+      }
       if (e.key === 'Enter' && e.target.matches('[data-bd-new-tag]')) {
         e.preventDefault();
         const value = e.target.value.trim();
@@ -439,6 +695,12 @@
         closePop();
         return;
       }
+      if (state.inlineEdit) {
+        e.preventDefault();
+        e.stopPropagation();
+        cancelInline();
+        return;
+      }
       if (host.closest('.modal.hidden')) return;
       e.preventDefault();
       e.stopPropagation();
@@ -470,7 +732,9 @@
     }
 
     host.addEventListener('click', onClick);
-    host.addEventListener('change', onChange);
+    host.addEventListener('input', onInput);
+    host.addEventListener('focusin', onFocusIn);
+    host.addEventListener('focusout', onFocusOut);
     host.addEventListener('keydown', onKeydown);
     host.addEventListener('submit', onSubmit);
     host.addEventListener('pointerdown', startDrag);
@@ -489,7 +753,9 @@
         if (destroyed) return;
         destroyed = true;
         host.removeEventListener('click', onClick);
-        host.removeEventListener('change', onChange);
+        host.removeEventListener('input', onInput);
+        host.removeEventListener('focusin', onFocusIn);
+        host.removeEventListener('focusout', onFocusOut);
         host.removeEventListener('keydown', onKeydown);
         host.removeEventListener('submit', onSubmit);
         host.removeEventListener('pointerdown', startDrag);

@@ -91,6 +91,43 @@ test('三档密度使用固定封面宽度与独立间距，Inspector 悬浮时�
   assert.match(read('public/js/shelf/store.js'), /'compact', 'standard', 'large'/);
 });
 
+test('Finder 四级侧栏：顶级入口、分组、条目、辅助数量层级明确', () => {
+  const section = ruleBody(shelfCss, '.wb-section-head {');
+  assert.match(section, /font-size: 12\.75px/);
+  assert.match(section, /font-weight: 650/);
+  assert.match(section, /color: #62646c/i);
+  assert.doesNotMatch(section, /text-transform:\s*uppercase/);
+  const row = ruleBody(shelfCss, '.wb-row {');
+  assert.match(row, /font-size: 14px/);
+  assert.match(row, /font-weight: 450/);
+  assert.match(row, /color: #35363b/i);
+  assert.match(row, /min-height: 36px/);
+  const active = ruleBody(shelfCss, '.wb-row.is-active');
+  assert.match(active, /background: #e9e9ec/i);
+  assert.match(active, /font-weight: 600/);
+  const all = ruleBody(shelfCss, '.wb-row-all {');
+  assert.match(all, /font-size: 15px/);
+  assert.match(all, /font-weight: 650/);
+  assert.match(all, /color: #1d1d1f/i);
+  assert.match(ruleBody(shelfCss, '.wb-row-all.is-active'), /font-weight: 650/);
+  const count = ruleBody(shelfCss, '.wb-row .wb-row-count {');
+  assert.match(count, /font-size: 12px/);
+  assert.match(count, /color: #929399/i);
+  assert.doesNotMatch(count, /background:/);
+  assert.match(ruleBody(shelfCss, '.wb-facet-filter {'), /font-size: 13\.5px/);
+  assert.match(ruleBody(shelfCss, '.wb-facet-filter {'), /height: 36px/);
+  assert.match(shelfCss, /\.wb-section \+ \.wb-section \{ margin-top: 22px; \}/);
+  assert.match(read('public/js/shelf/sidebar.js'), /className: 'wb-row-all'/);
+});
+
+test('手机横屏 932 使用资料库抽屉，不占用书封列宽', () => {
+  assert.match(shelfCss, /@media \(orientation: landscape\) and \(max-height: 560px\) and \(max-width: 1024px\)/);
+  assert.match(shelfCss, /body\[data-page="shelf"\] main\.wb:not\(\.sidebar-collapsed\) \.wb-side/);
+  assert.match(read('public/js/shelf/main.js'), /phoneLandscapeMq/);
+  assert.match(read('public/js/shelf/main.js'), /const compactSidebar/);
+  assert.match(read('public/js/shelf/main.js'), /setSidebarOpen\(!compactSidebar\(\)/);
+});
+
 test('侧栏头部在滚动区外，资料库只保留一层 Frosted 材质', () => {
   const sidebar = read('public/js/shelf/sidebar.js');
   assert.ok(sidebar.indexOf('<div class="wb-side-head">') < sidebar.indexOf('<div class="wb-side-scroll">'));
@@ -201,8 +238,8 @@ test('按钮/分段控件共享 control token，不再用黑/蓝实底表示选�
   assert.match(primary, /var\(--accent\)/);
   assert.doesNotMatch(primary, /background:\s*(#0066cc|#0077ed|#1d1d1f|var\(--night\))/i);
   assert.doesNotMatch(shelfCss, /\.wb-inspector-status/);
-  assert.doesNotMatch(ruleBody(shelfCss, '.wb-layout-seg button.active'), /var\(--wb-ink\)|#1d1d1f|#fff/);
-  assert.doesNotMatch(ruleBody(shelfCss, '.wb-view button.active'), /var\(--wb-ink\)|#1d1d1f|#fff/);
+  assert.doesNotMatch(ruleBody(shelfCss, '.wb-layout-seg button.active'), /background:\s*(var\(--wb-ink\)|#1d1d1f|#fff)/);
+  assert.doesNotMatch(ruleBody(shelfCss, '.wb-view button.active'), /background:\s*(var\(--wb-ink\)|#1d1d1f|#fff)/);
   assert.match(ruleBody(shelfCss, '.wb-action'), /var\(--control/);
 });
 
@@ -217,23 +254,63 @@ test('详情只剩一套：BookDetails 供 Inspector 与其他页面共用，旧
   assert.doesNotMatch(main, /openDetail\(Number\(target\.dataset\.id\)\)/);
   assert.match(main, /S\.inspector\.editBook/);
   const details = read('public/js/book-details.js');
-  ['data-bd-status', 'data-bd-rating', 'data-bd-collection-add', 'data-bd-edit', 'data-bd-delete', 'data-bd-grabber'].forEach((needle) => {
+  ['data-bd-status', 'data-bd-edit-rating', 'data-bd-edit-series', 'data-bd-collection-add', 'data-bd-edit', 'data-bd-delete', 'data-bd-copy', 'data-bd-grabber'].forEach((needle) => {
     assert.ok(details.includes(needle), `book-details.js 缺少 ${needle}`);
   });
   assert.match(details, /onClose/);
   assert.match(details, /onChanged/);
   pages.forEach((page) => {
-    assert.match(read(page), /\/js\/book-details\.js\?v=3/, `${page} 缺少统一详情组件`);
+    assert.match(read(page), /\/js\/book-details\.js\?v=5/, `${page} 缺少统一详情组件`);
   });
+});
+
+test('详情展示优先：评分/系列默认静态，行内编辑保护草稿与焦点', () => {
+  const details = read('public/js/book-details.js');
+  assert.match(details, /data-bd-edit-rating/);
+  assert.match(details, /data-bd-edit-series/);
+  assert.match(details, /data-bd-inline="rating"/);
+  assert.match(details, /data-bd-inline="series-name"/);
+  assert.match(details, /data-bd-more/);
+  assert.match(details, /data-bd-copy/);
+  assert.match(details, /function captureInlineDrafts/);
+  assert.match(details, /function restoreInlineFocus/);
+  assert.match(details, /async function commitInline/);
+  assert.match(details, /focusout/);
+  assert.doesNotMatch(details, /data-bd-rating\b/);
+  const title = ruleBody(style, '.bd-title {');
+  assert.match(title, /font-size: 21px/);
+  assert.match(title, /font-weight: 650/);
+  const author = ruleBody(style, '.bd-author {');
+  assert.match(author, /font-size: 13\.5px/);
+  const section = ruleBody(style, '.bd-section-title {');
+  assert.match(section, /font-size: 13px/);
+  assert.match(section, /font-weight: 650/);
+  assert.doesNotMatch(section, /uppercase|letter-spacing:\s*0\.06em/);
+  assert.match(ruleBody(style, '.bd-quick-input {'), /height: 32px/);
+  assert.match(style, /\.bd-more-toggle/);
+  assert.match(style, /\.bd-copy/);
+  const viewBlock = read('public/shelf.html').slice(
+    read('public/shelf.html').indexOf('id="wbViewToggle"'),
+    read('public/shelf.html').indexOf('id="wbLayoutBtn"')
+  );
+  assert.match(viewBlock, /fill="none"/);
+  assert.equal((viewBlock.match(/<rect/g) || []).length, 7, '网格 4 个 + 列表 3 个空心方框');
+  assert.equal((viewBlock.match(/stroke="currentColor"/g) || []).length >= 2, true);
+  assert.doesNotMatch(viewBlock, /fill="currentColor"/);
+  assert.match(ruleBody(shelfCss, '.wb-view button {'), /width: 28px/);
+  assert.match(ruleBody(shelfCss, '.wb-view button {'), /color: #6e6e73/i);
+  assert.match(ruleBody(shelfCss, '.wb-view button.active'), /color: #1d1d1f/i);
+  assert.match(shelfCss, /\.wb-view button \{ width: 44px; min-width: 44px; height: 44px; \}/);
+  assert.match(glassCss, /\.wb-view\.lg-surface button:not\(\.active\)[\s\S]*?color: #6e6e73/);
 });
 
 test('双击/选择/键盘路径与资源版本保持接线', () => {
   const shelf = read('public/shelf.html');
   assert.ok(shelf.indexOf('/js/book-details.js') < shelf.indexOf('/js/shelf/inspector.js'));
   const versions = {
-    'css/style.css': '118',
-    'css/liquid-glass.css': '5',
-    'css/shelf-workbench.css': '41',
+    'css/style.css': '120',
+    'css/liquid-glass.css': '6',
+    'css/shelf-workbench.css': '44',
     'js/chrome.js': '39',
     'js/api.js': '2',
     'js/overlay.js': '2',
@@ -242,11 +319,11 @@ test('双击/选择/键盘路径与资源版本保持接线', () => {
     'js/common.js': '44',
     'js/modal.js': '2',
     'js/select.js': '3',
-    'js/shelf/main.js': '40',
+    'js/shelf/main.js': '41',
     'js/shelf/store.js': '36',
-    'js/shelf/sidebar.js': '37',
+    'js/shelf/sidebar.js': '39',
     'js/shelf/inspector.js': '37',
-    'js/book-details.js': '3',
+    'js/book-details.js': '5',
   };
   pages.forEach((page) => {
     const html = read(page);
@@ -257,9 +334,9 @@ test('双击/选择/键盘路径与资源版本保持接线', () => {
     });
   });
   const sw = read('public/sw.js');
-  assert.match(sw, /CACHE_VERSION = 'v178'/);
+  assert.match(sw, /CACHE_VERSION = 'v182'/);
   Object.entries(versions).forEach(([asset, version]) => {
     assert.match(sw, new RegExp(`'/${asset.replace(/[/.]/g, '\\$&')}\\?v=${version}'`), `sw.js 缺少 ${asset}@${version}`);
   });
-  assert.match(sw, /'\/js\/book-details\.js\?v=3'/);
+  assert.match(sw, /'\/js\/book-details\.js\?v=5'/);
 });

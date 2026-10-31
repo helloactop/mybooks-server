@@ -317,7 +317,10 @@ html[data-glass-tier] :is(.wb-circle, .wb-search, .wb-sort .sel-trigger, .wb-vie
   color: var(--wb-ink, #1d1d1f);
 }
 html[data-glass-tier] .wb-view.lg-surface button:not(.active) {
-  color: var(--wb-ink, #1d1d1f);
+  color: #6e6e73;
+}
+html[data-glass-tier] .wb-view.lg-surface button.active {
+  color: #1d1d1f;
 }
 html[data-glass-tier] .wb-view.lg-surface button:active {
   transform: scale(0.9);

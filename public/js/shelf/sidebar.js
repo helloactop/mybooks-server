@@ -15,8 +15,8 @@
 
   const chevron = '<svg class="wb-chevron" width="8" height="5" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
-  function row({ label, count, active, axis, value, extra = '' }) {
-    return `<button type="button" class="wb-row${active ? ' is-active' : ''}" data-axis="${axis}" data-value="${esc(value)}" title="${esc(label)}">
+  function row({ label, count, active, axis, value, extra = '', className = '' }) {
+    return `<button type="button" class="wb-row${active ? ' is-active' : ''}${className ? ' ' + className : ''}" data-axis="${axis}" data-value="${esc(value)}" title="${esc(label)}">
       <span class="wb-row-name">${esc(label)}</span>
       <span class="wb-row-count">${count === null || count === undefined ? '—' : count}</span>
       ${extra}
@@ -196,7 +196,7 @@
     </div>
     <div class="wb-side-scroll">
       <section class="wb-section">
-        ${row({ label: '全部图书', count: f.total, active: allActive, axis: 'all', value: '' })}
+        ${row({ label: '全部图书', count: f.total, active: allActive, axis: 'all', value: '', className: 'wb-row-all' })}
       </section>
 
       <section class="wb-section">

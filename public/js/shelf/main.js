@@ -6,6 +6,8 @@
   const S = window.ShelfUI;
   const state = () => S.state;
   const isMobile = () => window.matchMedia('(max-width: 819px)').matches;
+  const phoneLandscapeMq = window.matchMedia('(orientation: landscape) and (max-height: 560px) and (max-width: 1024px)');
+  const compactSidebar = () => isMobile() || phoneLandscapeMq.matches;
   let viewSeq = 0;
   let longPressTimer = null;
   let longPressOrigin = null;
@@ -173,7 +175,7 @@
     syncSortUI();
     syncSearchPill();
     clearSelectionAndInspector();
-    if (isMobile()) closeSidebar();
+    if (compactSidebar()) closeSidebar();
     S.syncUrl();
     if (refreshFacets) await S.loadFacets();
     if (seq !== viewSeq) return;
@@ -354,7 +356,7 @@
     });
 
     $('#wbAdd').addEventListener('click', () => {
-      if (isMobile()) closeSidebar();
+      if (compactSidebar()) closeSidebar();
       if (typeof openBookModal === 'function') openBookModal(null);
     });
 
@@ -414,7 +416,7 @@
     });
 
     $('#wbSidebarToggle').addEventListener('click', () => {
-      setSidebarOpen($('#shelfWorkbench').classList.contains('sidebar-collapsed'), { persist: !isMobile() });
+      setSidebarOpen($('#shelfWorkbench').classList.contains('sidebar-collapsed'), { persist: !compactSidebar() });
     });
     $('#wbScrim').addEventListener('click', () => closeSidebar());
     $('#wbInspectorScrim').addEventListener('click', () => S.inspector.hide());
@@ -441,7 +443,7 @@
     const syncBodyUi = () => {
       const searchOpen = document.body.classList.contains('search-open');
       $('#wbSearchClose').hidden = !searchOpen;
-      if ((searchOpen || document.body.classList.contains('modal-open')) && isMobile()) closeSidebar();
+      if ((searchOpen || document.body.classList.contains('modal-open')) && compactSidebar()) closeSidebar();
     };
     new MutationObserver(syncBodyUi).observe(document.body, { attributes: true, attributeFilter: ['class'] });
     syncBodyUi();
@@ -456,7 +458,7 @@
           closeLayoutMenu();
           return;
         }
-        if (isMobile() && !$('#shelfWorkbench').classList.contains('sidebar-collapsed')) {
+        if (compactSidebar() && !$('#shelfWorkbench').classList.contains('sidebar-collapsed')) {
           closeSidebar();
           return;
         }
@@ -469,7 +471,7 @@
       }
     });
 
-    setSidebarOpen(!isMobile() && desktopSidebarOpen(), { persist: false });
+    setSidebarOpen(!compactSidebar() && desktopSidebarOpen(), { persist: false });
 
     let wasMobile = isMobile();
     let wasLandscape = window.innerWidth > window.innerHeight;
@@ -484,7 +486,7 @@
         // 跨断点一律先收起;回到桌面宽度才按**当前**偏好恢复侧栏 ——
         // 不能用进页面时读到的旧值,否则本次会话里刚收起/展开的选择不作数。
         // 详情/弹窗/搜索浮层正打开时保持收起,避免三栏叠在一起。
-        if (now || state().inspectorOpen || document.body.classList.contains('modal-open')
+        if (now || compactSidebar() || state().inspectorOpen || document.body.classList.contains('modal-open')
           || document.body.classList.contains('search-open')) closeSidebar();
         else setSidebarOpen(desktopSidebarOpen(), { persist: false });
         wasMobile = now;

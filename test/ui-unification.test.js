@@ -32,13 +32,62 @@ test('全站使用冷白 token，不再有暖米白/登录彩虹场景', () => {
 
 test('玻璃参数克制且仍保留真实折射引擎', () => {
   assert.match(glassCss, /--liquid-refraction:\s*12/);
-  assert.match(glassCss, /--liquid-chroma:\s*0\.12/);
+  assert.match(glassCss, /--liquid-chroma:\s*0\.06/);
   assert.match(glassCss, /--liquid-saturation:\s*140%/);
   assert.match(glassCss, /--liquid-opacity:\s*0\.76/);
   assert.match(glassCss, /backdrop-filter:\s*var\(--lg-filter/);
   const engine = read('public/js/liquid-glass.js');
   assert.match(engine, /feDisplacementMap/);
   assert.match(engine, /resolveTier/);
+});
+
+test('第三轮材质：选中态中性、蓝色只留给键盘焦点，主按钮不再发光', () => {
+  assert.match(style, /--selected-edge:\s*rgba\(0, 0, 0, 0\.1\)/);
+  assert.match(style, /--control-shadow:\s*0 1px 2px rgba\(0, 0, 0, 0\.03\)/);
+  const segActive = ruleBody(style, '.seg button.active');
+  assert.match(segActive, /var\(--selected-bg\)/);
+  assert.doesNotMatch(segActive, /0, 102, 204|inset 0 -2px/i);
+  const primary = ruleBody(style, '.btn-primary {');
+  assert.doesNotMatch(primary, /linear-gradient|0 4px 14px|0 6px 18px/i);
+  assert.match(style, /:is\(\.seg button, \.btn, \.icon-btn, \.sel-trigger\):focus-visible/);
+  assert.match(style, /\.sel-trigger:active/);
+  assert.match(shelfCss, /\.wb-circle:active \{[^}]*control-bg-pressed/);
+  assert.match(shelfCss, /main\.wb\.inspector-open \.wb-chrome #wbInspectorToggle/);
+});
+
+test('第三轮层级：大面板近实体、遮罩不再二次模糊、内部菜单不折射', () => {
+  assert.match(glassCss, /:is\(\.wb-side, \.wb-inspector, \.modal-box\)/);
+  assert.match(glassCss, /background-color: rgb\(255 255 255 \/ 0\.985\)/);
+  assert.match(glassCss, /background-color: rgb\(247 248 250 \/ 0\.96\)/);
+  assert.match(glassCss, /html\[data-glass-tier="full"\] \.modal,[\s\S]*?background: rgba\(20, 20, 24, 0\.38\);[\s\S]*?backdrop-filter: none;/);
+  assert.doesNotMatch(ruleBody(glassCss, '.lg-surface {'), /inset 0 -1px 0/);
+  const details = read('public/js/book-details.js');
+  assert.doesNotMatch(details, /class="bd-pop" data-glass="refract"/);
+});
+
+test('第三轮书架：84px 顶距、20px 间距、四列密度与三栏明度层级', () => {
+  const grid = ruleBody(shelfCss, '.wb-grid {');
+  assert.match(grid, /minmax\(var\(--wb-card-min\), 1fr\)/);
+  assert.match(grid, /gap: 20px/);
+  assert.match(grid, /padding: 84px/);
+  assert.doesNotMatch(grid, /justify-content: center/);
+  assert.match(shelfCss, /--wb-card-min: 180px/);
+  assert.match(shelfCss, /\.wb-side \{ --wb-panel: #f7f8fa; background: #f7f8fa; \}/);
+  assert.match(shelfCss, /\.wb-inspector \{ --wb-panel: #ffffff; background: #ffffff; \}/);
+  assert.doesNotMatch(ruleBody(shelfCss, '.wb-card-cover {'), /backdrop-filter/);
+});
+
+test('第三轮详情：简介折叠、操作分层、手机表单纵向排列', () => {
+  const details = read('public/js/book-details.js');
+  ['data-bd-summary-toggle', "bd-summary${collapsed ? ' is-collapsed'", 'bd-actions-main', 'bd-delete'].forEach((needle) => {
+    assert.ok(details.includes(needle), `book-details.js 缺少 ${needle}`);
+  });
+  assert.match(style, /\.bd-summary\.is-collapsed/);
+  assert.match(style, /\.bd-delete/);
+  assert.match(style, /#wbInspector \.bd-head \{[\s\S]*?position: sticky;/);
+  assert.match(style, /#bookModal \.form-grid \{ grid-template-columns: 1fr; gap: 13px; \}/);
+  assert.match(style, /#bookModal \.isbn-input-row \{[\s\S]*?grid-template-columns: 1fr 1fr;/);
+  assert.match(style, /#bookModal \.isbn-input-row input\[type="text"\] \{ grid-column: 1 \/ -1;/);
 });
 
 test('按钮/分段控件共享 control token，不再用黑/蓝实底表示选中', () => {
@@ -76,7 +125,7 @@ test('详情只剩一套：BookDetails 供 Inspector 与其他页面共用，旧
   assert.match(details, /onClose/);
   assert.match(details, /onChanged/);
   pages.forEach((page) => {
-    assert.match(read(page), /\/js\/book-details\.js\?v=1/, `${page} 缺少统一详情组件`);
+    assert.match(read(page), /\/js\/book-details\.js\?v=2/, `${page} 缺少统一详情组件`);
   });
 });
 
@@ -84,16 +133,16 @@ test('双击/选择/键盘路径与资源版本保持接线', () => {
   const shelf = read('public/shelf.html');
   assert.ok(shelf.indexOf('/js/book-details.js') < shelf.indexOf('/js/shelf/inspector.js'));
   const versions = {
-    'css/style.css': '112',
-    'css/liquid-glass.css': '3',
-    'css/shelf-workbench.css': '36',
+    'css/style.css': '115',
+    'css/liquid-glass.css': '4',
+    'css/shelf-workbench.css': '38',
     'js/chrome.js': '38',
     'js/common.js': '43',
     'js/modal.js': '2',
     'js/select.js': '3',
     'js/shelf/main.js': '37',
     'js/shelf/inspector.js': '37',
-    'js/book-details.js': '1',
+    'js/book-details.js': '2',
   };
   pages.forEach((page) => {
     const html = read(page);
@@ -104,9 +153,9 @@ test('双击/选择/键盘路径与资源版本保持接线', () => {
     });
   });
   const sw = read('public/sw.js');
-  assert.match(sw, /CACHE_VERSION = 'v169'/);
+  assert.match(sw, /CACHE_VERSION = 'v173'/);
   Object.entries(versions).forEach(([asset, version]) => {
     assert.match(sw, new RegExp(`'/${asset.replace(/[/.]/g, '\\$&')}\\?v=${version}'`), `sw.js 缺少 ${asset}@${version}`);
   });
-  assert.match(sw, /'\/js\/book-details\.js\?v=1'/);
+  assert.match(sw, /'\/js\/book-details\.js\?v=2'/);
 });

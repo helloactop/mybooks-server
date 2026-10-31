@@ -48,23 +48,23 @@
   /* —— 统一控件材质（按钮 / 分段 / 下拉 / 图标按钮）——
      实体内容用 --card / --surface，玻璃控件只复用这一组 token，
      不再为每个组件单独维护白色、阴影和选中色。 */
-  --control-bg: rgba(255, 255, 255, 0.7);
-  --control-bg-hover: rgba(255, 255, 255, 0.86);
-  --control-bg-pressed: rgba(255, 255, 255, 0.92);
+  --control-bg: rgba(255, 255, 255, 0.66);
+  --control-bg-hover: rgba(255, 255, 255, 0.82);
+  --control-bg-pressed: rgba(255, 255, 255, 0.9);
   --control-ink: var(--ink);
   --control-ink-muted: var(--ink-2);
-  --control-edge: rgba(0, 0, 0, 0.1);
-  --control-edge-hover: rgba(0, 0, 0, 0.16);
-  --control-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.82);
-  --control-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 6px 18px rgba(0, 0, 0, 0.05);
-  --control-shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.06), 0 10px 24px rgba(0, 0, 0, 0.08);
-  --control-blur: 14px;
-  --control-track: rgba(0, 0, 0, 0.04);
-  --selected-bg: rgba(255, 255, 255, 0.94);
-  --selected-edge: rgba(0, 102, 204, 0.38);
-  --selected-marker: var(--accent);
-  --selected-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 2px 6px rgba(0, 0, 0, 0.06);
-  --control-sheen: linear-gradient(145deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.08) 42%, rgba(255, 255, 255, 0.18));
+  --control-edge: rgba(0, 0, 0, 0.07);
+  --control-edge-hover: rgba(0, 0, 0, 0.12);
+  --control-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --control-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 3px 10px rgba(0, 0, 0, 0.035);
+  --control-shadow-hover: 0 1px 3px rgba(0, 0, 0, 0.04), 0 6px 16px rgba(0, 0, 0, 0.05);
+  --control-blur: 10px;
+  --control-track: rgba(0, 0, 0, 0.035);
+  --selected-bg: rgba(255, 255, 255, 0.9);
+  --selected-edge: rgba(0, 0, 0, 0.1);
+  --selected-marker: var(--ink-2);
+  --selected-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --control-sheen: linear-gradient(145deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.03) 42%, rgba(255, 255, 255, 0.08));
 
   /* 兼容仍在引用 --glass-* 的旧组件；值统一指向控件 token，不再保留两套来源。 */
   --glass-fill: var(--control-bg);
@@ -1447,10 +1447,7 @@ body.search-open .search-curtain {
   border-color: var(--selected-edge);
   color: var(--control-ink);
   font-weight: 600;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -2px 0 rgba(0, 102, 204, 0.5),
-    var(--selected-shadow);
+  box-shadow: var(--selected-shadow);
 }
 
 .seg button:active { transform: scale(0.97); }
@@ -1458,6 +1455,12 @@ body.search-open .search-curtain {
 .seg button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* 选中态是中性玻璃滑块；只有键盘导航才出现蓝色焦点轮廓。 */
+:is(.seg button, .btn, .icon-btn, .sel-trigger):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* 普通按钮：中性玻璃 + 深色文字；主操作仅用蓝色文字/细边强调 */
@@ -1499,7 +1502,7 @@ body.search-open .search-curtain {
   border-radius: inherit;
   pointer-events: none;
   background: var(--control-sheen);
-  opacity: 0.55;
+  opacity: 0.3;
   transition: opacity 0.2s var(--ease);
 }
 
@@ -1512,7 +1515,7 @@ body.search-open .search-curtain {
   color: var(--control-ink);
 }
 
-.btn:hover::before { opacity: 0.9; }
+.btn:hover::before { opacity: 0.45; }
 
 .btn:active {
   transform: scale(0.97);
@@ -1529,25 +1532,17 @@ body.search-open .search-curtain {
 }
 
 .btn-primary {
-  background:
-    linear-gradient(180deg, rgba(0, 102, 204, 0.2), rgba(255, 255, 255, 0.24)),
-    var(--control-bg);
-  border-color: rgba(0, 102, 204, 0.4);
+  background: var(--control-bg);
+  border-color: rgba(0, 102, 204, 0.26);
   color: var(--accent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 4px 14px rgba(0, 102, 204, 0.12);
+  box-shadow: var(--control-highlight), var(--control-shadow);
 }
 
 .btn-primary:hover {
-  background:
-    linear-gradient(180deg, rgba(0, 102, 204, 0.28), rgba(255, 255, 255, 0.3)),
-    var(--control-bg-hover);
-  border-color: rgba(0, 102, 204, 0.55);
+  background: var(--control-bg-hover);
+  border-color: rgba(0, 102, 204, 0.4);
   color: var(--accent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    0 6px 18px rgba(0, 102, 204, 0.16);
+  box-shadow: var(--control-highlight), var(--control-shadow-hover);
 }
 
 .btn-ghost {
@@ -1607,7 +1602,7 @@ body.search-open .search-curtain {
   border-radius: inherit;
   pointer-events: none;
   background: var(--control-sheen);
-  opacity: 0.45;
+  opacity: 0.22;
 }
 
 .icon-btn:hover {
@@ -1618,6 +1613,7 @@ body.search-open .search-curtain {
 }
 
 .icon-btn:active { transform: scale(0.94); }
+.icon-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* 标签胶囊沿用同一套中性表面，不再单独使用白底/蓝底。 */
 .tag-chip {
@@ -1711,6 +1707,8 @@ main {
 }
 
 .sel-trigger:hover { background: var(--control-bg-hover); border-color: var(--control-edge-hover); }
+.sel-trigger:active { background: var(--control-bg-pressed); }
+.sel-trigger:disabled { opacity: 0.45; cursor: not-allowed; }
 .sel-trigger[aria-expanded="true"] {
   background: var(--selected-bg);
   border-color: var(--selected-edge);
@@ -1793,7 +1791,7 @@ main {
 .sel-option:hover,
 .sel-option.active { background: var(--control-bg); }
 
-/* 选中项:亮玻璃 + 细蓝边 + 蓝色勾；不整块填充 */
+/* 选中项:中性亮玻璃 + 蓝色勾；不整块填充，也不加蓝色边框 */
 .sel-option.on {
   background: var(--selected-bg);
   color: var(--control-ink);
@@ -2690,8 +2688,11 @@ body.select-mode .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
   letter-spacing: 0.02em;
 }
 
-.bd-status { width: 100%; }
+.bd-status { width: 100%; border-color: transparent; background: rgba(0, 0, 0, 0.035); }
 .bd-status button { flex: 1; min-height: 30px; padding: 0 6px; font-size: 12px; }
+.bd-status button.active {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 2px rgba(0, 0, 0, 0.05);
+}
 
 .bd-meta {
   margin-top: 16px;
@@ -2727,7 +2728,7 @@ body.select-mode .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
 }
 
 .bd-input:hover { border-color: var(--control-edge-hover); }
-.bd-input:focus { border-color: var(--selected-edge); box-shadow: 0 0 0 3px var(--accent-soft); }
+.bd-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
 .bd-rating-line { display: flex; align-items: center; gap: 6px; }
 .bd-rating-input { width: 72px; flex: 0 0 auto; }
@@ -2791,7 +2792,7 @@ body.select-mode .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
   font-size: 11.5px;
   outline: none;
 }
-.bd-chip-input:focus { border-color: var(--selected-edge); box-shadow: 0 0 0 3px var(--accent-soft); }
+.bd-chip-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
 .bd-collection { position: relative; }
 
@@ -2837,7 +2838,7 @@ body.select-mode .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
   font-size: 11.5px;
   outline: none;
 }
-.bd-inline-input:focus { border-color: var(--selected-edge); box-shadow: 0 0 0 3px var(--accent-soft); }
+.bd-inline-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
 .bd-files { display: flex; flex-direction: column; gap: 4px; }
 .bd-file {
@@ -2862,19 +2863,54 @@ body.select-mode .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
 .bd-summary,
 .bd-muted { margin: 0; color: var(--ink-2); font-size: 12.5px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 .bd-muted { color: var(--ink-3); }
+.bd-summary.is-collapsed {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.bd-summary-toggle {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.bd-summary-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
 
 .bd-link { color: var(--accent); text-decoration: none; }
 .bd-link:hover { text-decoration: underline; }
 
 .bd-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
   margin-top: 20px;
   padding-top: 14px;
   border-top: 1px solid var(--hairline-soft);
 }
-.bd-actions .btn { flex: 1 1 auto; }
+.bd-actions-main { display: flex; gap: 8px; width: 100%; }
+.bd-actions-main .btn { flex: 1 1 0; }
+.bd-actions-main .btn-primary { flex: 1.35 1 0; }
+.bd-delete {
+  align-self: flex-start;
+  min-height: 32px;
+  padding: 4px 2px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--danger);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.bd-delete:hover { background: var(--danger-soft); border-color: rgba(192, 57, 43, 0.18); }
+.bd-delete:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .bd-empty {
   display: flex;
@@ -2898,10 +2934,14 @@ body.select-mode .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
   height: 100%;
   max-height: none;
   padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-top-color: rgba(255, 255, 255, 0.8);
   border-radius: var(--radius-xl);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background: rgb(255 255 255 / 0.985);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.16);
 }
 
 #bookDetailModal .book-detail-sheet .bd-scroll {
@@ -2927,7 +2967,45 @@ body.select-mode .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
   #bookDetailModal .book-detail-sheet .bd-scroll {
     padding: 16px 20px calc(24px + env(safe-area-inset-bottom));
   }
+  #bookDetailModal .book-detail-sheet .bd-head {
+    position: sticky;
+    top: -16px;
+    z-index: 4;
+    margin: -16px -20px 10px;
+    padding: 10px 20px 6px;
+    min-height: 52px;
+    background: rgba(255, 255, 255, 0.82);
+    -webkit-backdrop-filter: blur(12px) saturate(120%);
+    backdrop-filter: blur(12px) saturate(120%);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.045);
+  }
+  #bookDetailModal .book-detail-sheet .bd-grabber { top: 8px; }
+  #wbInspector .bd-head {
+    position: sticky;
+    top: -42px;
+    z-index: 4;
+    margin: -42px -20px 10px;
+    padding: 10px 20px 6px;
+    min-height: 52px;
+    background: rgba(255, 255, 255, 0.84);
+    -webkit-backdrop-filter: blur(12px) saturate(120%);
+    backdrop-filter: blur(12px) saturate(120%);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.045);
+  }
+  #wbInspector .bd-grabber { top: 8px; }
   .bd-grabber { display: block; }
+  .bd-title { font-size: 19px; }
+  .bd-author { font-size: 13.5px; }
+  .bd-row {
+    grid-template-columns: 64px minmax(0, 1fr);
+    min-height: 38px;
+    font-size: 14px;
+  }
+  .bd-k { font-size: 12px; }
+  .bd-summary { font-size: 14px; line-height: 1.7; }
+  .bd-summary.is-collapsed { -webkit-line-clamp: 3; }
+  .bd-section-title { font-size: 11px; }
+  .bd-status button { min-height: 40px; }
 }
 
 @media (hover: none), (pointer: coarse) {
@@ -2939,7 +3017,8 @@ body.select-mode .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
   .bd-inline-input { height: 40px; font-size: 16px; }
   .bd-chip-add,
   .bd-chip-more { min-height: 36px; }
-  .bd-actions .btn { min-height: 44px; }
+  .bd-actions .btn { min-height: 46px; font-size: 14.5px; }
+  .bd-delete { min-height: 44px; font-size: 13px; }
   .bd-pop button { min-height: 38px; }
 }
 
@@ -4988,8 +5067,17 @@ body.menu-open { overflow: hidden; }
     margin: 0;
     padding: 12px 16px max(12px, env(safe-area-inset-bottom));
     border-top: 1px solid var(--hairline-soft);
+    background: var(--surface);
+    z-index: 5;
   }
-  #bookModal .form-grid { gap: 13px; }
+  #bookModal .form-grid { grid-template-columns: 1fr; gap: 13px; }
+  #bookModal .isbn-input-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  #bookModal .isbn-input-row input[type="text"] { grid-column: 1 / -1; width: 100%; }
+  #bookModal .isbn-input-row .btn { width: 100%; min-width: 0; padding: 10px 8px; }
   #bookModal .form-section-head { margin-bottom: 10px; }
 }
 

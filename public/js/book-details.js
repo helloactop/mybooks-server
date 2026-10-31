@@ -8,6 +8,7 @@
 
 (function () {
   const TAG_PREVIEW = 8;
+  const SUMMARY_COLLAPSE_AT = 140;
   const STATUS = [['wish', '想读'], ['reading', '在读'], ['done', '已读']];
 
   function parseJson(value, fallback) {
@@ -53,6 +54,18 @@
       ${identifierRows(book)}`;
   }
 
+  function summaryHtml(book, state) {
+    if (!book.summary) return '';
+    const text = String(book.summary);
+    const long = text.length > SUMMARY_COLLAPSE_AT;
+    const collapsed = long && !state.summaryExpanded;
+    return `<section class="bd-section">
+      <h3 class="bd-section-title">简介</h3>
+      <p class="bd-summary${collapsed ? ' is-collapsed' : ''}">${esc(text)}</p>
+      ${long ? `<button type="button" class="bd-summary-toggle" data-bd-summary-toggle aria-expanded="${state.summaryExpanded}">${state.summaryExpanded ? '收起' : '展开全文'}</button>` : ''}
+    </section>`;
+  }
+
   function logsHtml(book) {
     const logs = logsOf(book);
     if (!logs.length) {
@@ -83,7 +96,7 @@
     const custom = book.custom_display && typeof book.custom_display === 'object' ? book.custom_display : {};
     const memberships = Array.isArray(book.collections) ? book.collections : [];
     const available = (state.collections || []).filter((c) => !memberships.some((m) => String(m.id) === String(c.id)));
-    const pop = state.collectionPop ? `<div class="bd-pop" data-glass="refract" role="dialog" aria-label="加入分类">
+    const pop = state.collectionPop ? `<div class="bd-pop" role="dialog" aria-label="加入分类">
       ${state.collectionsLoading ? '<div class="bd-pop-empty">载入中…</div>' : (available.length
         ? available.map((c) => `<button type="button" data-bd-add-collection="${c.id}">${esc(c.name)}</button>`).join('')
         : '<div class="bd-pop-empty">已在该书的全部分类中</div>')}
@@ -121,7 +134,7 @@
         ${valueRows(book)}
       </div>
 
-      ${book.summary ? `<section class="bd-section"><h3 class="bd-section-title">简介</h3><p class="bd-summary">${esc(book.summary)}</p></section>` : ''}
+      ${summaryHtml(book, state)}
       ${logsHtml(book)}
 
       <section class="bd-section">
@@ -152,9 +165,11 @@
       ${Object.keys(custom).length ? `<section class="bd-section"><h3 class="bd-section-title">自定义字段</h3><div class="bd-meta">${Object.entries(custom).map(([k, v]) => `<div class="bd-row"><span class="bd-k">${esc(k)}</span><span class="bd-v">${esc(v)}</span></div>`).join('')}</div></section>` : ''}
 
       <div class="bd-actions">
-        <button type="button" class="btn btn-primary" data-bd-edit>编辑全部</button>
-        <a class="btn btn-ghost" href="/notes/${book.id}">读书心得</a>
-        <button type="button" class="btn btn-danger-tint" data-bd-delete>移到回收站</button>
+        <div class="bd-actions-main">
+          <button type="button" class="btn btn-primary" data-bd-edit>编辑全部</button>
+          <a class="btn btn-ghost" href="/notes/${book.id}">读书心得</a>
+        </div>
+        <button type="button" class="bd-delete" data-bd-delete>移到回收站</button>
       </div>
     </div>`;
   }
@@ -182,6 +197,7 @@
       book: null,
       seq: 0,
       tagsExpanded: false,
+      summaryExpanded: false,
       collectionPop: false,
       collections: null,
       collectionsLoading: false,
@@ -198,6 +214,16 @@
       if (typeof toast === 'function') toast(message, isError);
     }
 
+    function fitSummary() {
+      if (destroyed) return;
+      const summary = host.querySelector('.bd-summary.is-collapsed');
+      if (!summary || summary.clientHeight <= 0) return;
+      if (summary.scrollHeight <= summary.clientHeight + 2) {
+        summary.classList.remove('is-collapsed');
+        summary.parentElement?.querySelector('[data-bd-summary-toggle]')?.remove();
+      }
+    }
+
     function render() {
       if (destroyed || !state.book) return;
       const previous = host.querySelector('.bd-scroll');
@@ -205,12 +231,15 @@
       host.innerHTML = contentHtml(state.book, state);
       const next = host.querySelector('.bd-scroll');
       if (next && scrollTop) next.scrollTop = scrollTop;
+      fitSummary();
+      if (!host.getClientRects().length) requestAnimationFrame(fitSummary);
     }
 
     function setBook(book) {
       if (!book) { showMessage('选择一本书'); return; }
       if (!state.book || state.book.id !== book.id) {
         state.tagsExpanded = false;
+        state.summaryExpanded = false;
         state.collectionPop = false;
         state.collections = null;
       }
@@ -310,6 +339,7 @@
       const status = e.target.closest('[data-bd-status]');
       if (status) { patch({ status: status.dataset.bdStatus }, '状态已更新'); return; }
       if (e.target.closest('[data-bd-tags-more]')) { state.tagsExpanded = !state.tagsExpanded; render(); return; }
+      if (e.target.closest('[data-bd-summary-toggle]')) { state.summaryExpanded = !state.summaryExpanded; render(); return; }
       const removeTag = e.target.closest('[data-bd-remove-tag]');
       if (removeTag) {
         const tags = tagsOf(state.book).filter((t) => t !== removeTag.dataset.bdRemoveTag);

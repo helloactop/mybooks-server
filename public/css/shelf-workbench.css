@@ -28,11 +28,10 @@ body[data-page="shelf"] .topbar,
 body[data-page="shelf"] footer { display: none !important; }
 
 #shelfWorkbench {
-  --wb-card-min: 176px;
-  --wb-card-max: 210px;
+  --wb-card-min: 180px;
 }
-#shelfWorkbench[data-density="compact"] { --wb-card-min: 150px; --wb-card-max: 180px; }
-#shelfWorkbench[data-density="large"] { --wb-card-min: 210px; --wb-card-max: 240px; }
+#shelfWorkbench[data-density="compact"] { --wb-card-min: 150px; }
+#shelfWorkbench[data-density="large"] { --wb-card-min: 210px; }
 
 body[data-page="shelf"] main.wb {
   position: relative;
@@ -66,9 +65,11 @@ body[data-page="shelf"] main.wb.sidebar-collapsed.inspector-open { grid-template
   background: var(--wb-panel);
   border: 1px solid var(--hairline-soft);
   border-radius: var(--radius-xl, 24px);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.045);
   transition: opacity 0.28s ease, transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
+.wb-side { --wb-panel: #f7f8fa; background: #f7f8fa; }
+.wb-inspector { --wb-panel: #ffffff; background: #ffffff; }
 body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
   opacity: 0;
   pointer-events: none;
@@ -329,12 +330,11 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
 }
 .wb-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--wb-card-min), var(--wb-card-max)));
+  grid-template-columns: repeat(auto-fill, minmax(var(--wb-card-min), 1fr));
   grid-auto-rows: max-content;
-  gap: 32px;
-  justify-content: center;
+  gap: 20px;
   align-items: start;
-  padding: 104px clamp(20px, 2.8vw, 48px) 112px;
+  padding: 84px clamp(20px, 2vw, 36px) 112px;
 }
 .wb-sentinel { height: 1px; }
 
@@ -398,7 +398,7 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
 #shelfWorkbench[data-cover-info="1"] .wb-card-info { display: flex; }
 .wb-card-name {
   color: var(--wb-ink);
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 600;
   line-height: 1.3;
   display: -webkit-box;
@@ -408,7 +408,7 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
 }
 .wb-card-byline {
   color: var(--wb-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
@@ -440,7 +440,7 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
 }
 .wb-card-overlay > span { position: relative; color: #fff; }
 .wb-card-title {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.25;
   display: -webkit-box;
@@ -450,7 +450,7 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
 }
 .wb-card-author {
   margin-top: 3px;
-  font-size: 9.5px;
+  font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.76);
@@ -685,7 +685,7 @@ body.marquee-selecting .wb-content { cursor: crosshair; }
     box-shadow 0.18s ease, color 0.18s ease, transform 0.12s ease;
 }
 .wb-circle:hover { background: var(--control-bg-hover); color: var(--control-ink); }
-.wb-circle:active { transform: scale(0.94); }
+.wb-circle:active { background: var(--control-bg-pressed); transform: scale(0.94); }
 .wb-circle[aria-pressed="true"],
 .wb-circle[aria-expanded="true"] {
   background: var(--selected-bg);
@@ -732,6 +732,11 @@ body.marquee-selecting .wb-content { cursor: crosshair; }
   color: var(--control-ink);
   box-shadow: var(--selected-shadow);
 }
+.wb-view button:focus-visible,
+.wb-layout-seg button:focus-visible,
+.wb-circle:focus-visible,
+.wb-brand:focus-visible,
+.wb-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ---------- 底部浮动工具条 ---------- */
 .wb-chrome {
@@ -749,6 +754,12 @@ body.marquee-selecting .wb-content { cursor: crosshair; }
 .wb-chrome > * { pointer-events: auto; }
 .wb-chrome > :first-child { justify-self: start; }
 .wb-chrome > :last-child { justify-self: end; }
+/* 详情已打开时，右下“详情”按钮与底部操作重叠且功能冗余；关闭详情后恢复。 */
+body[data-page="shelf"] main.wb.inspector-open .wb-chrome #wbInspectorToggle {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
 .wb-search {
   justify-self: center;
   display: inline-flex;
@@ -1083,12 +1094,11 @@ body[data-page="shelf"].select-mode .toast { bottom: calc(132px + env(safe-area-
   body[data-page="shelf"] main.wb.inspector-open .wb-top { right: calc(332px + 18px); }
   body[data-page="shelf"] main.wb.inspector-open .wb-scope { right: calc(332px + 18px); }
   .wb-grid {
-    grid-template-columns: repeat(auto-fill, minmax(var(--wb-card-min), var(--wb-card-max)));
-    gap: 24px;
-    padding-left: 24px;
-    padding-right: 24px;
+    grid-template-columns: repeat(auto-fill, minmax(var(--wb-card-min), 1fr));
+    gap: 20px;
+    padding: 84px 24px 104px;
   }
-  .wb-table-wrap { padding-top: 96px; }
+  .wb-table-wrap { padding-top: 84px; }
 }
 
 @media (max-width: 819px) {
@@ -1188,7 +1198,7 @@ body[data-page="shelf"].select-mode .toast { bottom: calc(132px + env(safe-area-
 
 @media (min-width: 561px) and (max-width: 819px) {
   #shelfWorkbench:not([data-density="compact"]) .wb-grid {
-    grid-template-columns: repeat(auto-fill, minmax(var(--wb-card-min), var(--wb-card-max)));
+    grid-template-columns: repeat(auto-fill, minmax(var(--wb-card-min), 1fr));
     gap: 18px;
   }
   #shelfWorkbench[data-density="compact"] .wb-grid {

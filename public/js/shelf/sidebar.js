@@ -95,20 +95,21 @@
   }
 
   function facetSection(key, title, items) {
-    const open = !!facetUI.expanded[key];
+    const expanded = !!facetUI.expanded[key];
     const limit = FACET_LIMITS[key] || LIMIT;
     const q = String(facetUI.query[key] || '').trim();
     const server = SERVER_FACETS.has(key);
-    const result = open && q ? facetUI.results[key] : null;
+    const result = q ? facetUI.results[key] : null;
     const active = result && result.q === q ? result : null;
     let base = items;
-    if (open && q) {
+    if (q) {
       if (active) base = sortFacetItems(key, active.items);
       else base = sortFacetItems(key, items.filter((item) => matches(item, q)).slice(0, 100));
     }
-    const shown = open ? withPinned(key, base) : collapsedItems(key, items, limit);
+    // “显示更多”只控制展开后的可见数量；搜索框始终留在分组内。
+    const shown = expanded ? withPinned(key, base) : collapsedItems(key, base, limit);
     const rowsHtml = facetRowsHtml(key, shown);
-    const input = open
+    const input = server
       ? `<input class="wb-facet-filter" data-facet="${key}" value="${esc(facetUI.query[key] || '')}" maxlength="100" placeholder="筛选${title}" aria-label="筛选${title}">`
       : '';
     const knownTotal = key === 'author' ? state().facets.authorTotal
@@ -116,18 +117,31 @@
         : key === 'series' ? state().facets.seriesTotal : null;
     const total = server ? (active ? active.total : (knownTotal ?? items.length)) : items.length;
     let note = '';
-    if (active && active.total > active.items.length) {
+    if (facetUI.searching[key] && q) {
+      note = '正在搜索…';
+    } else if (active && active.total > active.items.length) {
       note = `仅显示前 ${active.items.length} 项，请输入更精确的关键词`;
-    } else if (open && server && !q && total > items.length) {
+    } else if (expanded && server && !q && total > items.length) {
       note = `仅显示前 ${items.length} 项，输入关键词可查找全部`;
     }
-    const more = !open && total > limit
-      ? `<button type="button" class="wb-facet-more" data-facet-more="${key}">显示更多 · ${total}</button>`
-      : (open ? `<button type="button" class="wb-facet-more" data-facet-close="${key}">收起</button>` : '');
+    const more = expanded
+      ? `<button type="button" class="wb-facet-more" data-facet-close="${key}">收起</button>`
+      : (total > limit
+        ? `<button type="button" class="wb-facet-more" data-facet-more="${key}">显示更多 · ${total}</button>`
+        : '');
     return `<section class="wb-section">
       ${sectionHead(key, title)}
       ${sectionBody(key, `<div class="wb-facet-body" data-facet-body="${key}">${input}<div class="wb-facet-list" data-facet-list="${key}">${rowsHtml}</div><div class="wb-facet-note" data-facet-note="${key}"${note ? '' : ' hidden'}>${esc(note)}</div>${more}</div>`)}
     </section>`;
+  }
+
+  function updateFacetMore(root, key, total) {
+    if (facetUI.expanded[key]) return;
+    const btn = root.querySelector(`[data-facet-more="${key}"]`);
+    if (!btn) return;
+    const limit = FACET_LIMITS[key] || LIMIT;
+    btn.hidden = total <= limit;
+    if (!btn.hidden) btn.textContent = `显示更多 · ${total}`;
   }
 
   function collectionRows() {
@@ -176,11 +190,11 @@
       .slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh-Hans-CN'));
     const tags = (f.tags || []).filter((x) => x.count > 0);
 
-    root.innerHTML = `<div class="wb-side-scroll">
-      <div class="wb-side-head">
-        <span>资料库</span>
-        <button type="button" class="wb-side-close" data-sidebar-close aria-label="关闭资料库">✕</button>
-      </div>
+    root.innerHTML = `<div class="wb-side-head">
+      <span>资料库</span>
+      <button type="button" class="wb-side-close" data-sidebar-close aria-label="关闭资料库">✕</button>
+    </div>
+    <div class="wb-side-scroll">
       <section class="wb-section">
         ${row({ label: '全部图书', count: f.total, active: allActive, axis: 'all', value: '' })}
       </section>
@@ -354,25 +368,48 @@
       if (!input) return;
       const key = input.dataset.facet;
       const q = input.value.trim();
+      const limit = FACET_LIMITS[key] || LIMIT;
+      const seq = (facetUI.uiSeq[key] || 0) + 1;
+      facetUI.uiSeq[key] = seq;
       facetUI.query[key] = input.value;
+      facetUI.searching[key] = false;
       const list = root.querySelector(`[data-facet-list="${key}"]`);
       if (!list) return;
       const items = state().facets[FACET_KEYS[key]] || [];
-      const local = withPinned(key, sortFacetItems(key, q
+      const base = sortFacetItems(key, q
         ? items.filter((item) => matches(item, q)).slice(0, 100)
-        : items));
+        : items);
+      const local = facetUI.expanded[key]
+        ? withPinned(key, base)
+        : collapsedItems(key, base, limit);
       list.innerHTML = facetRowsHtml(key, local);
+      const knownTotal = key === 'author' ? state().facets.authorTotal
+        : key === 'tag' ? state().facets.tagTotal
+          : key === 'series' ? state().facets.seriesTotal : null;
+      updateFacetMore(root, key, q ? local.length : (knownTotal ?? items.length));
       const note = root.querySelector(`[data-facet-note="${key}"]`);
       if (note) { note.hidden = true; note.textContent = ''; }
       if (!SERVER_FACETS.has(key)) return;
       clearTimeout(searchTimers[key]);
       if (!q) { facetUI.results[key] = null; return; }
+      facetUI.searching[key] = true;
+      if (note) { note.hidden = false; note.textContent = '正在搜索…'; }
       searchTimers[key] = setTimeout(async () => {
         const result = await S.searchFacet(key, q);
-        if (!result || !facetUI.expanded[key] || facetUI.query[key].trim() !== q) return;
+        // 旧请求即使回来得晚，也不能覆盖新输入；不再依赖“显示更多”的展开状态。
+        if (facetUI.uiSeq[key] !== seq || facetUI.query[key].trim() !== q) return;
+        facetUI.searching[key] = false;
+        if (!result) {
+          if (note) { note.hidden = false; note.textContent = '搜索暂不可用'; }
+          return;
+        }
         const currentList = root.querySelector(`[data-facet-list="${key}"]`);
         if (!currentList) return;
-        currentList.innerHTML = facetRowsHtml(key, withPinned(key, sortFacetItems(key, result.items)));
+        const resultBase = sortFacetItems(key, result.items);
+        currentList.innerHTML = facetRowsHtml(key, facetUI.expanded[key]
+          ? withPinned(key, resultBase)
+          : collapsedItems(key, resultBase, limit));
+        updateFacetMore(root, key, result.total);
         const currentNote = root.querySelector(`[data-facet-note="${key}"]`);
         if (currentNote) {
           const text = result.total > result.items.length

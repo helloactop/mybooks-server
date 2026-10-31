@@ -61,10 +61,13 @@ function notifyBooksChanged() {
 let sharedStatsPromise = null;
 function sharedStats() {
   if (!sharedStatsPromise) {
+    const publicView = PUBLIC_PAGES.has(document.body.dataset.page);
     const vl = document.body.dataset.page === 'shelf'
       ? (new URLSearchParams(location.search).get('vl') || '') : '';
-    const url = '/api/stats' + (vl ? '?vl=' + encodeURIComponent(vl) : '');
-    sharedStatsPromise = api(url).catch(() => null);
+    const url = publicView
+      ? '/api/public/stats'
+      : '/api/stats' + (vl ? '?vl=' + encodeURIComponent(vl) : '');
+    sharedStatsPromise = (publicView ? apiPublic(url) : api(url)).catch(() => null);
   }
   return sharedStatsPromise;
 }
@@ -138,10 +141,15 @@ function bindHashReveal() {
 let detailViewController = null;
 let detailClosedHandler = null;
 
+const PUBLIC_PAGES = new Set(['home', 'rank', 'stats']);
+
 async function openDetail(id) {
+  const publicView = PUBLIC_PAGES.has(document.body.dataset.page);
   let book;
   try {
-    book = await api('/api/books/' + id);
+    book = publicView
+      ? await apiPublic('/api/public/books/' + id)
+      : await api('/api/books/' + id);
   } catch (e) {
     toast(e.message, true);
     return;
@@ -162,7 +170,7 @@ async function openDetail(id) {
   }
 
   let closedHandler = null;
-  const controller = window.BookDetails.create(host, {
+  const detailOptions = {
     mode: 'dialog',
     sheet: host,
     onClose: () => {
@@ -170,18 +178,25 @@ async function openDetail(id) {
       if (detailViewController === controller) detailViewController = null;
       closeModals();
     },
-    onEdit: (current) => openBookModal(current, {
+  };
+  if (publicView) {
+    // 公共页只读；不传 onEdit/onDelete/onChanged，详情组件也不会渲染管理操作。
+    detailOptions.readOnly = true;
+    detailOptions.loadBook = window.BookDetails.defaultPublicLoadBook;
+  } else {
+    detailOptions.onEdit = (current) => openBookModal(current, {
       onSaved: async (savedId) => {
         notifyBooksChanged();
         await openDetail(savedId);
       },
-    }),
-    onDelete: (current) => deleteBook(current.id, current.title),
-    onChanged: async () => {
+    });
+    detailOptions.onDelete = (current) => deleteBook(current.id, current.title);
+    detailOptions.onChanged = async () => {
       invalidateSharedStats();
       notifyBooksChanged();
-    },
-  });
+    };
+  }
+  const controller = window.BookDetails.create(host, detailOptions);
   detailViewController = controller;
   controller.setBook(book);
   closedHandler = () => {
@@ -1178,7 +1193,11 @@ $('#bookForm').addEventListener('submit', async (e) => {
 // bootReady:首屏数据备好的 Promise。自定义字段定义必须早于任何一次
 // openBookModal 完成,否则编辑弹窗里 renderCustomFieldInputs 会拿到空数组
 // (表现为"字段偶尔不显示")。用户操作可能早于首屏请求返回,先 await 再渲染。
+const ADMIN_BOOT_PAGES = new Set(['shelf', 'tags', 'notes']);
 const bootReady = (async () => {
+  // 公开首页/榜单/统计不请求自定义字段、系列或标签管理数据，
+  // 避免匿名访问因管理 API 401 被 api.js 带去登录页。
+  if (!ADMIN_BOOT_PAGES.has(document.body.dataset.page)) return;
   await loadCustomColumns();
   // 标签建议(datalist):编辑弹窗打开前备好,失败静默(不影响其它功能)
   sharedStats().then((data) => {

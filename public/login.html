@@ -3,30 +3,73 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>账号与设备 · My books</title>
-  <link rel="stylesheet" href="/css/style.css?v=115">
-  <link rel="stylesheet" href="/css/login.css?v=1">
-  <link rel="stylesheet" href="/css/liquid-glass.css?v=4">
+  <link rel="stylesheet" href="/css/style.css?v=118">
+  <link rel="stylesheet" href="/css/login.css?v=5">
+  <link rel="stylesheet" href="/css/liquid-glass.css?v=5">
   <script src="/js/liquid-glass.js?v=1" defer></script>
-  <script src="/js/login.js?v=2" defer></script>
+  <script src="/js/login.js?v=3" defer></script>
 </head>
 <body class="login-page">
   <main class="account-page">
-    <a href="/">My books</a><h1>账号与设备</h1>
-    <p id="accountStatus" role="status" aria-live="polite">正在连接服务器…</p>
-    <form id="loginForm" hidden>
-      <label>用户名<input name="username" autocomplete="username" required maxlength="80"></label>
-      <label>密码<input name="password" type="password" autocomplete="current-password" required maxlength="1024"></label>
-      <button class="btn btn-primary" type="submit">登录</button>
-      <details><summary>使用已有管理员令牌</summary>
-        <label>管理员令牌<input name="token" type="password" autocomplete="off" maxlength="1024"></label>
+    <header class="account-brand-row">
+      <a class="account-brand" href="/"><span class="account-mark" aria-hidden="true"><img src="/logo-mark.png?v=4" alt=""></span><span>My books</span></a>
+      <a class="account-home-link" href="/">公开首页</a>
+    </header>
+
+    <div class="account-head">
+      <p class="account-eyebrow">Account &amp; devices</p>
+      <h1>账号与设备</h1>
+      <p id="accountStatus" class="account-status" role="status" aria-live="polite">正在连接服务器…</p>
+    </div>
+
+    <form id="loginForm" class="account-form" hidden>
+      <div class="account-field">
+        <label for="loginUsername">用户名</label>
+        <input id="loginUsername" name="username" autocomplete="username" required maxlength="80">
+      </div>
+      <div class="account-field">
+        <label for="loginPassword">密码</label>
+        <input id="loginPassword" name="password" type="password" autocomplete="current-password" required maxlength="1024">
+      </div>
+      <button class="btn btn-primary account-submit" type="submit">登录</button>
+      <details class="account-token">
+        <summary>使用已有管理员令牌</summary>
+        <div class="account-field">
+          <label for="loginToken">管理员令牌</label>
+          <input id="loginToken" name="token" type="password" autocomplete="off" maxlength="1024">
+        </div>
         <button class="btn btn-ghost" type="button" id="tokenLogin">使用令牌登录</button>
       </details>
     </form>
-    <section id="accountPanel" hidden>
-      <p><a href="/shelf">进入书架</a></p>
-      <h2>已授权设备</h2><ul id="deviceList"></ul>
-      <button class="btn btn-ghost" id="logout" type="button">退出当前设备</button>
+
+    <section id="accountPanel" class="account-panel" hidden>
+      <div class="account-identity">
+        <span class="account-avatar" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="8" r="3.4"></circle><path d="M5.5 20c.3-3.8 3-6 6.5-6s6.2 2.2 6.5 6"></path></svg>
+        </span>
+        <span class="account-identity-copy">
+          <span class="account-eyebrow">当前账号</span>
+          <strong id="accountName">管理员</strong>
+          <span id="accountDevice" class="account-device-label">当前网页设备</span>
+        </span>
+        <span class="account-live"><i aria-hidden="true"></i>已登录</span>
+      </div>
+
+      <div class="account-main-actions">
+        <a class="btn btn-primary" href="/shelf">进入书库管理</a>
+        <button class="btn btn-ghost" id="logout" type="button">退出当前设备</button>
+      </div>
+
+      <section class="device-section" aria-labelledby="deviceHeading">
+        <div class="device-section-head">
+          <h2 id="deviceHeading">已授权设备</h2>
+          <span id="deviceCount" class="device-count"></span>
+        </div>
+        <ul id="deviceList" class="device-list"></ul>
+      </section>
     </section>
+
+    <p class="account-footnote">管理页需要登录；公开首页、榜单与统计可直接浏览。</p>
   </main>
 </body>
 </html>

@@ -103,7 +103,11 @@ test('HTTP feed:返回 JSON 并带 no-store', async () => {
   const home = await fetch(`${base}/api/home/feed?grid=1&ent=3`);
   assert.equal(home.status, 200);
   assert.match(home.headers.get('cache-control'), /no-store/);
-  assert.equal((await home.json()).featured.title, 'A');
+  const homeBody = await home.json();
+  assert.equal(homeBody.featured.title, 'A');
+  for (const key of ['uuid', 'files', 'notes', 'custom', 'collections', 'identifier_list', 'revision']) {
+    assert.equal(Object.hasOwn(homeBody.featured, key), false, `公开 feed 不能包含 ${key}`);
+  }
 
   const rank = await fetch(`${base}/api/rank/feed?size=8`);
   assert.equal(rank.status, 200);
@@ -111,4 +115,5 @@ test('HTTP feed:返回 JSON 并带 no-store', async () => {
   assert.equal(body.total, 1);
   assert.equal(body.done, 1);
   assert.deepEqual(titles(body.reread), ['A']);
+  assert.equal(Object.hasOwn(body.reread[0], 'uuid'), false);
 });

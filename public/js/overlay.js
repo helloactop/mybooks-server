@@ -234,6 +234,8 @@ let savedEditMode = false;
 let searchCloseTimer = null;
 let searchBlurTimer = null;
 let searchNavTimer = null;
+// 保存的搜索属于管理数据；公开首页/榜单/统计不发起这个私有请求。
+const canManageSavedSearches = ['shelf', 'tags', 'notes'].includes(document.body.dataset.page);
 
 const isSearchOpen = () => searchFlyout.classList.contains('open');
 const searchQuery = () => searchInput.value.trim();
@@ -255,13 +257,15 @@ function syncSearchTools() {
   const hasText = !!searchInput.value;
   searchResetBtn.hidden = !hasText;
   searchForm.classList.toggle('has-query', hasText);
-  searchSaveBtn.hidden = !q;
+  searchSaveBtn.hidden = !canManageSavedSearches || !q;
   if (savedEditMode && !savedItems.length) savedEditMode = false;
-  searchEditBtn.hidden = !savedItems.length;
+  searchEditBtn.hidden = !canManageSavedSearches || !savedItems.length;
   searchEditBtn.textContent = savedEditMode ? '完成' : '编辑';
   searchEmpty.hidden = savedItems.length > 0;
   if (!savedItems.length) {
-    searchEmpty.textContent = q ? '还没有保存的搜索,可把当前查询保存下来' : '还没有保存的搜索';
+    searchEmpty.textContent = canManageSavedSearches
+      ? (q ? '还没有保存的搜索,可把当前查询保存下来' : '还没有保存的搜索')
+      : '登录后可保存搜索';
   }
 }
 
@@ -512,13 +516,33 @@ searchSaveBtn.addEventListener('click', async () => {
   } catch (err) { toast(err.message, true); }
 });
 
+/* 搜索控件与已打开弹窗属于“内部点击”，不能在 pointerdown 阶段顺带关闭。
+ * 书架还有独立的搜索关闭钮 #wbSearchClose 与底部搜索入口 #shelfSearchBtn；
+ * 漏掉它们会让 pointerdown 先关搜索、click 再落到退场后露出的底层按钮。 */
+const searchExemptTarget = (target) => !!target.closest(
+  '#searchFlyout, #searchBtn, #menuBtn, #wbSearchClose, #shelfSearchBtn, .modal'
+);
+
+// 仅拦截“关闭搜索的同一次手势”产生的 click；不长期禁用任何按钮。
+let suppressSearchDismissClick = false;
+let suppressSearchDismissTimer = 0;
+
 document.addEventListener('pointerdown', (e) => {
-  if (!isSearchOpen()) return;
-  // #menuBtn 在搜索展开时就是 ✕,由它的 click 负责关闭,不能当成"面板外点击";
-  // 语法说明弹窗盖在搜索之上,点它也不能顺带收起搜索
-  if (e.target.closest('#searchFlyout') || e.target.closest('#searchBtn') || e.target.closest('#menuBtn') || e.target.closest('.modal')) return;
+  if (!isSearchOpen() || searchExemptTarget(e.target)) return;
+  suppressSearchDismissClick = true;
+  clearTimeout(suppressSearchDismissTimer);
+  suppressSearchDismissTimer = setTimeout(() => { suppressSearchDismissClick = false; }, 450);
   closeSearchOverlay(false);
 });
+
+document.addEventListener('click', (e) => {
+  if (!suppressSearchDismissClick) return;
+  suppressSearchDismissClick = false;
+  if (searchExemptTarget(e.target)) return;
+  // 这是关闭搜索的同一次触摸/鼠标手势，不让它命中底层书卡或添加按钮。
+  e.preventDefault();
+  e.stopPropagation();
+}, true);
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && isSearchOpen()) {
@@ -535,7 +559,8 @@ window.addEventListener('resize', () => {
   else searchFlyout.style.height = '';
 });
 
-loadSavedSearches();
+if (canManageSavedSearches) loadSavedSearches();
+else renderSaved();
 
 $('#addBtn').addEventListener('click', () => openBookModal(null));
 

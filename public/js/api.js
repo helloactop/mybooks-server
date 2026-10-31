@@ -20,16 +20,29 @@ function authHeaders() {
 function forgetToken() { localStorage.removeItem(TOKEN_KEY); }
 
 async function apiFetch(url, options = {}) {
+  const { publicAccess = false, headers: extraHeaders, ...fetchOptions } = options;
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    ...options,
+    ...fetchOptions,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(publicAccess ? {} : authHeaders()),
+      ...(extraHeaders || {}),
+    },
   });
 
-  // 401:会话缺失或失效,清理旧令牌并跳转登录。
+  // 管理 API 401:清理旧令牌并进入登录页。公开 API 不触发跳转，
+  // 否则匿名首页只因一次公开请求失败就会被带离页面。
   if (res.status === 401) {
-    forgetToken();
-    location.assign('/login?next=' + encodeURIComponent(location.pathname + location.search));
-    throw new Error('请先登录图书服务器');
+    const data401 = await res.json().catch(() => ({}));
+    if (!publicAccess) {
+      forgetToken();
+      location.assign('/login?next=' + encodeURIComponent(location.pathname + location.search));
+      throw new Error('请先登录图书服务器');
+    }
+    const error = new Error(data401.error || '公开内容暂不可用');
+    error.code = data401.code;
+    error.status = 401;
+    throw error;
   }
 
   // 429:触发限速(双层模式连续输错令牌),提示等待而非笼统"请求失败"
@@ -55,6 +68,11 @@ async function apiFetch(url, options = {}) {
 
 async function api(url, options = {}) {
   return (await apiFetch(url, options)).data;
+}
+
+// 公开页面专用：不加 Bearer、不因 401 自动跳登录。
+async function apiPublic(url, options = {}) {
+  return (await apiFetch(url, { ...options, publicAccess: true })).data;
 }
 
 // 需要响应头的调用(列表分页的总数 X-Total-Count)。

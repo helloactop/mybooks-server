@@ -23,7 +23,8 @@ const routesFeeds = require('./src/http/routes.feeds');
 const routesExport = require('./src/http/routes.export');
 const routesEnrich = require('./src/http/routes.enrich');
 const routesImport = require('./src/http/routes.import');
-const { requireAdmin, requireLibraryAccess } = require('./src/http/middleware.auth');
+const routesPublic = require('./src/http/routes.public');
+const { auth, requireSession } = require('./src/http/middleware.auth');
 const routesAuth = require('./src/http/routes.auth');
 const routesSync = require('./src/http/routes.sync');
 const { UPLOAD_DIR, FILES_DIR } = require('./src/core/paths');
@@ -51,6 +52,25 @@ app.use('/api/v1/auth', (req, res, next) => {
 // 也更符合"把文件拖进来"的直觉)。只对这一个路由生效,不给全局加文本解析器 ——
 // 那会让所有路由都接受任意文本体,收窄攻击面。
 app.use('/api/import.csv', express.text({ type: ['text/csv', 'text/plain'], limit: '10mb' }));
+
+// 公开只读 API（首页/榜单/统计/公开详情/导航名单），字段白名单见 routes.public.js。
+// 必须在下面的 /api 会话守卫之前注册。外链封面代理也属于公开图片资源。
+app.use(routesPublic);
+app.use(routesProxy);
+
+// 管理页面在静态目录之前拦截：未登录时跳登录页并保留原始路径；API 仍返回 401 JSON。
+const MANAGEMENT_PAGES = new Set(['/shelf', '/shelf.html', '/tags', '/tags.html', '/notes', '/notes.html']);
+app.use((req, res, next) => {
+  if (!['GET', 'HEAD'].includes(req.method)) return next();
+  const normal = String(req.path || '/').toLowerCase().replace(/\/+$/, '') || '/';
+  const management = MANAGEMENT_PAGES.has(normal)
+    || normal === '/notes' || normal.startsWith('/notes/');
+  if (!management) return next();
+  if (auth.authenticate(req)) return next();
+  res.set('Cache-Control', 'no-store');
+  return res.redirect(302, '/login?next=' + encodeURIComponent(req.originalUrl || req.path));
+});
+
 // 静态资源缓存策略:HTML 一律 no-cache(每次向服务器验证新鲜度),
 // 解决"备案号/新功能要强制刷新才出现"—— index.html 自身没有 ?v= 缓存戳,
 // 浏览器会缓存它,导致新发布的页面内容看不到。其余资源靠 ?v= 长缓存不受影响。
@@ -65,9 +85,13 @@ app.use(express.static(path.join(__dirname, 'public'), {
     if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
   },
 }));
-app.use('/uploads', requireLibraryAccess, express.static(UPLOAD_DIR));
-// 电子书文件:GET 下载/阅读用(上传经 /api/* 走鉴权);原文件名不落盘
-app.use('/books-files', requireLibraryAccess, express.static(FILES_DIR));
+// 封面是公开页面的展示资源；上传接口本身仍需要登录。
+app.use('/uploads', express.static(UPLOAD_DIR));
+// 原始电子书始终私有：即使公开首页可匿名浏览，也不能直接取正文原文件。
+app.use('/books-files', requireSession, (req, res, next) => {
+  res.set('Cache-Control', 'private, no-store');
+  next();
+}, express.static(FILES_DIR));
 
 // 读书心得页:/notes/<书籍 id> —— 带路径参数,静态目录兜不住,显式路由。
 // 与 *.html 同一套 no-cache 策略;非法 id 直接回书架(旧 hash 深链也收敛到这里)。
@@ -78,9 +102,9 @@ app.get('/notes/:id(\\d+)', (req, res) => {
 // 非法/缺失 id 的心得链接:/notes/abc → 书架(页面脚本会给出"找不到这本书"的引导)
 app.get('/notes/:rest(.*)', (req, res) => res.redirect('/shelf'));
 
-// 写操作鉴权(应用内):GET/HEAD 放行,POST/PUT/DELETE 要求 Bearer token。
-// token 来源:环境变量 ADMIN_TOKEN 或 data/admin-token 文件;Nginx Basic 是外圈,这层是里圈。
-app.use('/api', requireLibraryAccess, requireAdmin);
+// 管理 API 全部要求设备会话/Bearer；公开读取只走上面的 /api/public 与公开 feed。
+// 不再用 MYBOOKS_PUBLIC_READ 放开整个 /api 读接口。
+app.use('/api', requireSession);
 // 虚拟书库作用域(?vl=名称):解析一次挂到 req.vlScope,各路由只管取用
 app.use('/api', attachVlScope);
 
@@ -123,12 +147,10 @@ app.use(routesBooks);
 app.use(routesSync);
 app.use(routesNotes);
 app.use(routesMisc);
-app.use(routesProxy);
 app.use(routesCategories);
 app.use(routesCollections);
 app.use(routesSavedSearches);
 app.use(routesCustomFields);
-app.use(routesFeeds);
 app.use(routesExport);
 app.use(routesEnrich);
 app.use(routesImport);

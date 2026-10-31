@@ -363,7 +363,7 @@ function renderHome(feed = {}) {
 
 async function fetchHome() {
   try {
-    renderHome(await api(`/api/home/feed?grid=${GRID_MAX}&ent=${ENT_LIMIT}`));
+    renderHome(await apiPublic(`/api/public/home/feed?grid=${GRID_MAX}&ent=${ENT_LIMIT}`));
   } catch { /* 静默:首页保持上次内容 */ }
 }
 

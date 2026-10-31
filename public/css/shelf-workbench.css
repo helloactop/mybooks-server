@@ -29,9 +29,19 @@ body[data-page="shelf"] footer { display: none !important; }
 
 #shelfWorkbench {
   --wb-card-min: 180px;
+  --wb-card-width: 180px;
+  --wb-grid-gap: 20px;
 }
-#shelfWorkbench[data-density="compact"] { --wb-card-min: 150px; }
-#shelfWorkbench[data-density="large"] { --wb-card-min: 210px; }
+#shelfWorkbench[data-density="compact"] {
+  --wb-card-min: 140px;
+  --wb-card-width: 140px;
+  --wb-grid-gap: 14px;
+}
+#shelfWorkbench[data-density="large"] {
+  --wb-card-min: 210px;
+  --wb-card-width: 210px;
+  --wb-grid-gap: 24px;
+}
 
 body[data-page="shelf"] main.wb {
   position: relative;
@@ -78,7 +88,9 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
 
 .wb-inspector[hidden] { display: none !important; }
 .wb-side-scroll {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+  height: auto;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -90,7 +102,10 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
 
 /* ---------- 左侧资料库 ---------- */
 .wb-side-scroll { padding: 54px 8px 76px; }
-.wb-side-head { display: none; }
+.wb-side-head {
+  display: none;
+  flex: 0 0 auto;
+}
 .wb-scrim,
 .wb-inspector-scrim { display: none; }
 
@@ -116,30 +131,30 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
   }
   .wb-side-scroll { padding: 10px 8px 76px; }
   .wb-side-head {
-    position: sticky;
-    top: 0;
-    z-index: 2;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: 6px 8px 9px 10px;
-    margin-bottom: 2px;
-    background: var(--wb-panel);
-    color: var(--wb-tertiary);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    min-height: 52px;
+    padding: 4px 8px 5px 12px;
+    margin: 0;
+    background: transparent;
+    color: var(--wb-ink);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.045);
   }
   .wb-side-close {
-    width: 26px;
-    height: 26px;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 auto;
     border: 0;
     border-radius: 50%;
     background: transparent;
     color: var(--wb-tertiary);
-    font-size: 14px;
+    font-size: 15px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -153,24 +168,24 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
 .wb-section-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   width: 100%;
-  min-height: 24px;
+  min-height: 32px;
   padding: 0 10px;
-  margin: 0 0 3px;
+  margin: 0 0 4px;
   border: 0;
   background: transparent;
   color: var(--wb-tertiary);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
   text-align: left;
 }
 .wb-section-head:hover { color: var(--wb-muted); }
 .wb-section-head .wb-chevron { flex: 0 0 auto; transition: transform 0.2s ease; }
 .wb-section-head[aria-expanded="false"] .wb-chevron { transform: rotate(-90deg); }
-.wb-section-head .wb-head-count { margin-left: auto; font-weight: 500; letter-spacing: 0; color: var(--wb-tertiary); }
+.wb-section-head .wb-head-count { margin-left: auto; font-weight: 500; letter-spacing: 0; color: var(--wb-tertiary); font-size: 12.5px; }
 .wb-section-add {
   flex: 0 0 auto;
   width: 20px;
@@ -193,13 +208,13 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 29px;
+  min-height: 32px;
   padding: 0 10px;
   border: 0;
   border-radius: 10px;
   background: transparent;
   color: var(--wb-muted);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
   line-height: 1.2;
   text-align: left;
@@ -210,10 +225,13 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
 .wb-row .wb-row-count {
   margin-left: auto;
   flex: 0 0 auto;
-  color: var(--wb-tertiary);
-  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--wb-muted);
+  font-size: 11.5px;
   font-variant-numeric: tabular-nums;
-  font-weight: 400;
+  font-weight: 500;
 }
 .wb-row:hover .wb-row-count,
 .wb-row.is-active .wb-row-count { color: var(--wb-muted); }
@@ -246,30 +264,30 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
 .wb-row-act:hover { background: rgba(0, 0, 0, 0.08); color: var(--wb-ink); }
 .wb-row-act.is-danger:hover { color: #c0392b; }
 
-.wb-facet-list { max-height: 252px; overflow-y: auto; scrollbar-width: none; }
+.wb-facet-list { max-height: 270px; overflow-y: auto; scrollbar-width: none; }
 .wb-facet-list::-webkit-scrollbar { display: none; }
 .wb-facet-filter {
   width: 100%;
-  height: 27px;
-  margin: 2px 0 3px;
-  padding: 0 9px;
+  height: 34px;
+  margin: 6px 0 5px;
+  padding: 0 11px;
   border: 1px solid var(--wb-hairline);
-  border-radius: 8px;
+  border-radius: 9px;
   background: rgba(255, 255, 255, 0.52);
   color: var(--wb-ink);
-  font-size: 11.5px;
+  font-size: 14px;
   outline: none;
 }
 .wb-facet-filter:focus { border-color: var(--wb-hairline-strong); background: #fff; }
 .wb-facet-more {
   width: 100%;
-  min-height: 26px;
+  min-height: 32px;
   padding: 0 10px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: var(--wb-tertiary);
-  font-size: 11.5px;
+  font-size: 12.5px;
   text-align: left;
 }
 .wb-facet-more:hover { color: var(--wb-ink); background: var(--wb-hover); }
@@ -285,18 +303,18 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
 .wb-inline-input {
   min-width: 0;
   flex: 1;
-  height: 28px;
-  padding: 0 9px;
+  height: 34px;
+  padding: 0 10px;
   border: 1px solid var(--wb-hairline-strong);
   border-radius: 8px;
   background: #fff;
   color: var(--wb-ink);
-  font-size: 12px;
+  font-size: 13px;
   outline: none;
 }
 .wb-inline-input:focus { border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.12); }
 .wb-inline-ok {
-  height: 30px;
+  height: 34px;
   padding: 0 12px;
   border: 1px solid rgba(0, 102, 204, 0.3);
   border-radius: var(--radius-pill, 999px);
@@ -330,11 +348,12 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
 }
 .wb-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--wb-card-min), 1fr));
+  grid-template-columns: repeat(auto-fill, var(--wb-card-width));
   grid-auto-rows: max-content;
-  gap: 20px;
+  gap: var(--wb-grid-gap);
+  justify-content: start;
   align-items: start;
-  padding: 84px clamp(20px, 2vw, 36px) 112px;
+  padding: 0 clamp(20px, 2vw, 36px) 112px;
 }
 .wb-sentinel { height: 1px; }
 
@@ -499,19 +518,21 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
 }
 .wb-top-right { position: relative; display: flex; align-items: center; gap: 8px; pointer-events: auto; }
 .wb-scope {
-  position: absolute;
-  z-index: 5;
-  top: 70px;
-  left: 24px;
-  right: 24px;
-  color: var(--wb-muted);
-  font-size: 12.5px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 68px clamp(20px, 2vw, 36px) 0;
+  margin: 0 0 8px;
+  color: var(--wb-ink);
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   pointer-events: none;
 }
+.wb-scope-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wb-scope-count { flex: 0 0 auto; color: var(--wb-muted); font-size: 12.5px; font-weight: 400; }
 
 .wb-layout-menu {
   position: absolute;
@@ -754,6 +775,9 @@ body.marquee-selecting .wb-content { cursor: crosshair; }
 .wb-chrome > * { pointer-events: auto; }
 .wb-chrome > :first-child { justify-self: start; }
 .wb-chrome > :last-child { justify-self: end; }
+/* 搜索关闭按钮与顶部“添加书籍”位置重叠：退场期间（search-closing 450ms）
+   暂时锁住底层添加按钮，避免同一次触摸在按钮消失后命中它。 */
+body.search-closing #wbAdd { pointer-events: none; }
 /* 详情已打开时，右下“详情”按钮与底部操作重叠且功能冗余；关闭详情后恢复。 */
 body[data-page="shelf"] main.wb.inspector-open .wb-chrome #wbInspectorToggle {
   opacity: 0;
@@ -906,14 +930,14 @@ body[data-page="shelf"] main.wb.inspector-open .wb-chrome #wbInspectorToggle {
 .wb-multi-collections button:hover { background: var(--wb-hover); color: var(--wb-ink); }
 
 /* ---------- 列表视图 ---------- */
-.wb-table-wrap { padding: 96px clamp(18px, 3vw, 44px) 110px; overflow-x: auto; }
+.wb-table-wrap { padding: 0 clamp(18px, 3vw, 44px) 110px; overflow-x: auto; }
 
 /* 手机列表:封面 + 两行文字 + 状态,不使用表格表头 */
 .wb-mobile-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 90px 12px 108px;
+  padding: 0 12px 108px;
 }
 .wb-list-row {
   display: flex;
@@ -1057,15 +1081,6 @@ body[data-page="shelf"].select-mode .toast { bottom: calc(132px + env(safe-area-
   body[data-page="shelf"] .search-results { margin-top: 24px; }
   body[data-page="shelf"] .wb-search-close { top: 12px; right: 14px; }
   body[data-page="shelf"] .modal-box { padding-bottom: 0; }
-  body[data-page="shelf"] .modal-box .form-foot {
-    position: sticky;
-    bottom: 0;
-    z-index: 4;
-    margin-top: 12px;
-    padding: 10px 0 max(12px, env(safe-area-inset-bottom));
-    background: var(--card);
-    box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.06);
-  }
 }
 
 /* ---------- 响应式 ---------- */
@@ -1092,13 +1107,18 @@ body[data-page="shelf"].select-mode .toast { bottom: calc(132px + env(safe-area-
    该区间同时压缩网格间距,让 1024 左右能保持 3 列。 */
 @media (min-width: 820px) and (max-width: 1180px) {
   body[data-page="shelf"] main.wb.inspector-open .wb-top { right: calc(332px + 18px); }
-  body[data-page="shelf"] main.wb.inspector-open .wb-scope { right: calc(332px + 18px); }
   .wb-grid {
-    grid-template-columns: repeat(auto-fill, minmax(var(--wb-card-min), 1fr));
-    gap: 20px;
-    padding: 84px 24px 104px;
+    grid-template-columns: repeat(auto-fill, var(--wb-card-width));
+    gap: var(--wb-grid-gap);
+    justify-content: start;
+    padding: 0 24px 104px;
   }
-  .wb-table-wrap { padding-top: 84px; }
+  /* Inspector 在这个断点是 fixed 覆盖层：把右列真正让出来，
+     不把被面板盖住的封面算进“可见列数”。 */
+  body[data-page="shelf"] main.wb.inspector-open .wb-grid {
+    padding-right: calc(332px + 24px);
+  }
+  .wb-table-wrap { padding-top: 0; }
 }
 
 @media (max-width: 819px) {
@@ -1134,7 +1154,7 @@ body[data-page="shelf"].select-mode .toast { bottom: calc(132px + env(safe-area-
   }
   .wb-grid {
     gap: 16px;
-    padding: 92px 16px 104px;
+    padding: 0 16px 104px;
   }
   #shelfWorkbench[data-density="compact"] .wb-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1143,9 +1163,10 @@ body[data-page="shelf"].select-mode .toast { bottom: calc(132px + env(safe-area-
   #shelfWorkbench:not([data-density="compact"]) .wb-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .wb-table-wrap { padding: 88px 12px 104px; }
+  .wb-table-wrap { padding: 0 12px 104px; }
   .wb-top { top: 14px; left: 14px; right: 14px; }
-  .wb-scope { top: 66px; left: 14px; right: 14px; font-size: 12px; }
+  .wb-scope { padding: 68px 14px 0; font-size: 13px; }
+  .wb-scope-count { font-size: 12px; }
   .wb-brand { top: 14px; left: 14px; }
   .wb-brand-menu { top: 50px; left: 14px; }
   .wb-search-close { top: 14px; right: 14px; }
@@ -1197,17 +1218,15 @@ body[data-page="shelf"].select-mode .toast { bottom: calc(132px + env(safe-area-
 }
 
 @media (min-width: 561px) and (max-width: 819px) {
-  #shelfWorkbench:not([data-density="compact"]) .wb-grid {
-    grid-template-columns: repeat(auto-fill, minmax(var(--wb-card-min), 1fr));
-    gap: 18px;
-  }
-  #shelfWorkbench[data-density="compact"] .wb-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  #shelfWorkbench .wb-grid {
+    grid-template-columns: repeat(auto-fill, var(--wb-card-width));
+    gap: var(--wb-grid-gap);
+    justify-content: start;
   }
 }
 
 @media (max-width: 560px) {
-  .wb-grid { gap: 12px; padding: 90px 13px 100px; }
+  .wb-grid { gap: 12px; padding: 0 13px 100px; }
   .wb-inspector { max-height: min(78dvh, calc(100dvh - 130px)); }
   .wb-search { width: min(190px, 50vw); }
   .wb-table th:nth-child(3), .wb-table td:nth-child(3) { display: none; }
@@ -1216,6 +1235,7 @@ body[data-page="shelf"].select-mode .toast { bottom: calc(132px + env(safe-area-
 /* 触摸设备:放大高频目标,并让分类行操作始终可见(没有 hover 可以依赖)。 */
 @media (hover: none), (pointer: coarse) {
   .wb-row { min-height: 44px; }
+  .wb-section-head { min-height: 44px; }
   .wb-circle { width: 44px; height: 44px; }
   .wb-search { height: 44px; }
   .wb-search-close { width: 44px; height: 44px; }

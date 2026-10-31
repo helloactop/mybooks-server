@@ -2,8 +2,9 @@
  * 写操作鉴权中间件(应用内,不依赖 Nginx)
  *
  * 规则:
- *   · GET / HEAD 一律放行(浏览公开)
- *   · 其余方法要求 Authorization: Bearer <token> 或 X-Admin-Token: <token>
+ *   · 当前 server.js 对 /api 统一使用 requireSession（读与写都要求设备会话/Bearer）
+ *   · 匿名公开浏览只走 routes.public.js 的白名单接口
+ *   · requireAdmin / requireLibraryAccess 保留为兼容工具，但不再由公开开关绕过鉴权
  *   · token 来源(按优先级):环境变量 ADMIN_TOKEN → data/admin-token 文件(单行)
  *   · 比较用 crypto.timingSafeEqual(恒时,防时序侧信道)
  *
@@ -156,8 +157,7 @@ function sameOrigin(req) {
   try { return new URL(origin).host === req.get('host'); } catch { return false; }
 }
 
-function createAuthMiddleware({ store = authStore, legacyToken = loadTokenCached,
-  publicRead = () => process.env.MYBOOKS_PUBLIC_READ === 'true' } = {}) {
+function createAuthMiddleware({ store = authStore, legacyToken = loadTokenCached } = {}) {
   function authenticate(req) {
     const token = extractToken(req) || cookieToken(req);
     const master = legacyToken();
@@ -190,8 +190,8 @@ function createAuthMiddleware({ store = authStore, legacyToken = loadTokenCached
       if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
       return requireSession(req, res, next);
     },
+    // 兼容旧调用名；书库 API/文件一律需要会话，不再由 MYBOOKS_PUBLIC_READ 放开。
     requireLibraryAccess(req, res, next) {
-      if (publicRead()) return next();
       res.set('Cache-Control', 'private, no-store');
       return requireSession(req, res, next);
     },

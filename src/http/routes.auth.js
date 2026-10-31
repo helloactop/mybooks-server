@@ -9,7 +9,9 @@ router.use('/api/auth', (req, res, next) => {
 });
 router.get('/api/auth/status', (req, res) => res.json({
   service: 'my-books', auth_version: 1, initialized: auth.initialized(),
-  public_read: process.env.MYBOOKS_PUBLIC_READ === 'true',
+  // legacy 字段保留给旧客户端；整库公开读已移除，匿名只能访问白名单公开 API。
+  public_read: false,
+  public_pages: true,
 }));
 
 router.post('/api/auth/login', async (req, res, next) => {

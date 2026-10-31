@@ -45,14 +45,16 @@
       : `${esc(x.label)}:${esc(x.value)}`)).join(' · ')}</span></div>`;
   }
 
-  function valueRows(book) {
+  function valueRows(book, readOnly) {
     const pub = [book.publisher, book.pub_year].filter(Boolean).join(' · ');
     return `
       <div class="bd-row"><span class="bd-k">出版</span><span class="bd-v">${pub ? esc(pub) : '未设置'}</span></div>
       <div class="bd-row"><span class="bd-k">ISBN</span><span class="bd-v">${book.isbn ? esc(book.isbn) : '未设置'}</span></div>
       ${book.douban_id ? `<div class="bd-row"><span class="bd-k">豆瓣</span><span class="bd-v"><a class="bd-link" href="https://book.douban.com/subject/${esc(book.douban_id)}/" target="_blank" rel="noopener noreferrer">查看豆瓣条目 ↗</a></span></div>` : ''}
-      ${identifierRows(book)}`;
+      ${readOnly ? '' : identifierRows(book)}`;
   }
+
+  const statusLabel = (value) => (STATUS.find(([v]) => v === value) || ['', '未设置'])[1];
 
   function summaryHtml(book, state) {
     if (!book.summary) return '';
@@ -90,6 +92,7 @@
   }
 
   function contentHtml(book, state) {
+    const readOnly = !!state.readOnly;
     const tags = tagsOf(book);
     const visibleTags = state.tagsExpanded ? tags : tags.slice(0, TAG_PREVIEW);
     const rating = Number(book.rating) > 0 ? book.rating : '';
@@ -113,25 +116,31 @@
         <div class="bd-intro">
           <h2 class="bd-title">${esc(book.title)}</h2>
           <p class="bd-author">${book.author ? esc(book.author) : '未设置作者'}</p>
-          <div class="seg seg--track bd-status" role="group" aria-label="阅读状态">
-            ${STATUS.map(([value, label]) => `<button type="button" class="${book.status === value ? 'active' : ''}" data-bd-status="${value}">${label}</button>`).join('')}
-          </div>
+          ${readOnly
+            ? `<p class="bd-status-static">阅读状态 · <span>${esc(statusLabel(book.status))}</span></p>`
+            : `<div class="seg seg--track bd-status" role="group" aria-label="阅读状态">
+                ${STATUS.map(([value, label]) => `<button type="button" class="${book.status === value ? 'active' : ''}" data-bd-status="${value}">${label}</button>`).join('')}
+              </div>`}
         </div>
       </div>
 
       <div class="bd-meta">
         <div class="bd-row">
           <span class="bd-k">评分</span>
-          <span class="bd-v bd-rating-line"><input class="bd-input bd-rating-input" type="number" min="0" max="10" step="0.1" value="${esc(String(rating))}" placeholder="未设置" data-bd-rating aria-label="评分（满分 10）"><span class="bd-unit">/ 10</span></span>
+          <span class="bd-v${readOnly ? '' : ' bd-rating-line'}">${readOnly
+            ? (rating ? `${esc(String(rating))} / 10` : '未评分')
+            : `<input class="bd-input bd-rating-input" type="number" min="0" max="10" step="0.1" value="${esc(String(rating))}" placeholder="未设置" data-bd-rating aria-label="评分（满分 10）"><span class="bd-unit">/ 10</span>`}</span>
         </div>
-        <div class="bd-row">
-          <span class="bd-k">系列</span>
-          <span class="bd-v bd-series">
-            <input class="bd-input" type="text" value="${esc(book.series || '')}" placeholder="系列名" data-bd-series-name aria-label="系列名">
-            <input class="bd-input bd-series-index" type="text" value="${esc(book.series_index || '')}" placeholder="序号" data-bd-series-index aria-label="系列序号">
-          </span>
-        </div>
-        ${valueRows(book)}
+        ${readOnly
+          ? (book.series ? `<div class="bd-row"><span class="bd-k">系列</span><span class="bd-v">${esc(book.series)}${book.series_index ? ' #' + esc(String(book.series_index)) : ''}</span></div>` : '')
+          : `<div class="bd-row">
+              <span class="bd-k">系列</span>
+              <span class="bd-v bd-series">
+                <input class="bd-input" type="text" value="${esc(book.series || '')}" placeholder="系列名" data-bd-series-name aria-label="系列名">
+                <input class="bd-input bd-series-index" type="text" value="${esc(book.series_index || '')}" placeholder="序号" data-bd-series-index aria-label="系列序号">
+              </span>
+            </div>`}
+        ${valueRows(book, readOnly)}
       </div>
 
       ${summaryHtml(book, state)}
@@ -140,13 +149,15 @@
       <section class="bd-section">
         <h3 class="bd-section-title">标签</h3>
         <div class="bd-chips">
-          ${visibleTags.map((t) => `<span class="tag-chip bd-tag">${esc(t)}<button type="button" data-bd-remove-tag="${esc(t)}" aria-label="移除标签 ${esc(t)}">✕</button></span>`).join('')}
-          ${tags.length > TAG_PREVIEW ? `<button type="button" class="bd-chip-more" data-bd-tags-more>${state.tagsExpanded ? '收起' : `显示更多 (${tags.length - TAG_PREVIEW})`}</button>` : ''}
-          <input class="bd-chip-input" type="text" placeholder="+ 标签" data-bd-new-tag aria-label="添加标签">
+          ${readOnly
+            ? tags.map((t) => `<span class="tag-chip bd-tag">${esc(t)}</span>`).join('')
+            : `${visibleTags.map((t) => `<span class="tag-chip bd-tag">${esc(t)}<button type="button" data-bd-remove-tag="${esc(t)}" aria-label="移除标签 ${esc(t)}">✕</button></span>`).join('')}
+               ${tags.length > TAG_PREVIEW ? `<button type="button" class="bd-chip-more" data-bd-tags-more>${state.tagsExpanded ? '收起' : `显示更多 (${tags.length - TAG_PREVIEW})`}</button>` : ''}
+               <input class="bd-chip-input" type="text" placeholder="+ 标签" data-bd-new-tag aria-label="添加标签">`}
         </div>
       </section>
 
-      <section class="bd-section">
+      ${readOnly ? '' : `<section class="bd-section">
         <h3 class="bd-section-title">分类</h3>
         <div class="bd-collection">
           <div class="bd-chips">
@@ -170,12 +181,16 @@
           <a class="btn btn-ghost" href="/notes/${book.id}">读书心得</a>
         </div>
         <button type="button" class="bd-delete" data-bd-delete>移到回收站</button>
-      </div>
+      </div>`}
     </div>`;
   }
 
   async function defaultLoadBook(id) {
     return api('/api/books/' + id);
+  }
+
+  async function defaultPublicLoadBook(id) {
+    return apiPublic('/api/public/books/' + id);
   }
 
   async function defaultPatchBook(book, patch) {
@@ -196,6 +211,7 @@
     const state = {
       book: null,
       seq: 0,
+      readOnly: !!options.readOnly,
       tagsExpanded: false,
       summaryExpanded: false,
       collectionPop: false,
@@ -206,7 +222,7 @@
     let destroyed = false;
     let drag = null;
 
-    const loadBook = options.loadBook || defaultLoadBook;
+    const loadBook = options.loadBook || (state.readOnly ? defaultPublicLoadBook : defaultLoadBook);
     const patchBook = options.patchBook || defaultPatchBook;
     const loadCollections = options.loadCollections || defaultCollections;
 
@@ -336,6 +352,7 @@
         return;
       }
       if (e.target.closest('[data-bd-close]')) { e.preventDefault(); options.onClose?.(); return; }
+      if (state.readOnly) return;
       const status = e.target.closest('[data-bd-status]');
       if (status) { patch({ status: status.dataset.bdStatus }, '状态已更新'); return; }
       if (e.target.closest('[data-bd-tags-more]')) { state.tagsExpanded = !state.tagsExpanded; render(); return; }
@@ -365,7 +382,7 @@
     }
 
     function onChange(e) {
-      if (!state.book) return;
+      if (!state.book || state.readOnly) return;
       if (e.target.matches('[data-bd-rating]')) {
         patch({ rating: e.target.value === '' ? 0 : Number(e.target.value) }, '评分已更新');
         return;
@@ -381,6 +398,7 @@
     }
 
     function onKeydown(e) {
+      if (state.readOnly) return;
       if (e.key === 'Enter' && e.target.matches('[data-bd-new-tag]')) {
         e.preventDefault();
         const value = e.target.value.trim();
@@ -392,6 +410,7 @@
     }
 
     function onSubmit(e) {
+      if (state.readOnly) return;
       const form = e.target.closest('[data-bd-new-collection]');
       if (!form) return;
       e.preventDefault();
@@ -487,6 +506,7 @@
   window.BookDetails = {
     create,
     defaultLoadBook,
+    defaultPublicLoadBook,
     defaultPatchBook,
     defaultCollections,
     tagsOf,

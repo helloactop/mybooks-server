@@ -1,8 +1,27 @@
 'use strict';
+
 const statusEl = document.getElementById('accountStatus');
 const form = document.getElementById('loginForm');
 const panel = document.getElementById('accountPanel');
+const deviceList = document.getElementById('deviceList');
+const deviceCount = document.getElementById('deviceCount');
+const accountName = document.getElementById('accountName');
+const accountDevice = document.getElementById('accountDevice');
 let currentId = '';
+
+// 只接受同源相对路径，拒绝 //host、绝对 URL 和回到登录页自身。
+function nextDestination() {
+  const raw = new URLSearchParams(location.search).get('next');
+  if (!raw) return '';
+  try {
+    const url = new URL(raw, location.origin);
+    if (url.origin !== location.origin || url.pathname === '/login') return '';
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return '';
+  }
+}
+
 async function request(path, options = {}) {
   const res = await fetch('/api/auth/' + path, {
     ...options, headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
@@ -11,57 +30,99 @@ async function request(path, options = {}) {
   if (!res.ok) throw new Error(data.error || '请求失败');
   return data;
 }
+
+function dateText(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '未知' : date.toLocaleDateString('zh-CN');
+}
+
+function deviceRow(device, isCurrent) {
+  const li = document.createElement('li');
+  li.className = 'device-row' + (isCurrent ? ' is-current' : '');
+
+  const icon = document.createElement('span');
+  icon.className = 'device-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = '▣';
+
+  const copy = document.createElement('span');
+  copy.className = 'device-copy';
+  const name = document.createElement('strong');
+  name.textContent = device.label || '未命名设备';
+  const meta = document.createElement('span');
+  meta.className = 'device-meta';
+  const expiry = `到期 ${dateText(device.expiresAt)}`;
+  meta.textContent = isCurrent
+    ? `当前设备 · 登录于 ${dateText(device.createdAt)}`
+    : `登录于 ${dateText(device.createdAt)} · ${expiry}`;
+  copy.append(name, meta);
+
+  li.append(icon, copy);
+
+  if (isCurrent) {
+    const badge = document.createElement('span');
+    badge.className = 'device-current';
+    badge.textContent = '当前设备';
+    li.append(badge);
+    return li;
+  }
+
+  const revoke = document.createElement('button');
+  revoke.type = 'button';
+  revoke.className = 'btn btn-danger-tint device-revoke';
+  revoke.textContent = '撤销';
+  revoke.addEventListener('click', async () => {
+    if (!confirm(`撤销设备「${device.label || '未命名设备'}」的访问权限？`)) return;
+    try {
+      await request('devices/' + encodeURIComponent(device.id), { method: 'DELETE' });
+      await refresh();
+    } catch (error) {
+      statusEl.textContent = error.message;
+    }
+  });
+  li.append(revoke);
+  return li;
+}
+
 async function refresh() {
   try {
     const status = await request('status');
     if (!status.initialized) {
       statusEl.textContent = '服务器尚未初始化。请在服务器终端运行 npm run setup，设置管理员账号。';
+      form.hidden = true;
+      panel.hidden = true;
       return;
     }
     let me;
     try { me = await request('me'); } catch {
       statusEl.textContent = '使用服务器管理员账号登录。';
-      form.hidden = false; panel.hidden = true; return;
+      form.hidden = false;
+      panel.hidden = true;
+      return;
     }
     currentId = me.device.id;
-    form.hidden = true; panel.hidden = false;
-    statusEl.textContent = '已登录 · ' + me.device.label;
-    const list = document.getElementById('deviceList');
-    list.replaceChildren();
+    const next = nextDestination();
+    if (next) { location.replace(next); return; }
+
+    form.hidden = true;
+    panel.hidden = false;
+    statusEl.textContent = '会话有效，可管理书库与已授权设备。';
+    accountName.textContent = 'My books 管理员';
+    accountDevice.textContent = `当前设备 · ${me.device.label || '网页浏览器'}`;
+
     const devices = await request('devices');
-    const duplicates = devices.filter((d) => d.label === me.device.label && d.id !== currentId);
-    if (duplicates.length) {
-      const li = document.createElement('li');
-      const text = document.createElement('span');
-      text.textContent = `有 ${duplicates.length} 个旧的同类登录`;
-      const button = document.createElement('button');
-      button.type = 'button'; button.className = 'btn btn-ghost'; button.textContent = '撤销旧会话';
-      button.addEventListener('click', async () => {
-        if (!confirm(`撤销其他 ${duplicates.length} 个「${me.device.label}」会话?当前设备会保留。`)) return;
-        try {
-          for (const device of duplicates) {
-            await request('devices/' + encodeURIComponent(device.id), { method: 'DELETE' });
-          }
-          await refresh();
-        } catch (error) { statusEl.textContent = error.message; }
-      });
-      li.append(text, button); list.append(li);
-    }
-    for (const device of devices) {
-      const li = document.createElement('li');
-      const text = document.createElement('span');
-      text.textContent = device.label + (device.id === currentId ? '（当前设备）' : '')
-        + ' · 到期 ' + new Date(device.expiresAt).toLocaleDateString();
-      const button = document.createElement('button');
-      button.type = 'button'; button.className = 'btn btn-ghost'; button.textContent = '撤销';
-      button.addEventListener('click', async () => {
-        try { await request('devices/' + encodeURIComponent(device.id), { method: 'DELETE' }); await refresh(); }
-        catch (error) { statusEl.textContent = error.message; }
-      });
-      li.append(text, button); list.append(li);
-    }
-  } catch (error) { statusEl.textContent = error.message; }
+    deviceCount.textContent = `${devices.length} 台设备`;
+    const ordered = devices.slice().sort((a, b) => {
+      if (a.id === currentId) return -1;
+      if (b.id === currentId) return 1;
+      return String(b.createdAt).localeCompare(String(a.createdAt));
+    });
+    deviceList.replaceChildren(...ordered.map((device) => deviceRow(device, device.id === currentId)));
+  } catch (error) {
+    statusEl.textContent = error.message;
+  }
 }
+
 function deviceKey() {
   const storageKey = 'mybooks.deviceKey';
   let key = '';
@@ -80,7 +141,8 @@ function deviceKey() {
 
 async function login(useToken) {
   const buttons = form.querySelectorAll('button');
-  buttons.forEach((b) => { b.disabled = true; });
+  buttons.forEach((button) => { button.disabled = true; });
+  statusEl.textContent = '正在登录…';
   try {
     const fields = new FormData(form);
     const credentials = useToken ? { token: fields.get('token') }
@@ -91,19 +153,27 @@ async function login(useToken) {
     });
     localStorage.removeItem('mybooks.adminToken');
     form.reset();
-    // 仅允许同源相对跳转，防止登录页被用于开放重定向。
-    const next = new URLSearchParams(location.search).get('next');
-    const destination = next && new URL(next, location.origin);
-    if (destination && destination.origin === location.origin && destination.pathname !== '/login') {
-      location.assign(destination.href);
-    } else { await refresh(); }
-  } catch (error) { statusEl.textContent = error.message; }
-  finally { buttons.forEach((b) => { b.disabled = false; }); }
+    const next = nextDestination();
+    if (next) location.assign(next);
+    else await refresh();
+  } catch (error) {
+    statusEl.textContent = error.message;
+  } finally {
+    buttons.forEach((button) => { button.disabled = false; });
+  }
 }
+
 form.addEventListener('submit', (event) => { event.preventDefault(); login(false); });
 document.getElementById('tokenLogin').addEventListener('click', () => login(true));
 document.getElementById('logout').addEventListener('click', async () => {
-  try { await request('logout', { method: 'POST' }); localStorage.removeItem('mybooks.adminToken'); await refresh(); }
-  catch (error) { statusEl.textContent = error.message; }
+  try {
+    await request('logout', { method: 'POST' });
+    localStorage.removeItem('mybooks.adminToken');
+    statusEl.textContent = '已退出当前设备。';
+    await refresh();
+  } catch (error) {
+    statusEl.textContent = error.message;
+  }
 });
+
 refresh();

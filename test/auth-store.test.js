@@ -63,7 +63,7 @@ test('cookie 写操作拒绝跨站来源，原生无 Origin 可用', () => {
   assert.equal(sameOrigin({ get: (key) => ({ Origin: 'https://books.test', host: 'books.test' })[key] }), true);
   assert.equal(sameOrigin({}), true);
 });
-test('新部署默认私有，公开浏览必须显式开启', () => {
+test('书库 API 默认要求会话，匿名请求不会因旧公开开关被放行', () => {
   const middleware = createAuthMiddleware({ store: { initialized: () => false, authenticate: () => null }, legacyToken: () => '' });
   const res = { set() {}, status(code) { this.code = code; return this; }, json() {} };
   middleware.requireLibraryAccess({ method: 'GET', headers: {} }, res, () => assert.fail('不能放行'));

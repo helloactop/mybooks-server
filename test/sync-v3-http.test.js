@@ -9,7 +9,7 @@ const { once } = require('node:events');
 const { createAuthStore } = require('../src/db/auth');
 const { EMPTY_READING_DATA } = require('../src/core/mobile-reading');
 
-test('公开书库下阅读同步仍私有，强校验续传与文件替换后重新下载', async () => {
+test('书库文件与阅读同步始终私有，强校验续传与文件替换后重新下载', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mybooks-v3-http-'));
   const auth = createAuthStore(path.join(root, 'data', 'auth.json'));
   const child = spawn(process.execPath, ['server.js'], { cwd: path.resolve(__dirname, '..'),
@@ -27,7 +27,7 @@ test('公开书库下阅读同步仍私有，强校验续传与文件替换后�
       body:JSON.stringify({username:'admin',password:'integration-password'})})).json();
     const headers={Authorization:'Bearer '+login.token};
     const jsonHeaders={...headers,'Content-Type':'application/json'};
-    assert.equal((await fetch(base+'/api/books')).status,200);
+    assert.equal((await fetch(base+'/api/books')).status,401);
     assert.equal((await fetch(base+'/api/sync/changes')).status,401);
     const book=await (await fetch(base+'/api/books',{method:'POST',headers:jsonHeaders,body:JSON.stringify({title:'Sync'})})).json();
     const full=await (await fetch(base+'/api/v1/sync/changes',{headers})).json();
@@ -54,7 +54,7 @@ test('公开书库下阅读同步仍私有，强校验续传与文件替换后�
     const original=crypto.randomBytes(120000); const file=await upload(original);
     const detail=await (await fetch(base+'/api/books/'+book.id,{headers})).json();
     const url=base+detail.files[0].download_url;
-    const publicFile=await fetch(url);assert.equal(publicFile.status,200);await publicFile.arrayBuffer();
+    assert.equal((await fetch(url)).status,401);
     const first=await fetch(url,{headers}); const etag=first.headers.get('etag');
     assert.match(etag,/^"sha256-[a-f0-9]{64}"$/);
     assert.equal(first.headers.get('x-content-sha256'),crypto.createHash('sha256').update(original).digest('hex'));

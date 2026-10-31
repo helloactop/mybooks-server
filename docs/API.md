@@ -2,13 +2,29 @@
 
 这是供配套客户端接入的核心接口说明，不是全部管理接口的枚举。
 基地址是部署地址，例如 `https://books.example.com`；下列路径不带域名。
-正文、封面、心得与书目默认需要登录，`GET /healthz` 和认证状态可用于服务探测。
+管理接口（书目、同步、文件、心得、导出与设备）始终需要登录；公开首页、榜单和统计
+使用单独的只读白名单接口，匿名可读。`GET /healthz` 和认证状态可用于服务探测。
+
+## 公开只读接口
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| GET | `/api/public/home/feed` | 首页公开精选（白名单字段） |
+| GET | `/api/public/rank/feed` | 榜单公开数与重读榜（白名单字段） |
+| GET | `/api/public/stats` | 公开统计聚合 |
+| GET | `/api/public/books/:id` | 公开详情（不含文件、心得、自定义字段、UUID、修订与藏书集） |
+| GET | `/api/public/authors` | 公开作者名单与数量 |
+| GET | `/api/public/tags` | 公开标签名单与数量 |
+
+`/api/home/feed`、`/api/rank/feed` 保留为旧公开页兼容路径；管理接口 `/api/books`
+等不会因 `MYBOOKS_PUBLIC_READ` 而匿名开放。管理页面 `/shelf`、`/tags`、`/notes`
+未登录会 302 到 `/login?next=原始路径`。
 
 ## 认证
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
-| GET | `/api/auth/status` | 返回 `service`、`auth_version`、`initialized`、`public_read` |
+| GET | `/api/auth/status` | 返回 `service`、`auth_version`、`initialized`、`public_pages`（`public_read` 保留为兼容字段，固定 false） |
 | POST | `/api/auth/login` | 使用账号密码换取独立设备会话 |
 | GET | `/api/auth/me` | 检查当前会话 |
 | GET | `/api/auth/devices` | 查看设备会话 |

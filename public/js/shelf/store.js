@@ -51,7 +51,7 @@
     },
   };
   S.ui = { pageSeq: 0, facetSeq: 0, detailSeq: 0, facetSearchSeq: { author: 0, tag: 0 } };
-  S.facetUI = { expanded: {}, query: {}, results: {}, pinned: {} };
+  S.facetUI = { expanded: {}, query: {}, results: {}, pinned: {}, uiSeq: {}, searching: {} };
 
   const LAYOUT_KEY = 'shelf.layout';
   S.parseLayout = function () {

@@ -57,7 +57,7 @@ function renderRank(feed = {}) {
 async function loadRankings() {
   let feed;
   try {
-    feed = await api(`/api/rank/feed?size=${RANK_SIZE}`);
+    feed = await apiPublic(`/api/public/rank/feed?size=${RANK_SIZE}`);
   } catch {
     return; // 静默:保留上次内容
   }

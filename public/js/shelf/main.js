@@ -58,8 +58,9 @@
     if (s.series) parts.push(s.series);
     if (s.vl) parts.push(s.vl);
     const label = parts.length ? parts.join(' · ') : '全部图书';
-    el.textContent = s.total === null ? label : `${label} · ${s.total} 本`;
-    el.title = el.textContent;
+    const count = s.total === null ? '' : `${s.total} 本`;
+    el.innerHTML = `<span class="wb-scope-label">${esc(label)}</span>${count ? `<span class="wb-scope-count">${count}</span>` : ''}`;
+    el.title = s.total === null ? label : `${label} · ${count}`;
   }
 
   const SIDEBAR_KEY = 'shelf.sidebar';
@@ -388,6 +389,8 @@
       state().density = btn.dataset.density;
       S.saveLayout();
       applyLayoutPreferences();
+      // 密度变化只改 CSS 轨道；再跑一次 fill，紧凑模式多出来的列能继续取书。
+      ensureFill();
     });
     $('#wbShowInfo').addEventListener('change', (e) => {
       state().showInfo = !!e.target.checked;
@@ -425,7 +428,13 @@
         window.openSearchOverlay();
       }
     });
-    $('#wbSearchClose').addEventListener('click', () => {
+    const searchCloseBtn = $('#wbSearchClose');
+    // pointerdown 只阻止冒泡，不取消 click：搜索控件在 overlay 的外部点击判定里
+    // 被明确排除，真正的关闭仍由下面的 click 处理。
+    searchCloseBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    searchCloseBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       if (typeof window.closeSearchOverlay === 'function') window.closeSearchOverlay(false);
       $('#shelfSearchBtn').focus();
     });

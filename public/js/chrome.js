@@ -95,9 +95,10 @@ const NAV_MENUS = {
 /* 书架筛选 / 分类浏览里的作者、标签名单来自真实书库,不能写死在 NAV_MENUS:
  * 下拉按钮先渲染空名单,页面载入后各拉一次接口,桌面 flyout 与竖屏菜单共用。
  * 名单按书籍数排序(接口已排好),点名字直接去书架按该分类筛选。 */
+const navPublicPage = ['home', 'rank', 'stats'].includes(document.body.dataset.page);
 const NAV_LIST_SOURCES = {
-  authors: { param: 'author', endpoint: '/api/authors', label: '作者' },
-  tags: { param: 'tag', endpoint: '/api/tags', label: '标签' },
+  authors: { param: 'author', endpoint: navPublicPage ? '/api/public/authors' : '/api/authors', label: '作者' },
+  tags: { param: 'tag', endpoint: navPublicPage ? '/api/public/tags' : '/api/tags', label: '标签' },
 };
 
 /* apple.com 页脚实测的下拉按钮箭头:朝下的 V,展开时 320ms 变形成朝上的 V

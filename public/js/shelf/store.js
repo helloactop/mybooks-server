@@ -40,6 +40,11 @@
     inspectorId: null,
     inspectorBook: null,
     inspectorLoading: false,
+    pageStatus: 'idle',
+    pageError: '',
+    facetsStatus: 'idle',
+    facetsError: '',
+    facetsLoaded: false,
     facets: {
       total: 0,
       byStatus: { wish: 0, reading: 0, done: 0 },
@@ -52,6 +57,59 @@
   };
   S.ui = { pageSeq: 0, facetSeq: 0, detailSeq: 0, facetSearchSeq: { author: 0, tag: 0 } };
   S.facetUI = { expanded: {}, query: {}, results: {}, pinned: {}, uiSeq: {}, searching: {} };
+
+  // 完整详情缓存：列表行只含基础列，绝不能当作可编辑对象写回。
+  // 缓存只接收带 files / identifier_list 的完整响应，并用列表行的 revision
+  // 做一致性校验——列表刷新后若同步改过书，旧详情自动失效。
+  const DETAIL_CACHE_TTL_MS = 2 * 60 * 1000;
+  const detailCache = new Map();
+
+  function isFullDetail(book) {
+    return !!(book && book.id != null && Array.isArray(book.files) && Array.isArray(book.identifier_list));
+  }
+
+  S.detailCache = {
+    get(id, hint = null) {
+      const entry = detailCache.get(String(id));
+      if (!entry) return null;
+      if (Date.now() - entry.savedAt > DETAIL_CACHE_TTL_MS) {
+        detailCache.delete(String(id));
+        return null;
+      }
+      const cachedRevision = entry.book && entry.book.revision;
+      const hintRevision = hint && hint.revision;
+      if (cachedRevision != null && hintRevision != null
+          && String(cachedRevision) !== String(hintRevision)) {
+        detailCache.delete(String(id));
+        return null;
+      }
+      return entry.book;
+    },
+    set(book) {
+      if (!isFullDetail(book)) return false;
+      detailCache.set(String(book.id), { book, savedAt: Date.now() });
+      return true;
+    },
+    // 列表刷新时逐本比对 revision；同步/其它标签页改过的书不必等 TTL。
+    revalidate(rows) {
+      for (const row of rows || []) {
+        const entry = detailCache.get(String(row.id));
+        if (!entry) continue;
+        const cachedRevision = entry.book && entry.book.revision;
+        if (cachedRevision != null && row.revision != null
+            && String(cachedRevision) !== String(row.revision)) {
+          detailCache.delete(String(row.id));
+        }
+      }
+    },
+    invalidate(id) { detailCache.delete(String(id)); },
+    clear() { detailCache.clear(); },
+  };
+
+  // 编辑、删除、上传文件都会广播 books-changed；外部同步没有前端事件，
+  // 因此在窗口重新获得焦点时清空，下次打开详情重新取权威数据。
+  document.addEventListener('books-changed', () => S.detailCache.clear());
+  window.addEventListener('focus', () => S.detailCache.clear());
 
   const LAYOUT_KEY = 'shelf.layout';
   S.parseLayout = function () {
@@ -143,6 +201,19 @@
     s.start = 0;
     s.total = null;
     s.hasMore = true;
+    // 清空数据后立刻进入加载态：调用方随后就会发请求，
+    // 中间这一帧不能再把“空书架”当成最终状态画出来。
+    s.pageStatus = 'loading';
+    s.pageError = '';
+  };
+
+  S.errorMessage = function (err, fallback = '请求失败') {
+    const message = String((err && err.message) || '').trim();
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    if (offline || /failed to fetch|networkerror|network request failed|load failed/i.test(message)) {
+      return '网络连接失败，请检查网络后重试。';
+    }
+    return message || fallback;
   };
 
   S.loadPage = async function ({ append = false } = {}) {
@@ -150,6 +221,10 @@
     if (append && (s.loading || !s.hasMore)) return null;
     const seq = ++S.ui.pageSeq;
     s.loading = true;
+    if (!append) {
+      s.pageStatus = 'loading';
+      s.pageError = '';
+    }
     const p = S.params();
     p.set('size', String(PAGE_SIZE));
     p.set('start', String(s.start));
@@ -157,11 +232,19 @@
       const { data, total } = await apiPage('/api/books?' + p.toString());
       if (seq !== S.ui.pageSeq) return null;
       const rows = Array.isArray(data) ? data : [];
+      S.detailCache.revalidate(rows);
       s.books = append ? s.books.concat(rows) : rows;
       s.total = total;
       s.start = s.books.length;
       s.hasMore = total === null ? rows.length === PAGE_SIZE : s.books.length < total;
+      if (!append) s.pageStatus = 'ready';
       return { rows, total, append };
+    } catch (err) {
+      if (seq === S.ui.pageSeq && !append) {
+        s.pageStatus = 'error';
+        s.pageError = S.errorMessage(err, '书架加载失败');
+      }
+      throw err;
     } finally {
       if (seq === S.ui.pageSeq) s.loading = false;
     }
@@ -220,6 +303,9 @@
 
   S.loadFacets = async function () {
     const seq = ++S.ui.facetSeq;
+    const s = S.state;
+    s.facetsStatus = s.facetsLoaded ? 'refreshing' : 'loading';
+    s.facetsError = '';
     const query = vlQuery();
     const params = new URLSearchParams();
     if (S.state.vl) params.set('vl', S.state.vl);
@@ -227,7 +313,7 @@
     const facetQuery = '?' + params.toString();
     const fallback = (value) => api(value).catch(() => null);
     const fallbackPage = (value) => apiPage(value).catch(() => null);
-    const [stats, collections, virtualLibraries, seriesPage, authorsPage, tagsPage] = await Promise.all([
+    const results = await Promise.all([
       fallback('/api/stats' + query),
       fallback('/api/collections' + query),
       fallback('/api/virtual-libraries'),
@@ -236,10 +322,18 @@
       fallbackPage('/api/tags' + facetQuery),
     ]);
     if (seq !== S.ui.facetSeq) return;
+    const [stats, collections, virtualLibraries, seriesPage, authorsPage, tagsPage] = results;
+    // 六个请求全部失败 = 这一块真的坏了；部分失败仍用已有数据渐进渲染，
+    // 不把整个侧栏打成错误页（书籍列表本来就已经独立显示了）。
+    if (results.every((item) => item == null)) {
+      s.facetsStatus = 'error';
+      s.facetsError = '分类与统计加载失败';
+      return;
+    }
     const series = seriesPage && Array.isArray(seriesPage.data) ? seriesPage.data : [];
     const authors = authorsPage && Array.isArray(authorsPage.data) ? authorsPage.data : [];
     const tags = tagsPage && Array.isArray(tagsPage.data) ? tagsPage.data : [];
-    S.state.facets = {
+    s.facets = {
       total: Number(stats && stats.total) || 0,
       byStatus: (stats && stats.byStatus) || { wish: 0, reading: 0, done: 0 },
       collections: Array.isArray(collections) ? collections : [],
@@ -251,6 +345,8 @@
       authorTotal: authorsPage && authorsPage.total !== null ? authorsPage.total : authors.length,
       tagTotal: tagsPage && tagsPage.total !== null ? tagsPage.total : tags.length,
     };
+    s.facetsLoaded = true;
+    s.facetsStatus = 'ready';
     await Promise.all([
       pinActiveFacet('author', seq),
       pinActiveFacet('tag', seq),
@@ -260,14 +356,29 @@
     await refreshFacetSearches();
   };
 
-  S.loadDetail = async function (id) {
+  S.loadDetail = async function (id, { hint = null, force = false } = {}) {
+    const s = S.state;
+    if (!force) {
+      const cached = S.detailCache.get(id, hint);
+      if (cached) {
+        // 命中缓存也要推进详情序号：早先那本未完成的请求不能再覆盖当前状态。
+        ++S.ui.detailSeq;
+        s.inspectorBook = cached;
+        s.inspectorLoading = false;
+        return cached;
+      }
+    }
     const seq = ++S.ui.detailSeq;
     try {
       const book = await api('/api/books/' + id);
-      if (seq === S.ui.detailSeq) S.state.inspectorBook = book;
+      // 旧请求的响应既不能覆盖状态，也不能写进缓存（用户已切到另一本）。
+      if (seq === S.ui.detailSeq) {
+        S.detailCache.set(book);
+        s.inspectorBook = book;
+      }
       return book;
     } finally {
-      if (seq === S.ui.detailSeq) S.state.inspectorLoading = false;
+      if (seq === S.ui.detailSeq) s.inspectorLoading = false;
     }
   };
 
@@ -293,15 +404,20 @@
 
   S.updateBook = function (book) {
     const s = S.state;
+    if (!book) return book;
     if (s.inspectorBook && s.inspectorBook.id === book.id) s.inspectorBook = book;
     const row = s.books.find((b) => b.id === book.id);
     if (row) Object.assign(row, book);
+    S.detailCache.set(book);
+    return book;
   };
 
   S.patchBook = async function (id, patch) {
     const s = S.state;
     let base = s.inspectorBook && s.inspectorBook.id === id ? s.inspectorBook : s.books.find((b) => b.id === id);
     if (!base || !base.revision || !base.uuid) base = await S.loadDetail(id);
+    // 先失效再写：PATCH 失败时下一次打开也必须重新取权威详情。
+    S.detailCache.invalidate(id);
     const body = { ...patch, expected_revision: base.revision, expected_uuid: base.uuid };
     const updated = await api('/api/books/' + id, { method: 'PATCH', body: JSON.stringify(body) });
     S.updateBook(updated);

@@ -9,9 +9,15 @@
   const state = () => S.state;
   let loadSeq = 0;
   let details = null;
+  let loadError = '';
+  let loadErrorId = null;
 
   function selectedBooks() {
     return state().books.filter((b) => state().selection.has(b.id));
+  }
+
+  function listRow(id) {
+    return state().books.find((b) => b.id === id) || null;
   }
 
   function getDetails() {
@@ -24,6 +30,7 @@
       loadCollections: () => Promise.resolve(state().facets.collections || []),
       onClose: hide,
       onEdit: editBook,
+      onRetry: () => loadSelection({ force: true }),
       onDelete: (book) => {
         if (typeof window.deleteBook === 'function') window.deleteBook(book.id, book.title);
       },
@@ -108,51 +115,88 @@
     }
     const id = [...s.selection][0];
     const book = s.inspectorBook && s.inspectorBook.id === id ? s.inspectorBook : null;
-    if (!book) {
-      details.showMessage('载入中…', { loading: true });
+    if (book) {
+      details.setBook(book);
       return;
     }
-    details.setBook(book);
+    // 列表行只够做首屏预览（封面/书名/作者），完整字段仍等详情 API。
+    const row = listRow(id);
+    if (row) {
+      details.setPreview(row, { error: loadErrorId === id ? loadError : '' });
+      return;
+    }
+    details.showMessage('载入中…', { loading: true });
   }
 
-  async function loadSelection() {
+  async function loadSelection({ force = false } = {}) {
     const s = state();
     const seq = ++loadSeq;
     if (!s.inspectorOpen) return;
     if (s.selection.size !== 1) {
       s.inspectorBook = null;
+      loadError = '';
+      loadErrorId = null;
       render();
       return;
     }
     const id = [...s.selection][0];
     if (s.inspectorBook && s.inspectorBook.id === id) { render(); return; }
+    const row = listRow(id);
+    if (!force) {
+      const cached = S.detailCache.get(id, row);
+      if (cached) {
+        // 命中缓存同样推进序号，让 A 的迟到请求无法覆盖快速切到的 B。
+        S.ui.detailSeq += 1;
+        s.inspectorBook = cached;
+        s.inspectorLoading = false;
+        loadError = '';
+        loadErrorId = null;
+        render();
+        return;
+      }
+    }
     s.inspectorBook = null;
     s.inspectorLoading = true;
+    loadError = '';
+    loadErrorId = null;
     render();
     try {
-      const book = await S.loadDetail(id);
+      const book = await S.loadDetail(id, { hint: row, force });
       if (seq !== loadSeq || !s.inspectorOpen || s.selection.size !== 1
           || [...s.selection][0] !== id) return;
       s.inspectorBook = book;
       render();
     } catch (err) {
-      if (seq !== loadSeq) return;
-      toast(err.message, true);
-      hide();
+      if (seq !== loadSeq || !s.inspectorOpen || s.selection.size !== 1
+          || [...s.selection][0] !== id) return;
+      loadError = S.errorMessage(err, '详情加载失败');
+      loadErrorId = id;
+      render();
     } finally {
       if (seq === loadSeq) s.inspectorLoading = false;
     }
   }
 
-  function editBook(book) {
+  async function editBook(book) {
     if (!book || typeof window.openBookModal !== 'function') return;
-    window.openBookModal(book, { onSaved: (id) => refreshAfterEdit(id) });
+    // 列表行不是完整可编辑对象：先拿到完整详情（或命中缓存）再打开表单。
+    let full = state().inspectorBook && state().inspectorBook.id === book.id
+      ? state().inspectorBook : S.detailCache.get(book.id, book);
+    if (!full) {
+      try {
+        full = await S.loadDetail(book.id, { hint: book });
+      } catch (err) {
+        toast(S.errorMessage(err), true);
+        return;
+      }
+    }
+    window.openBookModal(full, { onSaved: (id) => refreshAfterEdit(id) });
   }
 
   async function refreshAfterEdit(id) {
     try {
-      const updated = await S.loadDetail(id);
-      state().inspectorBook = updated;
+      S.detailCache.invalidate(id);
+      const updated = await S.loadDetail(id, { force: true });
       S.updateBook(updated);
       invalidateSharedStats();
       const s = state();
@@ -168,7 +212,7 @@
       await S.loadFacets();
       S.hooks.facetsChanged();
     } catch (err) {
-      toast(err.message, true);
+      toast(S.errorMessage(err), true);
     }
   }
 
@@ -176,7 +220,6 @@
     if (!updated) return;
     const s = state();
     S.updateBook(updated);
-    s.inspectorBook = updated;
     invalidateSharedStats();
     if (s.q || s.vl || !S.matchesFilters(updated)) {
       await S.hooks.filterChanged({ refreshFacets: true, restoreId: updated.id });
@@ -212,7 +255,7 @@
           S.hooks.facetsChanged();
           render();
           toast(`已把 ${res.added} 本加入分类`);
-        } catch (err) { toast(err.message, true); }
+        } catch (err) { toast(S.errorMessage(err), true); }
         return;
       }
       if (e.target.closest('[data-multi="bulk"]')) { S.actions.openBulk(); return; }

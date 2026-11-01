@@ -179,6 +179,31 @@
     </div>`;
   }
 
+  /* 预览只消费列表行的封面/书名/作者。其余字段故意留白成骨架，
+     因为列表行缺 files/identifiers/custom，不能拿来渲染编辑控件。 */
+  function previewHtml(book, error) {
+    const body = error
+      ? `<div class="bd-preview-error" role="alert">
+          <p>${esc(error)}</p>
+          <button type="button" class="btn btn-ghost btn-sm" data-bd-retry>重试</button>
+        </div>`
+      : `<div class="bd-preview-skeleton" role="status" aria-label="正在载入详情">
+          <span aria-hidden="true"></span><span aria-hidden="true"></span>
+          <span aria-hidden="true"></span><span aria-hidden="true"></span>
+        </div>`;
+    return `<div class="bd-scroll">
+      ${headHtml()}
+      <div class="bd-hero">
+        <div class="bd-cover">${coverHtml(book)}</div>
+        <div class="bd-intro">
+          <h2 class="bd-title">${esc(book.title)}</h2>
+          <p class="bd-author">${book.author ? esc(book.author) : '未设置作者'}</p>
+        </div>
+      </div>
+      ${body}
+    </div>`;
+  }
+
   function contentHtml(book, state) {
     const readOnly = !!state.readOnly;
     const tags = tagsOf(book);
@@ -283,6 +308,8 @@
     const sheet = options.sheet || host.closest('.wb-inspector, .book-detail-sheet') || host;
     const state = {
       book: null,
+      previewBook: null,
+      previewError: '',
       seq: 0,
       readOnly: !!options.readOnly,
       tagsExpanded: false,
@@ -353,6 +380,22 @@
       if (!host.getClientRects().length) requestAnimationFrame(fitSummary);
     }
 
+    function setPreview(book, { error = '' } = {}) {
+      if (!book) { showMessage('载入中…', { loading: true }); return; }
+      if (!state.previewBook || state.previewBook.id !== book.id) {
+        state.tagsExpanded = false;
+        state.summaryExpanded = false;
+        state.moreExpanded = false;
+        state.inlineEdit = null;
+        state.collectionPop = false;
+        state.collections = null;
+      }
+      state.book = null;
+      state.previewBook = book;
+      state.previewError = String(error || '');
+      host.innerHTML = previewHtml(book, state.previewError);
+    }
+
     function setBook(book) {
       if (!book) { showMessage('选择一本书'); return; }
       if (!state.book || state.book.id !== book.id) {
@@ -364,10 +407,15 @@
         state.collections = null;
       }
       state.book = book;
+      state.previewBook = null;
+      state.previewError = '';
       render();
     }
 
     function showMessage(message, { loading = false } = {}) {
+      state.book = null;
+      state.previewBook = null;
+      state.previewError = '';
       host.innerHTML = `<div class="bd-scroll">
         ${headHtml()}
         <div class="bd-empty"${loading ? ' aria-busy="true"' : ''}>${esc(message)}</div>
@@ -564,11 +612,10 @@
     }
 
     function onClick(e) {
-      if (!state.book) {
-        if (e.target.closest('[data-bd-close]')) { e.preventDefault(); options.onClose?.(); }
-        return;
-      }
       if (e.target.closest('[data-bd-close]')) { e.preventDefault(); options.onClose?.(); return; }
+      if (e.target.closest('[data-bd-retry]')) { e.preventDefault(); options.onRetry?.(); return; }
+      // 预览态没有任何编辑入口；列表行不能被当作完整对象使用。
+      if (!state.book) return;
       const copy = e.target.closest('[data-bd-copy]');
       if (copy) {
         e.preventDefault();
@@ -746,6 +793,7 @@
 
     return {
       setBook,
+      setPreview,
       showMessage,
       reload,
       closePop,

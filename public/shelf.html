@@ -11,12 +11,23 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="My books">
   <link rel="apple-touch-icon" href="/icon-192.png">
+  <!-- 仅预判桌面首帧的栅格宽度：侧栏仍先按收起态渲染，等 JS 恢复。
+       这样展开侧栏只有透明度变化，不会把书籍网格整体推走（CLS）。 -->
+  <script>
+    try {
+      if (localStorage.getItem('shelf.sidebar') === 'closed') {
+        document.documentElement.dataset.shelfSidebar = 'closed';
+      }
+    } catch { /* 隐私模式等无法读取时按默认展开栅格预留 */ }
+  </script>
   <link rel="stylesheet" href="/css/style.css?v=120">
-  <link rel="stylesheet" href="/css/shelf-workbench.css?v=44">
+  <link rel="stylesheet" href="/css/shelf-workbench.css?v=47">
   <link rel="stylesheet" href="/css/liquid-glass.css?v=6">
 </head>
 <body data-page="shelf">
-  <main class="wb" id="shelfWorkbench" data-density="standard" data-cover-info="0">
+  <!-- 首屏先按收起渲染：手机抽屉在脚本恢复偏好前绝不露出空面板。
+       sidebar-booting 关闭首帧过渡，避免脚本恢复桌面展开态时播放滑入动画。 -->
+  <main class="wb sidebar-collapsed sidebar-booting" id="shelfWorkbench" data-density="standard" data-cover-info="0">
     <aside class="wb-side" id="wbSidebar" aria-label="资料库" data-glass="frost"></aside>
 
     <section class="wb-main" id="wbMain">
@@ -109,12 +120,33 @@
 
       <div class="wb-content" id="wbContent">
         <div class="wb-scope" id="wbScope" aria-live="polite"></div>
+        <!-- 首屏骨架：仅在请求超过阈值仍未返回时显示，快请求不会闪一下。 -->
+        <div class="wb-grid wb-skeleton hidden" id="shelfSkeleton" aria-hidden="true">
+          <div class="wb-skeleton-card"><span class="wb-skeleton-cover"></span><span class="wb-skeleton-line"></span></div>
+          <div class="wb-skeleton-card"><span class="wb-skeleton-cover"></span><span class="wb-skeleton-line"></span></div>
+          <div class="wb-skeleton-card"><span class="wb-skeleton-cover"></span><span class="wb-skeleton-line"></span></div>
+          <div class="wb-skeleton-card"><span class="wb-skeleton-cover"></span><span class="wb-skeleton-line"></span></div>
+          <div class="wb-skeleton-card"><span class="wb-skeleton-cover"></span><span class="wb-skeleton-line"></span></div>
+          <div class="wb-skeleton-card"><span class="wb-skeleton-cover"></span><span class="wb-skeleton-line"></span></div>
+          <div class="wb-skeleton-card"><span class="wb-skeleton-cover"></span><span class="wb-skeleton-line"></span></div>
+          <div class="wb-skeleton-card"><span class="wb-skeleton-cover"></span><span class="wb-skeleton-line"></span></div>
+          <div class="wb-skeleton-card"><span class="wb-skeleton-cover"></span><span class="wb-skeleton-line"></span></div>
+          <div class="wb-skeleton-card"><span class="wb-skeleton-cover"></span><span class="wb-skeleton-line"></span></div>
+          <div class="wb-skeleton-card"><span class="wb-skeleton-cover"></span><span class="wb-skeleton-line"></span></div>
+          <div class="wb-skeleton-card"><span class="wb-skeleton-cover"></span><span class="wb-skeleton-line"></span></div>
+        </div>
         <div class="wb-grid" id="bookGrid" role="listbox" aria-multiselectable="true" aria-label="书籍"></div>
         <div id="shelfSentinel" class="wb-sentinel" aria-hidden="true"></div>
         <div id="emptyState" class="wb-empty hidden">
           <div class="wb-empty-icon" aria-hidden="true">◫</div>
           <p id="emptyTitle">书架还是空的</p>
           <p class="wb-empty-hint" id="emptyText">添加第一本书,开始你的阅读记录之旅。</p>
+        </div>
+        <div id="shelfError" class="wb-empty wb-error hidden" role="alert">
+          <div class="wb-empty-icon" aria-hidden="true">!</div>
+          <p id="shelfErrorTitle">书架加载失败</p>
+          <p class="wb-empty-hint" id="shelfErrorText">请检查网络后重试。</p>
+          <button type="button" class="btn btn-ghost btn-sm" id="shelfRetry">重试</button>
         </div>
       </div>
     </section>
@@ -216,13 +248,13 @@
   <script defer src="/js/overlay.js?v=2"></script>
   <script defer src="/js/common.js?v=44"></script>
   <script defer src="/js/liquid-glass.js?v=1"></script>
-  <script defer src="/js/book-details.js?v=5"></script>
+  <script defer src="/js/book-details.js?v=6"></script>
   <script defer src="/js/scanner.js?v=2"></script>
-  <script defer src="/js/shelf/store.js?v=36"></script>
-  <script defer src="/js/shelf/sidebar.js?v=39"></script>
+  <script defer src="/js/shelf/store.js?v=38"></script>
+  <script defer src="/js/shelf/sidebar.js?v=41"></script>
   <script defer src="/js/shelf/grid.js?v=35"></script>
-  <script defer src="/js/shelf/inspector.js?v=37"></script>
+  <script defer src="/js/shelf/inspector.js?v=41"></script>
   <script defer src="/js/shelf/actions.js?v=35"></script>
-  <script defer src="/js/shelf/main.js?v=41"></script>
+  <script defer src="/js/shelf/main.js?v=43"></script>
 </body>
 </html>

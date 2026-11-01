@@ -61,6 +61,12 @@ body[data-page="shelf"] main.wb {
 body[data-page="shelf"] main.wb.inspector-open { grid-template-columns: 232px minmax(0, 1fr) 332px; }
 body[data-page="shelf"] main.wb.sidebar-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
 body[data-page="shelf"] main.wb.sidebar-collapsed.inspector-open { grid-template-columns: 0 minmax(0, 1fr) 332px; }
+/* 首帧预留桌面侧栏宽度：侧栏本身仍收起（opacity 0 / 移出），
+   脚本恢复展开时只淡入，不推动网格，避免 CLS。 */
+@media (min-width: 820px) {
+  body[data-page="shelf"] main.wb.sidebar-booting { grid-template-columns: 232px minmax(0, 1fr); }
+  html[data-shelf-sidebar="closed"] body[data-page="shelf"] main.wb.sidebar-booting { grid-template-columns: 0 minmax(0, 1fr); }
+}
 
 /* ---------- 悬浮面板 ---------- */
 .wb-side,
@@ -80,6 +86,9 @@ body[data-page="shelf"] main.wb.sidebar-collapsed.inspector-open { grid-template
 }
 .wb-side { --wb-panel: #f7f8fa; background: #f7f8fa; }
 .wb-inspector { --wb-panel: #ffffff; background: #ffffff; }
+/* 首次脚本恢复侧栏偏好时不播放滑入/滑出；HTML 已先按收起态渲染。 */
+body[data-page="shelf"] main.wb.sidebar-booting .wb-side,
+body[data-page="shelf"] main.wb.sidebar-booting { transition: none !important; }
 body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
   opacity: 0;
   pointer-events: none;
@@ -273,6 +282,14 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
 .wb-row-act.is-danger:hover { color: #c0392b; }
 
 .wb-facet-list { max-height: 270px; overflow-y: auto; scrollbar-width: none; }
+/* 展开后给列表更高的可视窗口，减少在内层列表与外层侧栏之间来回切换；
+   仍然有上限，避免一个超长作者列表把后面的分组永久推到很远。 */
+.wb-facet-list[data-expanded="true"] { max-height: min(48vh, 420px); }
+.wb-side-scroll,
+.wb-facet-list { scroll-behavior: auto; }
+@media (max-width: 819px) {
+  .wb-facet-list[data-expanded="true"] { max-height: min(42dvh, 360px); }
+}
 .wb-facet-list::-webkit-scrollbar { display: none; }
 .wb-facet-filter {
   width: 100%;
@@ -364,6 +381,63 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
   padding: 0 clamp(20px, 2vw, 36px) 112px;
 }
 .wb-sentinel { height: 1px; }
+
+/* ---------- 首屏骨架 ---------- */
+.wb-skeleton { pointer-events: none; }
+.wb-skeleton-card { display: flex; flex-direction: column; gap: 8px; }
+.wb-skeleton-cover {
+  aspect-ratio: 2 / 3;
+  width: 100%;
+  border-radius: var(--wb-card-radius);
+}
+.wb-skeleton-line {
+  width: 66%;
+  height: 10px;
+  margin: 0 2px;
+  border-radius: 5px;
+}
+.wb-skeleton-cover,
+.wb-skeleton-line,
+.wb-side-skeleton span,
+.bd-preview-skeleton span {
+  background: linear-gradient(100deg, #eef0f3 18%, #f8f9fb 42%, #eef0f3 66%);
+  background-size: 220% 100%;
+  animation: wb-skeleton-shimmer 1.5s ease-in-out infinite;
+}
+@keyframes wb-skeleton-shimmer {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-skeleton-cover,
+  .wb-skeleton-line,
+  .wb-side-skeleton span,
+  .bd-preview-skeleton span { animation: none; }
+}
+
+/* 侧栏数据尚未到达时的轻量占位（只占位，不挡住导航）。 */
+.wb-side-skeleton { display: flex; flex-direction: column; gap: 10px; padding: 8px 10px 4px; }
+.wb-side-skeleton span { display: block; height: 10px; border-radius: 5px; }
+.wb-side-skeleton span:nth-child(2) { width: 76%; }
+.wb-side-skeleton span:nth-child(3) { width: 58%; }
+.wb-side-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 6px;
+  color: var(--wb-tertiary);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.wb-side-status button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent, #0066cc);
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 .wb-card {
   position: relative;
@@ -902,6 +976,29 @@ body[data-page="shelf"] main.wb.inspector-open .wb-chrome #wbInspectorToggle {
   text-align: center;
   font-size: 12px;
 }
+/* 详情预览：先展示封面/书名/作者，其余字段只给行级骨架，不带任何可编辑控件。 */
+.wb-inspector .bd-preview-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  margin-top: 24px;
+}
+.wb-inspector .bd-preview-skeleton span { display: block; height: 11px; border-radius: 6px; }
+.wb-inspector .bd-preview-skeleton span:nth-child(1) { width: 34%; }
+.wb-inspector .bd-preview-skeleton span:nth-child(2) { width: 82%; }
+.wb-inspector .bd-preview-skeleton span:nth-child(3) { width: 68%; }
+.wb-inspector .bd-preview-skeleton span:nth-child(4) { width: 46%; }
+.wb-inspector .bd-preview-error {
+  margin-top: 24px;
+  padding: 14px;
+  border: 0.5px solid var(--wb-hairline);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.025);
+  color: var(--wb-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.wb-inspector .bd-preview-error p { margin: 0 0 10px; }
 .wb-inspector-multi .wb-multi-count { color: var(--wb-ink); font-size: 17px; font-weight: 600; }
 .wb-multi-covers { display: flex; justify-content: center; margin-bottom: 4px; }
 .wb-multi-covers .cover-placeholder,
@@ -1065,6 +1162,8 @@ body[data-page="shelf"] main.wb.inspector-open .wb-chrome #wbInspectorToggle {
 .wb-empty-icon { font-size: 28px; opacity: 0.35; margin-bottom: 6px; }
 .wb-empty p { margin: 0; font-size: 13px; }
 .wb-empty .wb-empty-hint { font-size: 12px; color: var(--wb-tertiary); }
+.wb-error .wb-empty-icon { opacity: 0.5; font-weight: 600; }
+.wb-error .btn { margin-top: 10px; }
 
 /* ---------- 批量操作条不要压住底部工具条 ---------- */
 body[data-page="shelf"] .bulk-bar { bottom: calc(66px + env(safe-area-inset-bottom)); z-index: 35; }

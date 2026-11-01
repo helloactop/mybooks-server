@@ -12,7 +12,7 @@
  * 激活阶段删除旧版本缓存。skipWaiting + clients.claim 让新 SW 立即接管。
  * ============================================================ */
 
-const CACHE_VERSION = 'v182';
+const CACHE_VERSION = 'v187';
 const SHELL_CACHE = `mybooks-shell-${CACHE_VERSION}`;
 const API_CACHE = `mybooks-api-${CACHE_VERSION}`;
 const IMG_CACHE = `mybooks-img-${CACHE_VERSION}`;
@@ -25,7 +25,7 @@ const IMG_LIMIT = 60;
 const SHELL_ASSETS = [
   '/css/style.css?v=120',
   '/css/login.css?v=5',
-  '/css/shelf-workbench.css?v=44',
+  '/css/shelf-workbench.css?v=47',
   '/css/liquid-glass.css?v=6',
   '/js/chrome.js?v=39',
   '/js/base.js?v=1',
@@ -36,16 +36,16 @@ const SHELL_ASSETS = [
   '/js/modal.js?v=2',
   '/js/overlay.js?v=2',
   '/js/common.js?v=44',
-  '/js/book-details.js?v=5',
+  '/js/book-details.js?v=6',
   '/js/liquid-glass.js?v=1',
   '/js/scanner.js?v=2',
   '/js/page-home.js?v=4',
-  '/js/shelf/store.js?v=36',
-  '/js/shelf/sidebar.js?v=39',
+  '/js/shelf/store.js?v=38',
+  '/js/shelf/sidebar.js?v=41',
   '/js/shelf/grid.js?v=35',
-  '/js/shelf/inspector.js?v=37',
+  '/js/shelf/inspector.js?v=41',
   '/js/shelf/actions.js?v=35',
-  '/js/shelf/main.js?v=41',
+  '/js/shelf/main.js?v=43',
   '/js/page-rank.js?v=3',
   '/js/page-stats.js?v=4',
   '/js/page-tags.js?v=8',

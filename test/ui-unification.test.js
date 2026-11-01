@@ -148,7 +148,8 @@ test('分类搜索常驻，显示更多只管数量，旧异步结果不覆盖�
   assert.match(sidebar, /facetUI\.uiSeq\[key\]/);
   assert.match(sidebar, /facetUI\.searching\[key\]/);
   assert.doesNotMatch(sidebar, /!facetUI\.expanded\[key\] \|\| facetUI\.query/);
-  assert.match(sidebar, /data-facet-more="\$\{key\}">显示更多/);
+  assert.match(sidebar, /const moreAttr = expanded \? 'data-facet-close' : 'data-facet-more'/);
+  assert.match(sidebar, /显示更多 · \$\{total\}/);
   assert.match(read('public/js/shelf/store.js'), /uiSeq: \{\}, searching: \{\}/);
 });
 
@@ -260,7 +261,7 @@ test('详情只剩一套：BookDetails 供 Inspector 与其他页面共用，旧
   assert.match(details, /onClose/);
   assert.match(details, /onChanged/);
   pages.forEach((page) => {
-    assert.match(read(page), /\/js\/book-details\.js\?v=5/, `${page} 缺少统一详情组件`);
+    assert.match(read(page), /\/js\/book-details\.js\?v=6/, `${page} 缺少统一详情组件`);
   });
 });
 
@@ -310,7 +311,7 @@ test('双击/选择/键盘路径与资源版本保持接线', () => {
   const versions = {
     'css/style.css': '120',
     'css/liquid-glass.css': '6',
-    'css/shelf-workbench.css': '44',
+    'css/shelf-workbench.css': '47',
     'js/chrome.js': '39',
     'js/api.js': '2',
     'js/overlay.js': '2',
@@ -319,11 +320,11 @@ test('双击/选择/键盘路径与资源版本保持接线', () => {
     'js/common.js': '44',
     'js/modal.js': '2',
     'js/select.js': '3',
-    'js/shelf/main.js': '41',
-    'js/shelf/store.js': '36',
-    'js/shelf/sidebar.js': '39',
-    'js/shelf/inspector.js': '37',
-    'js/book-details.js': '5',
+    'js/shelf/main.js': '43',
+    'js/shelf/store.js': '38',
+    'js/shelf/sidebar.js': '41',
+    'js/shelf/inspector.js': '41',
+    'js/book-details.js': '6',
   };
   pages.forEach((page) => {
     const html = read(page);
@@ -334,9 +335,9 @@ test('双击/选择/键盘路径与资源版本保持接线', () => {
     });
   });
   const sw = read('public/sw.js');
-  assert.match(sw, /CACHE_VERSION = 'v182'/);
+  assert.match(sw, /CACHE_VERSION = 'v187'/);
   Object.entries(versions).forEach(([asset, version]) => {
     assert.match(sw, new RegExp(`'/${asset.replace(/[/.]/g, '\\$&')}\\?v=${version}'`), `sw.js 缺少 ${asset}@${version}`);
   });
-  assert.match(sw, /'\/js\/book-details\.js\?v=5'/);
+  assert.match(sw, /'\/js\/book-details\.js\?v=6'/);
 });

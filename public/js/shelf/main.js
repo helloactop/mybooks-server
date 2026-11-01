@@ -105,13 +105,65 @@
     const s = state();
     const empty = $('#emptyState');
     if (!empty) return;
-    const isEmpty = s.books.length === 0;
+    // 空状态只在“请求成功且确实没有书”时出现；加载中/失败都不算空。
+    const isEmpty = s.pageStatus === 'ready' && s.books.length === 0;
     empty.classList.toggle('hidden', !isEmpty);
     if (!isEmpty) return;
     const title = $('#emptyTitle');
     const text = $('#emptyText');
     if (title) title.textContent = activeFilters() ? '没有找到匹配的书籍' : '书架还是空的';
     if (text) text.textContent = activeFilters() ? '试试调整左侧分类或搜索条件' : '添加第一本书,开始你的阅读记录之旅。';
+  }
+
+  const SKELETON_DELAY_MS = 180;
+  let skeletonTimer = 0;
+
+  function hideSkeleton() {
+    if (skeletonTimer) {
+      clearTimeout(skeletonTimer);
+      skeletonTimer = 0;
+    }
+    const skeleton = $('#shelfSkeleton');
+    if (skeleton) skeleton.classList.add('hidden');
+  }
+
+  // 只延迟“骨架出现”，不延迟请求完成后的渲染；快请求根本不会看到骨架。
+  function armSkeleton() {
+    hideSkeleton();
+    skeletonTimer = setTimeout(() => {
+      skeletonTimer = 0;
+      if (state().pageStatus !== 'loading' || state().books.length) return;
+      const skeleton = $('#shelfSkeleton');
+      if (skeleton) skeleton.classList.remove('hidden');
+    }, SKELETON_DELAY_MS);
+  }
+
+  function updatePageState() {
+    const s = state();
+    const error = $('#shelfError');
+    if (error) {
+      const failed = s.pageStatus === 'error';
+      error.classList.toggle('hidden', !failed);
+      const text = $('#shelfErrorText');
+      if (text) text.textContent = s.pageError || '请检查网络后重试。';
+    }
+    const grid = $('#bookGrid');
+    if (grid) grid.classList.toggle('hidden', s.pageStatus === 'error');
+    const content = $('#wbContent');
+    if (content) content.setAttribute('aria-busy', String(s.pageStatus === 'loading'));
+    updateEmpty();
+  }
+
+  async function loadFacetsInBackground() {
+    state().facetsStatus = 'loading';
+    updateSidebar();
+    try {
+      await S.loadFacets();
+    } catch {
+      state().facetsStatus = 'error';
+      state().facetsError = '分类与统计加载失败';
+    }
+    updateSidebar();
   }
 
   function updateSidebar() {
@@ -126,9 +178,10 @@
 
   function renderBooks(result) {
     if (!result) return;
+    hideSkeleton();
     if (result.append) S.grid.append(result.rows);
     else S.grid.render(state().books);
-    updateEmpty();
+    updatePageState();
     updateCount();
     ensureFill();
   }
@@ -136,7 +189,7 @@
   function ensureFill() {
     requestAnimationFrame(() => {
       const sentinel = $('#shelfSentinel');
-      if (!sentinel || state().loading || !state().hasMore) return;
+      if (!sentinel || state().pageStatus !== 'ready' || state().loading || !state().hasMore) return;
       if (sentinel.getBoundingClientRect().top < window.innerHeight + 600) loadMore();
     });
   }
@@ -147,7 +200,7 @@
       const result = await S.loadPage({ append: true });
       if (result) renderBooks(result);
     } catch (err) {
-      toast(err.message, true);
+      toast(S.errorMessage(err), true);
     }
   }
 
@@ -161,13 +214,29 @@
     S.resetPage();
     clearSelectionAndInspector();
     if (!keepScroll) S.grid.scrollTop();
-    const [page] = await Promise.all([S.loadPage(), S.loadFacets()]);
-    if (seq !== viewSeq) return;
-    updateSidebar();
-    S.grid.render(state().books);
-    updateEmpty();
-    updateCount();
-    ensureFill();
+    updatePageState();
+    // 书籍与侧栏数据互不阻塞：列表一到就画，分类/统计在后台补齐。
+    const facetsTask = loadFacetsInBackground();
+    try {
+      const page = await S.loadPage();
+      if (seq !== viewSeq) return;
+      hideSkeleton();
+      S.grid.render(state().books);
+      updatePageState();
+      updateCount();
+      S.grid.setupSentinel(loadMore);
+      if (page && page.rows.length && state().hasMore) ensureFill();
+    } catch (err) {
+      if (seq !== viewSeq) return;
+      hideSkeleton();
+      updatePageState();
+      toast(S.errorMessage(err), true);
+    }
+    await facetsTask;
+  }
+
+  async function retryShelf() {
+    await filterChanged({ refreshFacets: true, reload: true });
   }
 
   async function filterChanged({ refreshFacets = false, reload = false, restoreId = 0 } = {}) {
@@ -177,8 +246,20 @@
     clearSelectionAndInspector();
     if (compactSidebar()) closeSidebar();
     S.syncUrl();
-    if (refreshFacets) await S.loadFacets();
-    if (seq !== viewSeq) return;
+    if (refreshFacets && !reload) {
+      // 筛选变化立刻更新侧栏选中态；分类数据在后台刷新，不挡住书籍请求。
+      state().facetsStatus = state().facetsLoaded ? 'refreshing' : 'loading';
+      updateSidebar();
+      S.loadFacets().then(() => {
+        if (seq === viewSeq) updateSidebar();
+      }).catch(() => {
+        if (seq === viewSeq) {
+          state().facetsStatus = 'error';
+          state().facetsError = '分类与统计加载失败';
+          updateSidebar();
+        }
+      });
+    }
     if (reload) {
       await reloadAll();
       return;
@@ -186,11 +267,13 @@
     S.resetPage();
     S.grid.scrollTop();
     updateSidebar();
+    updatePageState();
     try {
       const result = await S.loadPage();
       if (seq !== viewSeq) return;
+      hideSkeleton();
       S.grid.render(state().books);
-      updateEmpty();
+      updatePageState();
       updateCount();
       ensureFill();
       // 编辑后服务端重查(restoreId):书仍在结果里就恢复选中与详情面板。
@@ -200,15 +283,16 @@
       }
     } catch (err) {
       if (seq !== viewSeq) return;
+      hideSkeleton();
       if (state().vl && /虚拟书库/.test(String(err.message || ''))) {
         state().vl = '';
         S.syncUrl();
         toast('该虚拟书库已不存在,已退回全部书籍', true);
         return filterChanged({ refreshFacets: true });
       }
-      toast(err.message, true);
+      toast(S.errorMessage(err), true);
       S.grid.render([]);
-      updateEmpty();
+      updatePageState();
     }
   }
 
@@ -472,6 +556,11 @@
     });
 
     setSidebarOpen(!compactSidebar() && desktopSidebarOpen(), { persist: false });
+    // 首帧布局已按偏好落位；放开过渡，之后的用户操作才播放动画。
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => $('#shelfWorkbench')?.classList.remove('sidebar-booting'));
+    });
+    $('#shelfRetry').addEventListener('click', retryShelf);
 
     let wasMobile = isMobile();
     let wasLandscape = window.innerWidth > window.innerHeight;
@@ -891,6 +980,7 @@
     closeSidebar: () => closeSidebar(),
     bookRemoved: (id) => {
       const s = state();
+      S.detailCache.invalidate(id);
       s.books = s.books.filter((b) => b.id !== id);
       if (s.total !== null && s.total > 0) s.total -= 1;
       s.start = s.books.length;
@@ -898,7 +988,7 @@
       S.actions.clearSelection();
       S.inspector.hide();
       S.grid.render(s.books);
-      updateEmpty();
+      updatePageState();
       updateCount();
     },
   };
@@ -914,24 +1004,30 @@
     bindChrome();
     bindGridEvents();
     bindSearchEvents();
-    S.sidebar.render();
+    state().pageStatus = 'loading';
+    state().pageError = '';
     S.grid.render([]);
+    updatePageState();
     S.actions.refreshBulkBar();
-    updateEmpty();
     const seq = ++viewSeq;
+    // 分类/统计不再参与首屏 Promise.all：它们晚到只更新侧栏。
+    loadFacetsInBackground();
+    armSkeleton();
     try {
-      const [page] = await Promise.all([S.loadPage(), S.loadFacets()]);
+      const page = await S.loadPage();
       if (seq !== viewSeq) return;
-      updateSidebar();
+      hideSkeleton();
       S.grid.render(state().books);
-      updateEmpty();
+      updatePageState();
       updateCount();
       S.grid.setupSentinel(loadMore);
       restoreScroll();
       if (page && page.rows.length && state().hasMore) ensureFill();
     } catch (err) {
-      toast(err.message, true);
-      updateEmpty();
+      if (seq !== viewSeq) return;
+      hideSkeleton();
+      updatePageState();
+      toast(S.errorMessage(err), true);
     }
   }
 

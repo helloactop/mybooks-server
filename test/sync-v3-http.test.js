@@ -68,6 +68,31 @@ test('书库文件与阅读同步始终私有，强校验续传与文件替换�
     assert.deepEqual(Buffer.from(await restarted.arrayBuffer()),replacement);
     assert.equal((await fetch(url.replace('uuid='+book.uuid,'uuid=other'),{headers})).status,409);
     const invalid=await fetch(url,{headers:{...headers,Range:'bytes=999999-'}});assert.equal(invalid.status,416);await invalid.arrayBuffer();
+    // 元数据兼容：新版写译者后，旧客户端只改状态/书名仍保留全部自动填充数据。
+    const metadata = { translators: ['译者甲', '译者乙'], publisher: '出版社', pub_year: '2026', rating: 8.9, douban_id: '123' };
+    const metaResponse = await fetch(base+'/api/books/'+book.id, { method:'PATCH', headers:jsonHeaders, body:JSON.stringify(metadata) });
+    assert.equal(metaResponse.status,200);
+    const withMeta = await metaResponse.json();
+    assert.deepEqual(withMeta.translators, metadata.translators);
+    const beforeEdit = await (await fetch(base+'/api/sync/changes',{headers})).json();
+    const editResponse = await fetch(base+'/api/books/'+book.id, { method:'PATCH', headers:jsonHeaders,
+      body:JSON.stringify({ title:'Changed', status:'reading', expected_revision:withMeta.revision, expected_uuid:book.uuid }) });
+    assert.equal(editResponse.status,200);
+    const edited = await editResponse.json();
+    for (const key of Object.keys(metadata)) assert.deepEqual(edited[key],metadata[key]);
+    const metadataDelta = await (await fetch(base+'/api/sync/changes?cursor='+beforeEdit.cursor,{headers})).json();
+    assert.deepEqual(metadataDelta.books[0].translators, metadata.translators);
+    const v2 = await (await fetch(base+'/api/sync/books',{headers})).json();
+    assert.deepEqual(v2.books.find((b)=>b.id===book.id).translators, metadata.translators);
+    const legacyPut = await fetch(base+'/api/books/'+book.id, { method:'PUT', headers:jsonHeaders,
+      body:JSON.stringify({ title:'Legacy edit', expected_revision:edited.revision, expected_uuid:book.uuid }) });
+    assert.equal(legacyPut.status,200);
+    const legacy = await legacyPut.json();
+    for (const key of Object.keys(metadata)) assert.deepEqual(legacy[key],metadata[key]);
+    const stale = await fetch(base+'/api/books/'+book.id, { method:'PATCH', headers:jsonHeaders,
+      body:JSON.stringify({ translators:['冲突译者'], expected_revision:edited.revision, expected_uuid:book.uuid }) });
+    assert.equal(stale.status,409);
+    assert.deepEqual((await stale.json()).current.translators,metadata.translators);
   } finally {
     child.kill();if(child.exitCode===null)await once(child,'exit');
     if(path.dirname(root)!==path.resolve(os.tmpdir()))throw Error('拒绝清理非临时测试目录');

@@ -68,6 +68,20 @@
 | PUT | `/api/sync/state/assets/:sha256.ext` | 二进制上传同步资源，最多 64 MiB，校验内容 SHA-256 |
 | GET/HEAD | `/api/sync/state/assets/:sha256.ext` | 私有资源，支持强 ETag、SHA-256 与 Range/If-Range |
 
+### 译者元数据
+
+创建、详情、列表、豆瓣候选和同步视图使用独立的 `translators` 字符串数组，
+例如 `{"author":"作者","translators":["译者甲","译者乙"]}`。详情、列表和同步响应
+还提供 `translators_display`（以 `、` 连接；为空时为 `""`）。译者不写入作者字段或作者分类。
+
+PATCH/PUT 省略 `translators` 时保留服务器原值；显式传 `[]` 才表示清空译者。
+豆瓣/ISBN 元数据补全未取得译者时保留原值，即使开启覆盖也不会用空结果清空。
+Web 和 Android 手工填写多位译者时使用顿号 `、`，姓名内的逗号保留。
+CSV 导入导出支持 `translators` / `译者` 列及多个姓名的转义。
+
+服务端通过 SQLite v25 增量迁移新增 `books.translators TEXT NOT NULL DEFAULT '[]'`，
+沿用现有 JSON TEXT 存储方式；不重建旧表，不修改旧书 UUID、revision、更新时间或同步游标。
+
 ### 书目分页
 
 `GET /api/books` 默认仍返回筛选后的完整数组，旧客户端不受影响。需要分页时传：

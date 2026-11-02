@@ -1,3 +1,4 @@
+const { translatorDto } = require('../core/translators');
 const { EMPTY_READING_DATA, validateReadingData } = require('../core/mobile-reading');
 
 function cursorError() {
@@ -29,7 +30,7 @@ function getSyncChanges(db, cursor) {
     }
     const full = cursor === undefined;
     const changed = (alias, kind) => full ? '1=1' : `EXISTS(SELECT 1 FROM sync_changes c WHERE c.book_id=${alias}.id AND c.kind='${kind}' AND c.seq>${since} AND c.seq<=${high})`;
-    const books = db.prepare(`SELECT b.* FROM books b WHERE b.deleted_at IS NULL AND ${changed('b', 'book')} ORDER BY b.id`).all();
+    const books = db.prepare(`SELECT b.* FROM books b WHERE b.deleted_at IS NULL AND ${changed('b', 'book')} ORDER BY b.id`).all().map(translatorDto);
     const deleted = db.prepare(`SELECT d.* FROM book_deletions d WHERE NOT EXISTS(SELECT 1 FROM books b WHERE b.id=d.id AND b.deleted_at IS NULL)
       AND ${changed('d', 'book')} ORDER BY d.id`).all();
     const reading = db.prepare(`SELECT b.id,b.uuid,COALESCE(r.revision,0) AS revision FROM books b

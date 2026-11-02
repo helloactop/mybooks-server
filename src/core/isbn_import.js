@@ -50,6 +50,8 @@ function toBookBody(book, isbn, tags) {
   return {
     title: book.title || '',
     author: book.author || '',
+    ...(Array.isArray(book.authors) ? { authors: book.authors } : {}),
+    translators: book.translators || [],
     summary: book.summary || '',
     cover: book.cover || '',
     publisher: book.publisher || '',

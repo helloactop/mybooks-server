@@ -334,6 +334,7 @@ async function openBookModal(book, options = {}) {
   } : null;
   $('#fTitle').value = book ? book.title : '';
   $('#fAuthor').value = book ? book.author : '';
+  $('#fTranslators').value = book ? (book.translators || []).join('、') : '';
   $('#fTags').value = book ? JSON.parse(book.tags).join(', ') : '';
   $('#fSummary').value = book ? (book.summary || '') : '';
   $('#fCoverUrl').value = book ? book.cover : '';
@@ -763,6 +764,7 @@ function ensureIdRow(type, value) {
 function applyBookMeta(d) {
   $('#fTitle').value = d.title || '';
   $('#fAuthor').value = d.author || '';
+  if (Array.isArray(d.translators) && d.translators.length) $('#fTranslators').value = d.translators.join('、');
   $('#fSummary').value = d.summary || '';
   $('#fTags').value = (d.tags || []).join(', ');
   if (d.cover) {
@@ -1128,6 +1130,7 @@ $('#bookForm').addEventListener('submit', async (e) => {
   const payload = {
     title,
     author: $('#fAuthor').value.trim(),
+    translators: $('#fTranslators').value.split(/[、;；/&]+/).map((name) => name.trim()).filter(Boolean),
     status: formStatus,
     tags: $('#fTags').value,
     read_logs: formLogs.filter((l) => l.start || l.finish),

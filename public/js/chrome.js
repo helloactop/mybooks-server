@@ -424,6 +424,10 @@ function overlaysHtml() {
                 <input type="text" id="fAuthor" maxlength="80">
               </div>
               <div class="field">
+                <label for="fTranslators">译者</label>
+                <input type="text" id="fTranslators" placeholder="多位译者用顿号分隔">
+              </div>
+              <div class="field">
                 <label>状态</label>
                 <div class="seg seg--track" id="fStatus">
                   <button type="button" data-value="wish">想读</button>

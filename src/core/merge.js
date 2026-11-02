@@ -9,6 +9,7 @@
  *   · 冲突标识符、评分、系列等一律目标优先
  * ============================================================ */
 
+const { parseTranslators } = require('./translators');
 const { deriveLogFields, applyStatusTransition, todayStr } = require('./bulk');
 
 function parseTags(raw) {
@@ -90,6 +91,7 @@ function mergeFields(target, sources) {
 
   return {
     status,
+    translators: JSON.stringify([target, ...sources].map((book) => parseTranslators(book.translators)).find((names) => names.length) || []),
     tags: JSON.stringify(mergeTags(target.tags, sources.map((s) => s.tags))),
     read_logs: JSON.stringify(logs),
     start_date: derived.start_date,

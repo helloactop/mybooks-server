@@ -9,6 +9,8 @@
  *   记录推导,忽略请求体里的旧值;无记录时保留请求体兜底值(API 兼容)。
  * ============================================================ */
 
+const { parseTranslators } = require('./translators');
+
 const STATUSES = ['wish', 'reading', 'done'];
 
 const { titleSort, authorsToSortString } = require('./sort_keys');
@@ -162,6 +164,7 @@ function parseBook(body) {
       // 名字里本来就带逗号时(「Herbert, Frank」)再拿 author 去 splitAuthors 会被拆成两位,
       // 所以链接表必须以这份数组为准,而不是从缓存串反推。
       authors,
+      translators: JSON.stringify(parseTranslators(body.translators)),
       status,
       summary: String(body.summary || '').trim().slice(0, 1000),
       tags: JSON.stringify(tags),
@@ -196,6 +199,7 @@ function clampRating(v) {
 // 前端局部提交 / 旧客户端脚本不会误清数据(纯函数:返回新对象)
 function mergeUpdate(existing, values, body) {
   const merged = { ...values };
+  if (body.translators == null) merged.translators = existing.translators || '[]';
   if (!('summary' in body)) merged.summary = existing.summary;
   if (!('author' in body) && !('authors' in body)) {
     merged.author = existing.author;

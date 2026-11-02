@@ -110,6 +110,7 @@ test('A10 toIncoming:数据源 mapToBook 形状 → 补全字段形状(含 ident
     tags: ['a'], doubanId: '1', isbn: '9787536692930',
   });
   assert.deepEqual(inc, {
+    translators: [],
     summary: 'S', cover: 'C', publisher: 'P', pub_year: '2008', rating: 9,
     tags: ['a'],
     // 标识符也要带上(calibre apply_mi 的 idents.update 同款)
@@ -422,7 +423,7 @@ test('C15 ENRICH_FIELDS 不含 title/author/series', () => {
   // series 不在白名单:数据源(豆瓣/OL)根本不产出它,
   // 列进来只会让 updatedFields 出现一个永远补不到的字段
   assert.ok(!ENRICH_FIELDS.includes('series'));
-  assert.deepEqual([...ENRICH_FIELDS].sort(), ['cover', 'pub_year', 'publisher', 'rating', 'summary']);
+  assert.deepEqual([...ENRICH_FIELDS].sort(), ['cover', 'pub_year', 'publisher', 'rating', 'summary', 'translators']);
 });
 
 test('C16 封面失败单独记账,不影响元数据结论(calibre 的 failed_covers 同思路)', async () => {

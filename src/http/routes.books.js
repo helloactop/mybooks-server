@@ -9,6 +9,7 @@
  * ============================================================ */
 
 const express = require('express');
+const { translatorDto } = require('../core/translators');
 
 const { parseBook, mergeUpdate } = require('../core/book');
 const { parseBulkRequest } = require('../core/bulk');
@@ -58,7 +59,7 @@ function withFiles(row) {
   const ids = identifiersRepo.getIdentifiers(db, row.id);
   const note = notesRepo.statNote(row.id);
   return {
-    ...row,
+    ...translatorDto(row),
     files,
     file_formats: files.map((f) => f.format).join(', '),
     identifiers: ids,
@@ -86,7 +87,7 @@ function withCustomDisplay(rows) {
   // 心得存在磁盘上(notes-files/{id}.md):一次 readdir 拿到全部有心得的 id
   const noteIds = new Set(notesRepo.listNoteIds());
   return rows.map((r) => ({
-    ...r,
+    ...translatorDto(r),
     custom_display: map[r.id] || {},
     series_label: coreSeries.seriesLabel(r.series, r.series_index),
     has_notes: noteIds.has(r.id),
@@ -336,7 +337,7 @@ router.post('/api/books/merge', (req, res) => {
   if (failed) {
     console.error(`[merge] 已合并到 id=${parsed.targetId},但有 ${failed} 个来源文件/心得未能从磁盘移除`);
   }
-  res.json({ ok: true, target: result.target, merged: result.merged });
+  res.json({ ok: true, target: translatorDto(result.target), merged: result.merged });
 });
 
 // 局部更新:只改请求体出现的字段。PUT 是整书语义(省略 status/tags 会被默认值重置),
@@ -364,6 +365,7 @@ router.patch('/api/books/:id', (req, res) => {
     read_logs: Array.isArray(existingLogs) ? existingLogs : [],
     identifiers: identifiersRepo.getIdentifiers(db, id),
     ...patch,
+    translators: patch.translators ?? existing.translators,
   };
   const { errors, values } = parseBook(fullBody);
   if (errors.length) return badBody(res, errors.join(';'));

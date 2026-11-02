@@ -60,6 +60,7 @@ function mergeBooks(handleDb, targetId, rawSourceIds) {
         title: target.title,
         title_sort: target.title_sort,
         author: target.author,
+        translators: fields.translators,
         author_sort: target.author_sort,
         status: fields.status,
         summary: fields.summary,

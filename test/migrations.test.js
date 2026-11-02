@@ -127,7 +127,7 @@ test('v24:被 v23 压平的 author_sort 修回倒装键,且不推 revision / 不
 
   db.exec('PRAGMA user_version = 23');          // v24 位于索引 23,只重放这一步
   const res = runMigrations(db, dir);
-  assert.deepEqual(res, { from: 23, to: 24, ran: 1 });
+  assert.deepEqual(res, { from: 23, to: migrations.length, ran: migrations.length - 23 });
 
   const 书 = db.prepare('SELECT author_sort, revision, updated_at FROM books WHERE id = ?').get(book.lastInsertRowid);
   assert.equal(书.author_sort, 'Herbert, Frank & Herbert, Brian');

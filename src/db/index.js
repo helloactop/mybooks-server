@@ -638,8 +638,14 @@ function migrateV24(db) {
   }
 }
 
+// v25: 独立译者元数据，与 tags/read_logs 一样以 JSON TEXT 保存。
+function migrateV25(db) {
+  const cols = db.prepare('PRAGMA table_info(books)').all().map((c) => c.name);
+  if (!cols.includes('translators')) db.exec("ALTER TABLE books ADD COLUMN translators TEXT NOT NULL DEFAULT '[]'");
+}
+
 // 迁移注册表:顺序即版本，历史迁移保持不变。
-const migrations = [migrateV1, migrateV2, migrateV3, migrateV4, migrateV5, migrateV6, migrateV7, migrateV8, migrateV9, migrateV10, migrateV11, migrateV12, migrateV13, migrateV14, migrateV15, migrateV16, migrateV17, migrateV18, migrateV19, migrateV20, migrateV21, migrateV22, migrateV23, migrateV24];
+const migrations = [migrateV1, migrateV2, migrateV3, migrateV4, migrateV5, migrateV6, migrateV7, migrateV8, migrateV9, migrateV10, migrateV11, migrateV12, migrateV13, migrateV14, migrateV15, migrateV16, migrateV17, migrateV18, migrateV19, migrateV20, migrateV21, migrateV22, migrateV23, migrateV24, migrateV25];
 
 function runMigrations(db, dataDir) {
   const current = db.prepare('PRAGMA user_version').get().user_version;

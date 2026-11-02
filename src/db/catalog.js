@@ -14,11 +14,12 @@ const bookFiles = require('./book_files');
 const collections = require('./collections');
 const categories = require('./categories');
 const { joinList } = require('../core/csv');
+const { parseTranslators } = require('../core/translators');
 
 const STATUS_LABEL = { wish: '想读', reading: '在读', done: '已读' };
 
 const FIXED_HEADERS = [
-  'id', 'title', 'title_sort', 'author', 'author_sort',
+  'id', 'title', 'title_sort', 'author', 'author_sort', 'translators',
   'status', 'status_label', 'tags', 'collections', 'series', 'series_index', 'rating',
   'publisher', 'pub_year', 'isbn', 'douban_id',
   'start_date', 'finish_date', 'read_count', 'read_logs',
@@ -70,6 +71,7 @@ function buildCatalog(handleDb, query = {}) {
       r.title_sort,
       joinList(linkedAuthors && linkedAuthors.length ? linkedAuthors : [r.author], '、'),
       r.author_sort,
+      joinList(parseTranslators(r.translators), '、'),
       r.status,
       STATUS_LABEL[r.status] || r.status,
       // 标签与藏书集同样是"一个单元格多个值":joinList 会把名字里的分隔符转义掉,

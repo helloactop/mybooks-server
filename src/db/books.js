@@ -6,6 +6,7 @@
 const { db, now, inTransaction } = require('./index');
 const crypto = require('node:crypto');
 const { coverUploadFile, splitAuthors } = require('../core/book');
+const { parseTranslators } = require('../core/translators');
 const { isbnKey } = require('../core/isbn');
 const { scopeClause } = require('../core/sql');
 const { applyStatusTransition, deriveLogFields, todayStr } = require('../core/bulk');
@@ -107,9 +108,9 @@ function addBook(values, customValues = null, handleDb = db) {
     // 是严格报错的(ERR_INVALID_STATE: Unknown named parameter),不像某些驱动会忽略。
     const { identifiers: idMap, authors, ...cols } = values;
     const result = handleDb.prepare(`
-      INSERT INTO books (title, title_sort, author, author_sort, status, summary, tags, start_date, finish_date, cover, read_count, read_logs, publisher, pub_year, isbn, rating, douban_id, series, series_index, uuid, created_at, updated_at)
-      VALUES (@title, @title_sort, @author, @author_sort, @status, @summary, @tags, @start_date, @finish_date, @cover, @read_count, @read_logs, @publisher, @pub_year, @isbn, @rating, @douban_id, @series, @series_index, @uuid, @ts, @ts)
-    `).run({ ...cols, uuid: crypto.randomUUID(), ts });
+      INSERT INTO books (title, title_sort, author, author_sort, translators, status, summary, tags, start_date, finish_date, cover, read_count, read_logs, publisher, pub_year, isbn, rating, douban_id, series, series_index, uuid, created_at, updated_at)
+      VALUES (@title, @title_sort, @author, @author_sort, @translators, @status, @summary, @tags, @start_date, @finish_date, @cover, @read_count, @read_logs, @publisher, @pub_year, @isbn, @rating, @douban_id, @series, @series_index, @uuid, @ts, @ts)
+    `).run({ ...cols, translators: JSON.stringify(parseTranslators(values.translators)), uuid: crypto.randomUUID(), ts });
     const created = getBook(result.lastInsertRowid, handleDb);
     categories.syncBookTags(handleDb, created.id, categories.parseTagNames(created.tags));
     // 作者链接以 parseBook 的整名数组为准;老调用方没给时才退回拆缓存串
@@ -134,14 +135,14 @@ function updateBook(id, merged, customValues = null, handleDb = db) {
     // 同上:identifiers 与 authors 不是 books 表的列,剔出命名参数(否则 node:sqlite 报错)
     const { identifiers: idMap, authors, ...cols } = merged;
     handleDb.prepare(`
-      UPDATE books SET title = @title, title_sort = @title_sort, author = @author, author_sort = @author_sort, status = @status,
+      UPDATE books SET title = @title, title_sort = @title_sort, author = @author, author_sort = @author_sort, translators = @translators, status = @status,
         summary = @summary, tags = @tags, start_date = @start_date, finish_date = @finish_date,
         cover = @cover, read_count = @read_count, read_logs = @read_logs,
         publisher = @publisher, pub_year = @pub_year, isbn = @isbn, rating = @rating, douban_id = @douban_id,
         series = @series, series_index = @series_index,
         updated_at = @ts
       WHERE id = @id
-    `).run({ ...cols, ts: now(), id });
+    `).run({ ...cols, translators: JSON.stringify(parseTranslators(merged.translators ?? oldRow.translators)), ts: now(), id });
     const updated = getBook(id, handleDb);
     categories.syncBookTags(handleDb, id, categories.parseTagNames(updated.tags));
     // authors = null/undefined 表示"这次没提作者"(mergeUpdate 的局部更新语义),
@@ -379,7 +380,7 @@ function purgeExpired(handleDb = db, days = TRASH_RETENTION_DAYS) {
 //
 // 校验:列名的键必须在 ENRICH_COLUMNS 白名单里,防止调用方传进任意列名
 // (列名是拼进 SQL 的,不收口就是注入面)。
-const ENRICH_COLUMNS = new Set(['summary', 'cover', 'publisher', 'pub_year', 'rating']);
+const ENRICH_COLUMNS = new Set(['translators', 'summary', 'cover', 'publisher', 'pub_year', 'rating']);
 
 function enrichBook(handleDb, id, patch) {
   const row = getBook(id, handleDb);
@@ -389,8 +390,9 @@ function enrichBook(handleDb, id, patch) {
   const params = [];
   for (const [k, v] of Object.entries(patch || {})) {
     if (!ENRICH_COLUMNS.has(k)) continue;        // 白名单外一律忽略
+    if (k === 'translators' && !parseTranslators(v).length) continue;
     sets.push(`${k} = ?`);
-    params.push(v);
+    params.push(k === 'translators' ? JSON.stringify(parseTranslators(v)) : v);
   }
 
   // 标签并集:后端再判一次重(规则层已判,这里防并发与重复提交)

@@ -198,6 +198,7 @@
         <div class="bd-intro">
           <h2 class="bd-title">${esc(book.title)}</h2>
           <p class="bd-author">${book.author ? esc(book.author) : '未设置作者'}</p>
+          ${book.translators?.length ? `<p class="bd-author">译者：${esc(book.translators.join('、'))}</p>` : ''}
         </div>
       </div>
       ${body}
@@ -228,6 +229,7 @@
         <div class="bd-intro">
           <h2 class="bd-title">${esc(book.title)}</h2>
           <p class="bd-author">${book.author ? esc(book.author) : '未设置作者'}</p>
+          ${book.translators?.length ? `<p class="bd-author">译者：${esc(book.translators.join('、'))}</p>` : ''}
         </div>
       </div>
       ${readOnly

@@ -54,6 +54,7 @@ function installStubFetch() {
 
 const reqFor = (q) => ({ query: { q } });
 const EXPECTED_RESULT = {
+  authors: [], translators: [],
   title: '测试书', author: '', summary: '一段简介。', publisher: '某出版社',
   pubYear: '', isbn: '', rating: 8.5, doubanId: '10001',
   doubanUrl: 'https://book.douban.com/subject/10001/', tags: [],

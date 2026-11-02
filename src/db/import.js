@@ -20,6 +20,7 @@
 
 const { db, now, inTransaction } = require('./index');
 const books = require('./books');
+const { parseTranslators } = require('../core/translators');
 const identifiersRepo = require('./identifiers');
 const categories = require('./categories');
 const search = require('./search');
@@ -88,6 +89,8 @@ function mergeBook(
   // 只挑 enrich 认识的字段做合并;其余(status/read_logs 等)不碰 ——
   // 导入一条 CSV 不该把已有书的阅读记录改掉。
   const patch = {};
+  const translators = parseTranslators(body.translators);
+  if (translators.length && (overwrite || !parseTranslators(existing.translators).length)) patch.translators = translators;
   const picks = ['summary', 'publisher', 'pub_year', 'rating', 'cover'];
   for (const f of picks) {
     const raw = body[f];

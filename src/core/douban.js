@@ -16,6 +16,7 @@
  * ============================================================ */
 
 const cheerio = require('cheerio');
+const { parseTranslators } = require('./translators');
 
 const DOUBAN_SEARCH_URL = 'https://www.douban.com/search?cat=1001&q=';
 const DOUBAN_BOOK_URL = 'https://book.douban.com/subject/';
@@ -86,21 +87,20 @@ function parseBookPage(html, doubanId) {
   // 信息栏:作者/译者/出版社/出版年/ISBN/丛书
   $('span.pl').each((_, el) => {
     const text = $(el).text().trim();
-    const parent = $(el).parent();
-    if (text.startsWith('作者')) {
-      parent.find('a').each((__, a) => {
-        const href = $(a).attr('href') || '';
-        if (href.includes('/author') || href.includes('/search')) {
-          out.authors.push($(a).text().trim());
-        }
-      });
-    } else if (text.startsWith('译者')) {
-      parent.find('a').each((__, a) => {
-        const href = $(a).attr('href') || '';
-        if (href.includes('/author') || href.includes('/search')) {
-          out.translators.push($(a).text().trim());
-        }
-      });
+    if (text.startsWith('作者') || text.startsWith('译者')) {
+      // 标签后仅扫描本行；#info 可能把作者与译者放在同一个父节点。
+      const names = [];
+      let plain = '';
+      let node = el.nextSibling;
+      while (node) {
+        if (node.type === 'tag' && (node.name === 'br' || $(node).is('span.pl') || $(node).find('span.pl').length)) break;
+        if (node.type === 'tag' && node.name === 'a') names.push($(node).text());
+        plain += $(node).text();
+        node = node.nextSibling;
+      }
+      const people = parseTranslators(names.length ? names : plain.replace(/^[:：\s]+/, ''));
+      if (text.startsWith('作者')) out.authors.push(...people);
+      else out.translators.push(...people);
     } else if (text.startsWith('出版社')) {
       out.publisher = tailText($, el);
     } else if (text.startsWith('出版年')) {
@@ -166,12 +166,12 @@ function cleanSummary(html) {
 
 /* ---------- 字段映射:豆瓣 → my-books(供前端回填的形状) ---------- */
 function mapToBook(meta) {
-  const authors = meta.translators.length && meta.authors.length
-    ? meta.authors // 译者是否并入作者由前端/用户决定,这里保持作者独立
-    : meta.authors;
+  const authors = meta.authors || [];
   return {
     title: meta.title,
-    author: authors.join(' / ') || meta.translators.join(' / ') || '',
+    authors,
+    author: authors.join(' / '),
+    translators: parseTranslators(meta.translators),
     summary: meta.summary,
     publisher: meta.publisher,
     pubYear: meta.pubYear,

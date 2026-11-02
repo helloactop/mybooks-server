@@ -40,6 +40,7 @@
  *   error     网络/上游异常
  * ============================================================ */
 
+const { parseTranslators } = require('./translators');
 const { checkIsbn } = require('./isbn');
 
 // 一次请求上限:批量补全是"手动勾选一批书",不是全库重建。
@@ -58,7 +59,7 @@ const LOOKUP_CONCURRENCY = 3;
 // 让用户以为补到了。豆瓣与 Open Library 的映射都不产出 series,
 // 故不列(2026-10-20 核实 core/douban.js:168 / core/openlibrary.js:84)。
 // **title / author 不在其中**,见文件头第 2 条。
-const ENRICH_FIELDS = ['summary', 'cover', 'publisher', 'pub_year', 'rating'];
+const ENRICH_FIELDS = ['translators', 'summary', 'cover', 'publisher', 'pub_year', 'rating'];
 
 // 可补的标识符类型(与 core/identifiers.js 的常用类型对齐)
 const ENRICH_IDENTIFIERS = ['isbn', 'douban', 'openlibrary'];
@@ -74,6 +75,7 @@ const ERROR_TEXT = {
 // rating 的 0 是"未评分",也算空 —— 否则永远补不上评分。
 function isEmpty(field, value) {
   if (value === undefined || value === null) return true;
+  if (field === 'translators') return parseTranslators(value).length === 0;
   if (field === 'rating') {
     const n = Number(value);
     return !Number.isFinite(n) || n <= 0;
@@ -106,6 +108,14 @@ function buildPatch(current, incoming, { overwrite = false, fields = null, curre
 
   for (const f of want) {
     const next = incoming[f];
+    if (f === 'translators') {
+      const names = parseTranslators(next);
+      if (!names.length) continue;
+      if (!isEmpty(f, current[f]) && !overwrite) { skippedExisting.push(f); continue; }
+      patch[f] = names;
+      filled.push(f);
+      continue;
+    }
     if (next === undefined || next === null) continue;
     if (f === 'rating') {
       const n = Number(next);
@@ -170,6 +180,7 @@ function toIncoming(book) {
   if (book.doubanId) identifiers.douban = String(book.doubanId).trim();
   if (book.openlibraryId) identifiers.openlibrary = String(book.openlibraryId).trim();
   return {
+    translators: parseTranslators(book.translators),
     summary: book.summary || '',
     cover: book.cover || '',
     publisher: book.publisher || '',

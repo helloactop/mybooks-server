@@ -58,6 +58,7 @@ const MAX_REPORT = 500;          // 逐条结果上限,防止响应体过大
 const HEADER_MAP = {
   title: 'title', 书名: 'title',
   author: 'author', authors: 'author', 作者: 'author',
+  translators: 'translators', 译者: 'translators',
   status: 'status', 状态: 'status',
   rating: 'rating', 评分: 'rating',
   publisher: 'publisher', 出版社: 'publisher',
@@ -214,6 +215,7 @@ function rowToBook(headers, row, { fields, custom }) {
         body.author = names.join('、');         // 查重比对用,与库内缓存同形
         break;
       }
+      case 'translators': body.translators = splitList(raw); break;
       case 'tags': body.tags = splitTags(raw); break;
       case 'collections': {
         for (const name of splitTags(raw)) {

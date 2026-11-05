@@ -189,7 +189,7 @@ function entNote(b) {
 
 /* 第一排:大卡(文案 + 封面,封面不铺满) */
 function entItemHtml(b, i) {
-  // 眉标只保留"读过 N 次"这类事实信息,不出现「想读 / 在读 / 已读」状态字样
+  // 眉标只保留"读过 N 次"这类事实信息,不出现「未读 / 在读 / 已读」状态字样
   // (与小卡一致:首页画廊整体不再展示阅读状态;二者都为空的卡片,眉标整行不渲染)
   const counts = (b.read_count || 0) > 1 ? `读过 ${b.read_count} 次` : '';
   const eyebrow = b.status === 'done' ? `读过 ${b.read_count || 1} 次` : counts;
@@ -214,7 +214,7 @@ function entItemHtml(b, i) {
 }
 
 /* 第二排:小卡(封面 + 标题),与第一排共用同一份书单和索引
-   注:小卡不再渲染「想读 / 在读」状态角标(.fam-chip),样式规则仍保留在 style.css,
+   注:小卡不再渲染「未读 / 在读」状态角标(.fam-chip),样式规则仍保留在 style.css,
        需要恢复时补回下面那行 span 即可 */
 function entSmallHtml(b, i) {
   const tone = fallbackTone(b.title); // 初始兜底(有封面时会被真实取色覆盖)

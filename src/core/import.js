@@ -89,7 +89,7 @@ const IGNORED_HEADERS = new Set([
 ]);
 
 const STATUS_ALIAS = {
-  wish: 'wish', 想读: 'wish',
+  wish: 'wish', 未读: 'wish', 想读: 'wish', // 保留旧版 CSV 状态别名。
   reading: 'reading', 在读: 'reading',
   done: 'done', 已读: 'done',
 };
@@ -228,7 +228,7 @@ function rowToBook(headers, row, { fields, custom }) {
       case 'status': {
         const st = STATUS_ALIAS[raw.toLowerCase()] || STATUS_ALIAS[raw];
         if (st) body.status = st;
-        else errors.push(`状态「${raw}」不认识(可用:想读/在读/已读)`);
+        else errors.push(`状态「${raw}」不认识(可用:未读/在读/已读)`);
         break;
       }
       case 'read_count': body.read_count = raw; break;

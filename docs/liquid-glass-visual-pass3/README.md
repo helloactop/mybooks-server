@@ -187,7 +187,7 @@ npm run check:public     pass — 200 text files checked, 46 binary/large skippe
 | 768 详情 | Sheet 320–960；摘要完整显示无“展开”按钮；关闭钮 44px |
 | 932 横屏 | Inspector 592–924 × 8–356；可滚动；无横向溢出；底部工具条不重叠 |
 | 双击书卡 | 打开 `#bookModal`，不打开旧详情/新抽屉 |
-| 快捷状态 | 想读 ↔ 在读 来回切换并恢复，无蓝色描边 |
+| 快捷状态 | 未读 ↔ 在读 来回切换并恢复，无蓝色描边 |
 | Inspector 编辑保存 | 标题同步到 Inspector 与网格，保存后无残留弹窗 |
 | 全站抽屉编辑保存 | 保存后抽屉重新打开并显示新标题 |
 | Escape 层级 | 先关收藏集弹层，Inspector 保持；再按关闭 Inspector |

@@ -7,7 +7,7 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
 
-const STATUS_LABEL = { wish: '想读', reading: '在读', done: '已读' };
+const STATUS_LABEL = { wish: '未读', reading: '在读', done: '已读' };
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({

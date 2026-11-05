@@ -9,7 +9,7 @@
 (function () {
   const TAG_PREVIEW = 8;
   const SUMMARY_COLLAPSE_AT = 140;
-  const STATUS = [['wish', '想读'], ['reading', '在读'], ['done', '已读']];
+  const STATUS = [['wish', '未读'], ['reading', '在读'], ['done', '已读']];
 
   function parseJson(value, fallback) {
     try { return JSON.parse(value); } catch { return fallback; }

@@ -40,7 +40,7 @@
 | `--night-2` | `#272729` | 统计 hero、深色瓦片 | `style.css:25` |
 | `--night-text` | `#f5f5f7` | 深色表面主文字 | `style.css:26` |
 | `--night-sub` | `#86868b` | 深色表面次文字 | `style.css:27` |
-| `--wish` | `#6e6e73` | 状态“想读” | `style.css:28` |
+| `--wish` | `#6e6e73` | 状态“未读” | `style.css:28` |
 | `--reading` | `#0066cc` | 状态“在读” | `style.css:29` |
 | `--done` | `#1d1d1f` | 状态“已读” | `style.css:30` |
 

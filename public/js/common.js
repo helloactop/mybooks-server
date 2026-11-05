@@ -1105,7 +1105,7 @@ function renderReadLogs() {
 
 $('#addLogBtn').addEventListener('click', () => {
   formLogs.push({ start: '', finish: '' });
-  // 开始记录阅读时,「想读」自动变为「在读」
+  // 开始记录阅读时,「未读」自动变为「在读」
   if (formStatus === 'wish') {
     formStatus = 'reading';
     renderStatusUI();

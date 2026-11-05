@@ -62,7 +62,7 @@
 
 | 状态 | 色 | 用法 |
 |---|---|---|
-| 想读 `wish` | `--wish: #6e6e73` | 中性灰胶囊 |
+| 未读 `wish` | `--wish: #6e6e73` | 中性灰胶囊 |
 | 在读 `reading` | `--reading: #0066cc` | Action Blue 胶囊 |
 | 已读 `done` | `--done: #1d1d1f` | 近黑胶囊 |
 

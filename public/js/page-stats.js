@@ -13,7 +13,7 @@ function renderStats(data) {
       <div class="hstat"><span class="num">${data.total}</span><span class="label">总藏书</span></div>
       <div class="hstat"><span class="num">${data.byStatus.done}<small> · ${donePct}%</small></span><span class="label">已读</span></div>
       <div class="hstat"><span class="num">${data.byStatus.reading}</span><span class="label">在读</span></div>
-      <div class="hstat"><span class="num">${data.byStatus.wish}</span><span class="label">想读</span></div>
+      <div class="hstat"><span class="num">${data.byStatus.wish}</span><span class="label">未读</span></div>
     </div>`;
 
   renderYearChart(data.byYear);

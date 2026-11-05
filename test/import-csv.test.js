@@ -137,6 +137,11 @@ test('B7 rowToBook:标签多分隔符、评分钳制、状态中文', () => {
   assert.deepEqual(body.tags, ['科幻', '小说', '硬科幻']);
   assert.equal(body.rating, 9.5);
   assert.equal(body.status, 'done');
+  for (const status of ['未读', '想读', 'wish']) {
+    const parsed = rowToBook(['title', 'status'], ['三体', status], mapHeaders(['title', 'status']));
+    assert.deepEqual(parsed.errors, []);
+    assert.equal(parsed.body.status, 'wish');
+  }
 });
 
 test('B8 rowToBook:评分超 10 被钳到 10,负数归 0', () => {
@@ -161,6 +166,7 @@ test('B11 rowToBook:未知状态值报错而不是静默丢弃', () => {
   const m = mapHeaders(['title', 'status']);
   const { errors } = rowToBook(['title', 'status'], ['x', '在读中'], m);
   assert.ok(errors.some((e) => e.includes('在读中')));
+  assert.ok(errors.some((e) => e.includes('可用:未读/在读/已读')));
 });
 
 test('B12 parseIdentifiersCell:type:value; type2:value2', () => {

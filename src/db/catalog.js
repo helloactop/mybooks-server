@@ -16,7 +16,7 @@ const categories = require('./categories');
 const { joinList } = require('../core/csv');
 const { parseTranslators } = require('../core/translators');
 
-const STATUS_LABEL = { wish: '想读', reading: '在读', done: '已读' };
+const STATUS_LABEL = { wish: '未读', reading: '在读', done: '已读' };
 
 const FIXED_HEADERS = [
   'id', 'title', 'title_sort', 'author', 'author_sort', 'translators',

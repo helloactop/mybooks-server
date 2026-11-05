@@ -58,7 +58,7 @@ const FIELD_ALIAS = {
 };
 // 状态中文/别名 → 库内 code(wish/reading/done)。
 const STATUS_VALUE = {
-  wish: 'wish', 想读: 'wish',
+  wish: 'wish', 未读: 'wish', 想读: 'wish', // 兼容已有的搜索和虚拟书库条件。
   reading: 'reading', 在读: 'reading',
   done: 'done', 已读: 'done',
 };

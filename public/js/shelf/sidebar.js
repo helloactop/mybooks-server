@@ -213,7 +213,7 @@
     return `<section class="wb-section" data-side-section="status">
       ${sectionHead('status', '阅读状态')}
       ${sectionBody('status', `<div>
-        ${row({ label: '想读', count: displayCount(s.facets.byStatus.wish), active: s.status === 'wish', axis: 'status', value: 'wish' })}
+        ${row({ label: '未读', count: displayCount(s.facets.byStatus.wish), active: s.status === 'wish', axis: 'status', value: 'wish' })}
         ${row({ label: '在读', count: displayCount(s.facets.byStatus.reading), active: s.status === 'reading', axis: 'status', value: 'reading' })}
         ${row({ label: '已读', count: displayCount(s.facets.byStatus.done), active: s.status === 'done', axis: 'status', value: 'done' })}
       </div>`)}

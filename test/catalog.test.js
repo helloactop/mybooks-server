@@ -128,14 +128,21 @@ test('buildCatalog:沿用列表筛选;回收站中的书不导出', () => {
   const db = freshDb();
   const doneId = makeBook(db, { title: '读完的', status: 'done' });
   makeBook(db, { title: '在读的', status: 'reading' });
+  const unreadId = makeBook(db, { title: '未读的', status: 'wish' });
   const trashedId = makeBook(db, { title: '已删除的', status: 'done' });
   books.softDeleteBook(db, trashedId);
 
   const done = buildCatalog(db, { status: 'done' });
   assert.deepEqual(done.rows.map((r) => r[done.headers.indexOf('id')]), [doneId]);
+  const unread = buildCatalog(db, { status: 'wish' });
+  assert.equal(unread.rows.length, 1);
+  const unreadRow = rowObject(unread.headers, unread.rows[0]);
+  assert.equal(unreadRow.id, unreadId);
+  assert.equal(unreadRow.status, 'wish');
+  assert.equal(unreadRow.status_label, '未读');
 
   const all = buildCatalog(db, {});
-  assert.equal(all.rows.length, 2);
+  assert.equal(all.rows.length, 3);
   assert.ok(!all.rows.some((r) => r[all.headers.indexOf('title')] === '已删除的'));
   db.close();
 });

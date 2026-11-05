@@ -51,7 +51,7 @@ const NAV_MENUS = {
   shelf: [
     { heading: '浏览书架', elevated: true, links: [
       { label: '全部书籍', href: '/shelf' },
-      { label: '想读', href: '/shelf?status=wish' },
+      { label: '未读', href: '/shelf?status=wish' },
       { label: '在读', href: '/shelf?status=reading' },
       { label: '已读', href: '/shelf?status=done' },
     ] },
@@ -346,7 +346,7 @@ function overlaysHtml() {
           <tr><td><code>tag:科幻</code></td><td>标签(精确匹配归一化标签)</td></tr>
           <tr><td><code>author:刘慈欣</code></td><td>作者(精确匹配归一化作者)</td></tr>
           <tr><td><code>title:三体</code></td><td>书名(子串)</td></tr>
-          <tr><td><code>status:done</code></td><td>状态:想读 wish / 在读 reading / 已读 done(或中文)</td></tr>
+          <tr><td><code>status:done</code></td><td>状态:未读 wish / 在读 reading / 已读 done(或中文)</td></tr>
           <tr><td><code>rating&gt;=9</code></td><td>评分,支持 &gt; &lt; &gt;= &lt;= = !=</td></tr>
           <tr><td><code>pubyear:2008</code></td><td>出版年,可用 <code>pubyear&lt;2010</code> 这类范围</td></tr>
           <tr><td><code>publisher:译文</code></td><td>出版社(子串)</td></tr>
@@ -430,7 +430,7 @@ function overlaysHtml() {
               <div class="field">
                 <label>状态</label>
                 <div class="seg seg--track" id="fStatus">
-                  <button type="button" data-value="wish">想读</button>
+                  <button type="button" data-value="wish">未读</button>
                   <button type="button" data-value="reading">在读</button>
                   <button type="button" data-value="done">已读</button>
                 </div>

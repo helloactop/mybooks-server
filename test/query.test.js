@@ -44,6 +44,7 @@ test('中文字段别名:标签/作者/评分 → 规范字段', () => {
 
 test('状态中文值归一化为 code', () => {
   assert.equal(parseQuery('status:已读').filters[0].value, 'done');
+  assert.equal(parseQuery('状态:未读').filters[0].value, 'wish');
   assert.equal(parseQuery('状态:想读').filters[0].value, 'wish');
 });
 

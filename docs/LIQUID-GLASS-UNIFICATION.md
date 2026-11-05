@@ -161,7 +161,7 @@ npm run check:public     pass — 198 text files checked, 27 binary/large skippe
 | 检查 | 结果 |
 | --- | --- |
 | 双击书卡 | `editOpen: true`，`detailSheetOpen: false`，旧 `#detailModal` 不存在 |
-| Inspector 快捷状态 | 想读 → 在读 → 想读，按钮态与列表同步 |
+| Inspector 快捷状态 | 未读 → 在读 → 未读，按钮态与列表同步 |
 | Inspector 编辑保存 | 标题更新到 Inspector 与网格；保存后无残留弹窗；Inspector 保持打开 |
 | 全站抽屉编辑保存 | 保存后抽屉重新打开并显示新标题 |
 | Escape 层级 | 先关收藏集弹层，Inspector 仍开；再按一次关闭 Inspector |

@@ -36,7 +36,7 @@
 - <div class="bd-hero"> cover + intro (title/author + status 控件) </div>
 - <input data-bd-rating> / <input data-bd-series-name> ...
 + <div class="bd-hero"> cover + title/author </div>
-+ <div class="seg seg--track bd-status"> 想读 / 在读 / 已读 </div>
++ <div class="seg seg--track bd-status"> 未读 / 在读 / 已读 </div>
 + <section class="bd-info-section">
 +   <h3>书籍信息</h3>
 +   rating static / series static / 出版 / ISBN(复制) / 豆瓣

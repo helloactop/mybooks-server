@@ -58,16 +58,15 @@ function createAuthStore(file = path.join(DATA_DIR, 'auth.json')) {
       const expected = admin ? Buffer.from(admin.hash, 'hex') : Buffer.alloc(64);
       return expected.length === result.length && crypto.timingSafeEqual(result, expected) && admin?.username === username;
     },
-    issueSession(label, deviceKey = '') {
+    issueSession(label, deviceKey = '', previousSessionId = '') {
       const state = read();
       state.sessions = state.sessions.filter((s) => s.expiresAt > Date.now());
       const keyHash = String(deviceKey || '').trim()
         ? digest(String(deviceKey).trim().slice(0, 200))
         : '';
-      if (keyHash) {
-        // 同一浏览器重复登录:替换旧会话,避免设备列表堆积。
-        state.sessions = state.sessions.filter((s) => s.deviceKeyHash !== keyHash);
-      }
+      // 稳定标识或已验证的旧会话均可确认设备身份；不能按名称合并同型号设备。
+      state.sessions = state.sessions.filter((s) =>
+        (!keyHash || s.deviceKeyHash !== keyHash) && s.id !== previousSessionId);
       if (state.sessions.length >= 100) throw Object.assign(new Error('设备数量已达上限，请先撤销不用的设备'), { status: 409 });
       const token = crypto.randomBytes(32).toString('base64url');
       const session = {

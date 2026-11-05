@@ -12,7 +12,7 @@
  * 激活阶段删除旧版本缓存。skipWaiting + clients.claim 让新 SW 立即接管。
  * ============================================================ */
 
-const CACHE_VERSION = 'v188';
+const CACHE_VERSION = 'v189';
 const SHELL_CACHE = `mybooks-shell-${CACHE_VERSION}`;
 const API_CACHE = `mybooks-api-${CACHE_VERSION}`;
 const IMG_CACHE = `mybooks-img-${CACHE_VERSION}`;
@@ -30,7 +30,7 @@ const SHELL_ASSETS = [
   '/js/chrome.js?v=39',
   '/js/base.js?v=1',
   '/js/api.js?v=2',
-  '/js/login.js?v=3',
+  '/js/login.js?v=4',
   '/js/cover.js?v=1',
   '/js/select.js?v=3',
   '/js/modal.js?v=2',

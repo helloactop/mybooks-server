@@ -78,6 +78,38 @@ test('全新私有部署：初始化、网页 cookie、安卓 Bearer、文件保
     assert.equal(devices[0].label, 'android');
     assert.equal((await fetch(base + '/api/auth/devices/' + session.id, { method: 'DELETE', headers })).status, 204);
     assert.equal((await fetch(base + '/api/books', { headers })).status, 401);
+
+    const signIn = (fields = {}, authHeaders = {}) => fetch(base + '/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders },
+      body: JSON.stringify({ username: 'admin', password: 'integration-password', device_name: '同名设备', ...fields }),
+    });
+    const oldBrowserResponse = await signIn();
+    const oldBrowser = await oldBrowserResponse.json();
+    const oldCookie = oldBrowserResponse.headers.get('set-cookie').split(';')[0];
+    const phone = await (await signIn()).json();
+    const phoneHeaders = { Authorization: 'Bearer ' + phone.token };
+    const failed = await signIn({ password: 'incorrect', device_key: 'browser-stable' }, { Cookie: oldCookie });
+    assert.equal(failed.status, 401);
+    assert.ok(store.authenticate(oldBrowser.token), '登录失败不能撤销已有授权');
+    const browserResponse = await signIn({ device_key: 'browser-stable' }, { Cookie: oldCookie });
+    assert.equal(browserResponse.status, 200);
+    const browser = await browserResponse.json();
+    assert.equal(store.authenticate(oldBrowser.token), null, '旧 Cookie 授权被迁移替换');
+    const newPhoneResponse = await signIn({ device_key: 'android:stable' }, phoneHeaders);
+    assert.equal(newPhoneResponse.status, 200);
+    const newPhone = await newPhoneResponse.json();
+    assert.equal(store.authenticate(phone.token), null, '旧 Bearer 授权被迁移替换');
+    const repeated = await (await signIn({ device_key: 'android:stable' })).json();
+    assert.equal(store.authenticate(newPhone.token), null, '重启或丢失旧令牌后仍按设备标识替换');
+    const sameNameOther = await (await signIn({ device_key: 'android:other' })).json();
+    assert.ok(store.authenticate(browser.token));
+    assert.ok(store.authenticate(repeated.token));
+    assert.ok(store.authenticate(sameNameOther.token));
+    const finalDevices = await (await fetch(base + '/api/auth/devices', {
+      headers: { Authorization: 'Bearer ' + repeated.token },
+    })).json();
+    assert.equal(finalDevices.length, 3, '同名的不同设备不会被合并');
+    assert.equal(JSON.stringify(finalDevices).includes('deviceKeyHash'), false);
   } finally {
     child.kill();
     if (child.exitCode === null) await once(child, 'exit');

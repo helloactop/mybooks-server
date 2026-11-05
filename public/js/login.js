@@ -123,20 +123,33 @@ async function refresh() {
   }
 }
 
+let cachedDeviceKey = '';
 function deviceKey() {
+  if (cachedDeviceKey) return cachedDeviceKey;
   const storageKey = 'mybooks.deviceKey';
+  const cookieName = 'mybooks_device_key';
   let key = '';
-  try {
-    key = localStorage.getItem(storageKey) || '';
-    if (!key) {
-      key = window.crypto && crypto.randomUUID ? crypto.randomUUID()
-        : Date.now().toString(36) + Math.random().toString(36).slice(2);
-      localStorage.setItem(storageKey, key);
-    }
-  } catch {
-    key = Date.now().toString(36) + Math.random().toString(36).slice(2);
+  try { key = localStorage.getItem(storageKey) || ''; } catch { /* Cookie 兜底 */ }
+  if (!key) {
+    try {
+      key = decodeURIComponent(document.cookie.split(';').map((part) => part.trim())
+        .find((part) => part.startsWith(cookieName + '='))?.slice(cookieName.length + 1) || '');
+    } catch { /* 存储均不可用时保留页面内标识 */ }
   }
-  return key;
+  if (!key) key = window.crypto && crypto.randomUUID ? crypto.randomUUID()
+    : Date.now().toString(36) + Math.random().toString(36).slice(2);
+  cachedDeviceKey = key;
+  try { localStorage.setItem(storageKey, key); } catch { /* Cookie 兜底 */ }
+  try {
+    // 仅保存随机设备标识，不含登录凭据；退出后保留，供下次登录识别。
+    document.cookie = `${cookieName}=${encodeURIComponent(key)}; Path=/; Max-Age=31536000; SameSite=Lax`
+      + (location.protocol === 'https:' ? '; Secure' : '');
+  } catch { /* 页面内缓存仍可用 */ }
+  return cachedDeviceKey;
+}
+
+function clearLegacyToken() {
+  try { localStorage.removeItem('mybooks.adminToken'); } catch { /* 不影响 Cookie 会话 */ }
 }
 
 async function login(useToken) {
@@ -151,7 +164,7 @@ async function login(useToken) {
       method: 'POST',
       body: JSON.stringify({ ...credentials, device_name: '网页浏览器', device_key: deviceKey() }),
     });
-    localStorage.removeItem('mybooks.adminToken');
+    clearLegacyToken();
     form.reset();
     const next = nextDestination();
     if (next) location.assign(next);
@@ -168,7 +181,7 @@ document.getElementById('tokenLogin').addEventListener('click', () => login(true
 document.getElementById('logout').addEventListener('click', async () => {
   try {
     await request('logout', { method: 'POST' });
-    localStorage.removeItem('mybooks.adminToken');
+    clearLegacyToken();
     statusEl.textContent = '已退出当前设备。';
     await refresh();
   } catch (error) {

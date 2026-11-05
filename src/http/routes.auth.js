@@ -27,7 +27,9 @@ router.post('/api/auth/login', async (req, res, next) => {
       rateFail(req);
       return res.status(401).json({ error: '用户名、密码或管理员令牌不正确', code: 'AUTH_REQUIRED' });
     }
-    const session = authStore.issueSession(device_name, device_key);
+    // 登录成功后轮换当前 Cookie/Bearer 会话，兼容尚未绑定 device_key 的旧客户端。
+    const previousSession = auth.authenticate(req);
+    const session = authStore.issueSession(device_name, device_key, previousSession?.id);
     rateClear(req);
     // 反代 TLS 通过 PUBLIC_URL 配置；直连 TLS 使用 req.secure。
     const secure = req.secure || process.env.MYBOOKS_PUBLIC_URL?.startsWith('https://');

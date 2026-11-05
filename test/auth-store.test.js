@@ -53,6 +53,21 @@ test('旧令牌先签发设备会话后，仍能初始化账号并保留设备',
   await store.initialize('admin', 'long-test-password');
   assert.ok(store.authenticate(session.token));
 });
+
+test('旧会话绑定稳定标识时仅替换已确认的设备，同名设备保持独立', () => {
+  const store = createAuthStore(path.join(root, 'device-migration.json'));
+  const legacy = store.issueSession('同型号手机');
+  const other = store.issueSession('同型号手机', 'android:other');
+  const migrated = store.issueSession('同型号手机', 'android:current', legacy.id);
+  assert.equal(store.authenticate(legacy.token), null);
+  assert.ok(store.authenticate(other.token));
+  assert.ok(store.authenticate(migrated.token));
+  const reopened = createAuthStore(path.join(root, 'device-migration.json'));
+  const relogin = reopened.issueSession('同型号手机', 'android:current');
+  assert.equal(reopened.authenticate(migrated.token), null);
+  assert.ok(reopened.authenticate(relogin.token));
+  assert.equal(reopened.listSessions().length, 2);
+});
 test('损坏的授权文件不能变成可接管的未初始化状态', () => {
   const file = path.join(root, 'broken.json');
   fs.writeFileSync(file, '{}');

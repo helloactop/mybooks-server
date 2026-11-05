@@ -1038,7 +1038,7 @@ body[data-page="shelf"] main.wb.inspector-open .wb-chrome #wbInspectorToggle {
 /* ---------- 列表视图 ---------- */
 .wb-table-wrap { padding: 0 clamp(18px, 3vw, 44px) 110px; overflow-x: auto; }
 
-/* 手机列表:封面 + 两行文字 + 状态,不使用表格表头 */
+/* 手机列表:封面 + 书名/作者/译者 + 状态,不使用表格表头 */
 .wb-mobile-list {
   display: flex;
   flex-direction: column;
@@ -1146,6 +1146,8 @@ body[data-page="shelf"] main.wb.inspector-open .wb-chrome #wbInspectorToggle {
 .wb-table .wb-t-title { color: var(--wb-ink); font-weight: 500; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wb-table .wb-t-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .wb-table .wb-t-format { color: var(--wb-tertiary); font-size: 10.5px; letter-spacing: 0.02em; }
+.wb-t-author, .wb-t-translator { display: block; }
+.wb-t-translator { margin-top: 3px; font-size: 11px; overflow-wrap: anywhere; }
 
 /* ---------- 空状态 ---------- */
 .wb-empty {

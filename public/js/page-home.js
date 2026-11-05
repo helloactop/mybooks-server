@@ -205,6 +205,7 @@ function entItemHtml(b, i) {
             ${eyebrow ? `<p class="ent-eyebrow">${esc(eyebrow)}</p>` : ''}
             <h3 class="ent-scene-title">${esc(b.title)}</h3>
             ${meta ? `<p class="ent-scene-meta">${esc(meta)}</p>` : ''}
+            ${b.translators?.length ? `<p class="ent-scene-meta book-translator">译者：${esc(b.translators.join('、'))}</p>` : ''}
             <p class="ent-scene-note">${esc(note)}</p>
           </div>
           <div class="ent-scene-cover">${coverHtml(b)}</div>
@@ -226,7 +227,7 @@ function entSmallHtml(b, i) {
         style="background:${tone.bg};color:${tone.fg};--card-scrim:${tone.scrim};--card-soft:${tone.soft}"${b.cover ? ` data-tint-src="${esc(b.cover)}"` : ''}>
         <div class="fam-cover">${coverHtml(b)}</div>
         <div class="fam-foot">
-          <p class="fam-note"><strong>${esc(b.title)}</strong>${b.author ? `<span>${esc(b.author)}</span>` : ''}</p>
+          <p class="fam-note"><strong>${esc(b.title)}</strong>${b.author ? `<span>${esc(b.author)}</span>` : ''}${b.translators?.length ? `<span>译者：${esc(b.translators.join('、'))}</span>` : ''}</p>
           ${intro ? `<p class="fam-summary">${esc(intro)}</p>` : ''}
         </div>
       </div>
@@ -272,6 +273,7 @@ function homeFeatureHtml(b) {
       <div class="home-eyebrow">最新上架 · 读过 ${b.read_count || 1} 次</div>
       <h2 class="home-title" data-open-detail="${b.id}" role="button" tabindex="0" aria-label="查看《${esc(b.title)}》详情">${esc(b.title)}</h2>
       ${b.author ? `<p class="home-author">${esc(b.author)}</p>` : ''}
+      ${b.translators?.length ? `<p class="home-author book-translator">译者：${esc(b.translators.join('、'))}</p>` : ''}
       <div class="home-meta">
         ${homeStatusLabel(b) ? `<span class="status-inline ${b.status}">${homeStatusLabel(b)}</span>` : ''}
         ${dates.length ? `<span class="nm-date">${esc(dates.join(' · '))}</span>` : ''}
@@ -298,7 +300,7 @@ function homeTileHtml(b) {
         ? `<p class="tile-summary">${esc(intro)}</p>`
         : `<p class="tile-tagline">${esc([b.author, b.finish_date ? `读完于 ${b.finish_date}` : ''].filter(Boolean).join(' · '))}</p>`}
       <div class="home-meta">
-        ${metaBits ? `<span class="tile-meta-text">${esc(metaBits)}</span>` : ''}
+        ${metaBits ? `<span class="tile-meta-text">${esc(metaBits)}${b.translators?.length ? `<span class="tile-translator">译者：${esc(b.translators.join('、'))}</span>` : ''}</span>` : ''}
       </div>
       <div class="tile-links">
         <a class="home-link" href="/notes/${b.id}">读书心得 ›</a>

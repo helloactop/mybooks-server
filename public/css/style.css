@@ -3635,6 +3635,7 @@ main.page-home {
   color: var(--tile-sub, rgba(245, 245, 247, 0.68));
   letter-spacing: 0.01em;
 }
+.tile-translator { display: block; margin-top: 4px; }
 
 .tile-links { display: flex; gap: 22px; margin-top: 16px; margin-bottom: clamp(20px, 2.5vw, 30px); }
 
@@ -3676,6 +3677,7 @@ main.page-home {
   letter-spacing: 0.01em;
   margin: 8px 0 0;
 }
+.book-translator { overflow-wrap: anywhere; }
 
 .home-meta {
   display: flex;

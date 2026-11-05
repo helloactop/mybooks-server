@@ -13,18 +13,20 @@
     const author = book.author || '';
     return `<article class="wb-card${selected ? ' is-selected' : ''}" data-id="${book.id}"
       tabindex="-1" role="option" aria-selected="${selected}" draggable="${isMobile() ? 'false' : 'true'}"
-      aria-label="《${esc(book.title)}》${author ? ' · ' + esc(author) : ''}">
+      aria-label="《${esc(book.title)}》${author ? ' · ' + esc(author) : ''}${book.translators?.length ? ' · 译者：' + esc(book.translators.join('、')) : ''}">
       <div class="wb-card-cover">
         ${coverHtml(book)}
         <span class="wb-card-check" aria-hidden="true">✓</span>
         <span class="wb-card-overlay" aria-hidden="true">
           <span class="wb-card-title">${esc(book.title)}</span>
           ${author ? `<span class="wb-card-author">${esc(author)}</span>` : ''}
+          ${book.translators?.length ? `<span class="wb-card-author">译者：${esc(book.translators.join('、'))}</span>` : ''}
         </span>
       </div>
       <div class="wb-card-info">
         <span class="wb-card-name">${esc(book.title)}</span>
         ${author ? `<span class="wb-card-byline">${esc(author)}</span>` : ''}
+        ${book.translators?.length ? `<span class="wb-card-byline">译者：${esc(book.translators.join('、'))}</span>` : ''}
       </div>
     </article>`;
   }
@@ -35,11 +37,12 @@
     const formats = book.file_formats ? `<span class="wb-list-format">${esc(book.file_formats)}</span>` : '';
     return `<article class="wb-list-row${selected ? ' is-selected' : ''}" data-id="${book.id}"
       tabindex="-1" role="option" aria-selected="${selected}" draggable="false"
-      aria-label="《${esc(book.title)}》${author ? ' · ' + esc(author) : ''}">
+      aria-label="《${esc(book.title)}》${author ? ' · ' + esc(author) : ''}${book.translators?.length ? ' · 译者：' + esc(book.translators.join('、')) : ''}">
       <div class="wb-list-cover">${coverHtml(book)}</div>
       <div class="wb-list-main">
         <span class="wb-list-title">${esc(book.title)}</span>
         <span class="wb-list-author">${esc(author || '—')}</span>
+        ${book.translators?.length ? `<span class="wb-list-author">译者：${esc(book.translators.join('、'))}</span>` : ''}
       </div>
       <div class="wb-list-side">
         <span class="wb-list-status ${esc(book.status)}">${esc(STATUS_LABEL[book.status] || '')}</span>
@@ -52,7 +55,7 @@
   const COLUMN_DEFS = {
     cover: { label: '', cell: (b) => `<td><div class="wb-thumb">${coverHtml(b)}</div></td>` },
     title: { label: '书名', sort: 'title', cell: (b) => `<td class="wb-t-title" title="${esc(b.title)}">${esc(b.title)}</td>` },
-    author: { label: '作者', sort: 'author', cell: (b) => `<td>${esc(b.author || '—')}</td>` },
+    author: { label: '作者', sort: 'author', cell: (b) => `<td><span class="wb-t-author">${esc(b.author || '—')}</span>${b.translators?.length ? `<span class="wb-t-translator">译者：${esc(b.translators.join('、'))}</span>` : ''}</td>` },
     series: { label: '系列', sort: 'series', cell: (b) => `<td>${esc(b.series_label || b.series || '—')}</td>` },
     status: { label: '状态', cell: (b) => `<td>${esc(STATUS_LABEL[b.status] || '')}</td>` },
     rating: { label: '评分', cell: (b) => `<td class="wb-t-num">${Number(b.rating) > 0 ? esc(String(b.rating)) : '—'}</td>` },

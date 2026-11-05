@@ -309,13 +309,13 @@ test('双击/选择/键盘路径与资源版本保持接线', () => {
   const shelf = read('public/shelf.html');
   assert.ok(shelf.indexOf('/js/book-details.js') < shelf.indexOf('/js/shelf/inspector.js'));
   const versions = {
-    'css/style.css': '120',
+    'css/style.css': '121',
     'css/liquid-glass.css': '6',
-    'css/shelf-workbench.css': '47',
+    'css/shelf-workbench.css': '48',
     'js/chrome.js': '39',
     'js/api.js': '2',
     'js/overlay.js': '2',
-    'js/page-home.js': '4',
+    'js/page-home.js': '5',
     'js/page-rank.js': '3',
     'js/common.js': '44',
     'js/modal.js': '2',
@@ -335,7 +335,7 @@ test('双击/选择/键盘路径与资源版本保持接线', () => {
     });
   });
   const sw = read('public/sw.js');
-  assert.match(sw, /CACHE_VERSION = 'v187'/);
+  assert.match(sw, /CACHE_VERSION = 'v188'/);
   Object.entries(versions).forEach(([asset, version]) => {
     assert.match(sw, new RegExp(`'/${asset.replace(/[/.]/g, '\\$&')}\\?v=${version}'`), `sw.js 缺少 ${asset}@${version}`);
   });

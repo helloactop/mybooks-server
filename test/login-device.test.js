@@ -9,6 +9,8 @@ const source = fs.readFileSync(path.join(__dirname, '../public/js/login.js'), 'u
 function page({ storage, jar = { value: '' }, cookiesBlocked = false } = {}) {
   const elements = new Map();
   const document = {
+    createElement() { return { children: [], append(...children) { this.children.push(...children); },
+      setAttribute() {}, addEventListener() {} }; },
     getElementById(id) {
       if (!elements.has(id)) elements.set(id, {
         addEventListener() {}, querySelectorAll: () => [], reset() {},
@@ -52,4 +54,14 @@ test('所有持久存储均不可用时页面内重试仍使用同一标识', ()
   const key = current.evaluate('deviceKey()');
   assert.ok(key);
   assert.equal(current.evaluate('deviceKey()'), key);
+});
+
+test('账号管理设备列表只显示登录时间，不显示到期提示', () => {
+  const current = page({ storage: blockedStorage });
+  for (const expiresAt of [null, Date.UTC(2030, 0, 1)]) {
+    const row = current.evaluate(`deviceRow({ label: 'phone', createdAt: '2026-11-05T00:00:00Z', expiresAt: ${expiresAt} }, false)`);
+    const meta = row.children[1].children[1];
+    assert.match(meta.textContent, /^登录于 /);
+    assert.doesNotMatch(meta.textContent, /到期|有效期|长期有效/);
+  }
 });

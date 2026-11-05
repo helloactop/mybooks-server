@@ -1,6 +1,6 @@
 const express = require('express');
 const { auth, authStore, loadToken, safeEqual, sameOrigin, COOKIE_NAME,
-  rateCheck, rateFail, rateClear, requireSession } = require('./middleware.auth');
+  setSessionCookie, rateCheck, rateFail, rateClear, requireSession } = require('./middleware.auth');
 const router = express.Router();
 
 router.use('/api/auth', (req, res, next) => {
@@ -31,12 +31,7 @@ router.post('/api/auth/login', async (req, res, next) => {
     const previousSession = auth.authenticate(req);
     const session = authStore.issueSession(device_name, device_key, previousSession?.id);
     rateClear(req);
-    // 反代 TLS 通过 PUBLIC_URL 配置；直连 TLS 使用 req.secure。
-    const secure = req.secure || process.env.MYBOOKS_PUBLIC_URL?.startsWith('https://');
-    res.cookie(COOKIE_NAME, session.token, {
-      httpOnly: true, secure: !!secure, sameSite: 'lax', path: '/',
-      maxAge: Date.parse(session.expires_at) - Date.now(),
-    });
+    setSessionCookie(req, res, session.token);
     res.json(session);
   } catch (err) { next(err); }
 });

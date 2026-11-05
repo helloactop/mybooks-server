@@ -144,6 +144,15 @@ function rateClear(req) {
 
 // 写权限、私有书库读权限与设备会话使用同一鉴权入口。未初始化时拒绝访问。
 const COOKIE_NAME = 'mybooks_session';
+// 浏览器限制持久 Cookie 的最长寿命；服务端会话本身不设到期时间，访问时续存 Cookie。
+const COOKIE_MAX_AGE_MS = 400 * 24 * 3600 * 1000;
+
+function setSessionCookie(req, res, token) {
+  const secure = req.secure || process.env.MYBOOKS_PUBLIC_URL?.startsWith('https://');
+  res.cookie(COOKIE_NAME, token, {
+    httpOnly: true, secure: !!secure, sameSite: 'lax', path: '/', maxAge: COOKIE_MAX_AGE_MS,
+  });
+}
 
 function cookieToken(req) {
   return String(req.headers.cookie || '').split(';').map((s) => s.trim())
@@ -181,6 +190,9 @@ function createAuthMiddleware({ store = authStore, legacyToken = loadTokenCached
       return res.status(403).json({ error: '请求来源不匹配', code: 'ORIGIN_REJECTED' });
     }
     req.authSession = session;
+    if (!extractToken(req) && session.id !== 'legacy-admin') {
+      setSessionCookie(req, res, cookieToken(req));
+    }
     rateClear(req);
     next();
   }
@@ -212,5 +224,5 @@ function failLogSize() {
 }
 
 module.exports = { requireAdmin, requireLibraryAccess, requireSession, auth, authStore,
-  createAuthMiddleware, sameOrigin, COOKIE_NAME, rateCheck, rateFail, rateClear,
+  createAuthMiddleware, sameOrigin, COOKIE_NAME, setSessionCookie, rateCheck, rateFail, rateClear,
   safeEqual, extractToken, loadToken, resetTokenCache, TOKEN_FILE, FAIL_LIMIT, MAX_ENTRIES, failLogSize };

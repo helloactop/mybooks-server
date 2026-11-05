@@ -51,10 +51,9 @@ function deviceRow(device, isCurrent) {
   name.textContent = device.label || '未命名设备';
   const meta = document.createElement('span');
   meta.className = 'device-meta';
-  const expiry = `到期 ${dateText(device.expiresAt)}`;
   meta.textContent = isCurrent
     ? `当前设备 · 登录于 ${dateText(device.createdAt)}`
-    : `登录于 ${dateText(device.createdAt)} · ${expiry}`;
+    : `登录于 ${dateText(device.createdAt)}`;
   copy.append(name, meta);
 
   li.append(icon, copy);
@@ -106,7 +105,7 @@ async function refresh() {
 
     form.hidden = true;
     panel.hidden = false;
-    statusEl.textContent = '会话有效，可管理书库与已授权设备。';
+    statusEl.textContent = '已登录，可管理书库与已授权设备。';
     accountName.textContent = 'My books 管理员';
     accountDevice.textContent = `当前设备 · ${me.device.label || '网页浏览器'}`;
 

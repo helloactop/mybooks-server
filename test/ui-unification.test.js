@@ -335,7 +335,7 @@ test('双击/选择/键盘路径与资源版本保持接线', () => {
     });
   });
   const sw = read('public/sw.js');
-  assert.match(sw, /CACHE_VERSION = 'v189'/);
+  assert.match(sw, /CACHE_VERSION = 'v190'/);
   Object.entries(versions).forEach(([asset, version]) => {
     assert.match(sw, new RegExp(`'/${asset.replace(/[/.]/g, '\\$&')}\\?v=${version}'`), `sw.js 缺少 ${asset}@${version}`);
   });

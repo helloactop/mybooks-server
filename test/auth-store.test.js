@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const crypto = require('node:crypto');
 const { createAuthStore } = require('../src/db/auth');
 const { createAuthMiddleware, sameOrigin } = require('../src/http/middleware.auth');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mybooks-accounts-'));
@@ -45,6 +46,43 @@ test('同一浏览器 device_key 重复登录替换旧会话', () => {
   const sessions = store.listSessions();
   assert.equal(sessions.length, 2);
   assert.equal(JSON.stringify(sessions).includes('deviceKeyHash'), false, '不暴露设备指纹');
+});
+
+test('设备授权经过多年和重启仍有效，主动撤销后立即失效', (t) => {
+  const file = path.join(root, 'permanent.json');
+  const store = createAuthStore(file);
+  const session = store.issueSession('phone', 'android:permanent');
+  assert.equal(session.expires_at, null);
+  assert.equal(store.listSessions()[0].expiresAt, null);
+  t.mock.method(Date, 'now', () => Date.UTC(2080, 0, 1));
+  const reopened = createAuthStore(file);
+  assert.ok(reopened.authenticate(session.token));
+  assert.equal(reopened.listSessions().length, 1);
+  reopened.issueSession('other', 'other-key');
+  assert.ok(reopened.authenticate(session.token), '签发其他设备授权不能清理长期会话');
+  reopened.revoke(session.id);
+  assert.equal(createAuthStore(file).authenticate(session.token), null);
+});
+
+test('升级旧授权只迁移未到期会话，过期会话不会恢复', (t) => {
+  const file = path.join(root, 'expiration-migration.json');
+  const hash = (token) => crypto.createHash('sha256').update(token).digest('hex');
+  fs.writeFileSync(file, JSON.stringify({ version: 1, admin: null, sessions: [
+    { id: 'active', label: 'active', tokenHash: hash('active-token'), deviceKeyHash: hash('stable-key'), expiresAt: Date.now() + 60000 },
+    { id: 'expired', label: 'expired', tokenHash: hash('expired-token'), expiresAt: Date.now() - 1 },
+  ] }));
+  const store = createAuthStore(file);
+  assert.ok(store.authenticate('active-token'));
+  assert.equal(store.authenticate('expired-token'), null);
+  const migrated = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.equal(migrated.version, 2);
+  assert.equal(migrated.sessions.length, 1);
+  assert.equal(migrated.sessions[0].expiresAt, null);
+  assert.equal(migrated.sessions[0].deviceKeyHash, hash('stable-key'));
+  t.mock.method(Date, 'now', () => Date.UTC(2080, 0, 1));
+  const reopened = createAuthStore(file);
+  assert.ok(reopened.authenticate('active-token'));
+  assert.equal(reopened.authenticate('expired-token'), null);
 });
 
 test('旧令牌先签发设备会话后，仍能初始化账号并保留设备', async () => {

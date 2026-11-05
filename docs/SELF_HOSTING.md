@@ -65,7 +65,8 @@ PowerShell 可用 `Copy-Item .env.example .env`。
 - 现有 `ADMIN_TOKEN` 和 `data/admin-token` 仍有效，可在网页登录页交换为独立设备会话。
 - **未配置管理员或旧令牌时，写入会被拒绝**，不再依赖 Nginx 是否保护写接口。
 - 如需保持公开浏览，显式设置 `MYBOOKS_PUBLIC_READ=true`；写入仍需登录。
-- 设备会话有效期 30 天；在 `/login` 查看、逐个撤销设备。密码不保存在客户端。
+- 设备会话长期有效，不因时间自动退出；在 `/login` 查看、逐个撤销设备，也可主动退出。密码不保存在客户端。
+- 升级时将仍有效的旧会话转为长期授权，已过期或撤销的授权不会恢复。网页使用持久 Cookie 并在访问时续存；浏览器自身的存储清理或 Cookie 寿命限制仍可能要求重新登录。
 - 使用反代时配置 `MYBOOKS_PUBLIC_URL=https://你的域名`，启用 Secure cookie。
   只有确定代理网络可信时才配置 `MYBOOKS_TRUST_PROXY`（例如 `loopback`），
   不应无条件信任公网传入的转发头。

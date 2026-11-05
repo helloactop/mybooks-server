@@ -5,19 +5,27 @@ const crypto = require('node:crypto');
 const { promisify } = require('node:util');
 const { DATA_DIR } = require('../core/paths');
 const scrypt = promisify(crypto.scrypt);
-const SESSION_MS = 30 * 24 * 3600 * 1000;
+const AUTH_VERSION = 2;
 const digest = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
 function createAuthStore(file = path.join(DATA_DIR, 'auth.json')) {
   function read() {
+    let state;
     try {
-      const state = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (state.version !== 1 || !Array.isArray(state.sessions)) throw new Error('无效的授权文件');
-      return state;
+      state = JSON.parse(fs.readFileSync(file, 'utf8'));
     } catch (err) {
-      if (err.code === 'ENOENT') return { version: 1, admin: null, sessions: [] };
+      if (err.code === 'ENOENT') return { version: AUTH_VERSION, admin: null, sessions: [] };
       throw err; // 损坏的授权文件不能被当作未初始化，防止重新接管。
     }
+    if (![1, AUTH_VERSION].includes(state.version) || !Array.isArray(state.sessions)) throw new Error('无效的授权文件');
+    if (state.version === 1) {
+      // 仅迁移升级时仍有效的授权，不能恢复已经过期的旧凭据。
+      state.sessions = state.sessions.filter((s) => s.expiresAt > Date.now())
+        .map((s) => ({ ...s, expiresAt: null }));
+      state.version = AUTH_VERSION;
+      write(state);
+    }
+    return state;
   }
   function write(state) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -46,7 +54,7 @@ function createAuthStore(file = path.join(DATA_DIR, 'auth.json')) {
         write({ ...current, admin: { username, salt, hash } });
         return;
       }
-      fs.writeFileSync(file, JSON.stringify({ version: 1, admin: { username, salt, hash }, sessions: [] }), {
+      fs.writeFileSync(file, JSON.stringify({ version: AUTH_VERSION, admin: { username, salt, hash }, sessions: [] }), {
         flag: 'wx', mode: 0o600,
       });
     },
@@ -60,7 +68,6 @@ function createAuthStore(file = path.join(DATA_DIR, 'auth.json')) {
     },
     issueSession(label, deviceKey = '', previousSessionId = '') {
       const state = read();
-      state.sessions = state.sessions.filter((s) => s.expiresAt > Date.now());
       const keyHash = String(deviceKey || '').trim()
         ? digest(String(deviceKey).trim().slice(0, 200))
         : '';
@@ -72,21 +79,20 @@ function createAuthStore(file = path.join(DATA_DIR, 'auth.json')) {
       const session = {
         id: crypto.randomUUID(), tokenHash: digest(token),
         label: String(label || '设备').trim().slice(0, 100),
-        createdAt: new Date().toISOString(), expiresAt: Date.now() + SESSION_MS,
+        createdAt: new Date().toISOString(), expiresAt: null,
         ...(keyHash ? { deviceKeyHash: keyHash } : {}),
       };
       state.sessions.push(session);
       write(state);
-      return { token, id: session.id, expires_at: new Date(session.expiresAt).toISOString() };
+      return { token, id: session.id, expires_at: null };
     },
     authenticate(token) {
       if (!token) return null;
       const hash = digest(token);
-      return read().sessions.find((s) => s.tokenHash === hash && s.expiresAt > Date.now()) || null;
+      return read().sessions.find((s) => s.tokenHash === hash) || null;
     },
     listSessions() {
-      return read().sessions.filter((s) => s.expiresAt > Date.now())
-        .map(({ tokenHash, deviceKeyHash, ...session }) => session);
+      return read().sessions.map(({ tokenHash, deviceKeyHash, ...session }) => session);
     },
     revoke(id) {
       const state = read();

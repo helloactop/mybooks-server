@@ -37,11 +37,16 @@ test('全新私有部署：初始化、网页 cookie、安卓 Bearer、文件保
       body: JSON.stringify({ username: 'admin', password: 'integration-password', device_name: 'android' }) });
     assert.equal(login.status, 200);
     assert.match(login.headers.get('set-cookie'), /HttpOnly/i);
+    assert.match(login.headers.get('set-cookie'), /Max-Age=34560000/);
     const session = await login.json();
+    assert.equal(session.expires_at, null);
     const headers = { Authorization: 'Bearer ' + session.token };
     assert.deepEqual(await (await fetch(base + '/api/books', { headers })).json(), []);
     const cookie = login.headers.get('set-cookie').split(';')[0];
-    assert.equal((await fetch(base + '/api/books', { headers: { Cookie: cookie } })).status, 200);
+    const cookieAccess = await fetch(base + '/api/books', { headers: { Cookie: cookie } });
+    assert.equal(cookieAccess.status, 200);
+    assert.match(cookieAccess.headers.get('set-cookie'), /Max-Age=34560000/, '访问时续存持久 Cookie');
+    assert.equal(cookieAccess.headers.get('set-cookie').split(';')[0], cookie, '续存不签发额外设备会话');
     const created = await (await fetch(base + '/api/books', { method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ title: '版本检查' }) })).json();
     assert.ok(created.revision > 0);
@@ -110,6 +115,14 @@ test('全新私有部署：初始化、网页 cookie、安卓 Bearer、文件保
     })).json();
     assert.equal(finalDevices.length, 3, '同名的不同设备不会被合并');
     assert.equal(JSON.stringify(finalDevices).includes('deviceKeyHash'), false);
+    assert.ok(finalDevices.every((device) => device.expiresAt === null));
+    const logout = await fetch(base + '/api/auth/logout', {
+      method: 'POST', headers: { Cookie: browserResponse.headers.get('set-cookie').split(';')[0] },
+    });
+    assert.equal(logout.status, 204);
+    const logoutCookies = logout.headers.getSetCookie();
+    assert.match(logoutCookies.at(-1), /Expires=Thu, 01 Jan 1970/);
+    assert.equal(store.authenticate(browser.token), null, '长期会话仍可主动退出');
   } finally {
     child.kill();
     if (child.exitCode === null) await once(child, 'exit');

@@ -1,0 +1,53 @@
+.ui-checkbox {
+  --checkbox-size: var(--ui-icon-size-lg);
+  --checkbox-mark-size: var(--ui-icon-size-sm);
+  --checkbox-font-size: var(--ui-font-size-md);
+  display: grid;
+  min-width: 0;
+  color: var(--ui-color-text);
+  font: var(--checkbox-font-size) / var(--ui-line-height-normal) var(--ui-font-family);
+}
+.ui-checkbox[data-size="sm"] { --checkbox-size: var(--ui-icon-size-md); --checkbox-mark-size: var(--ui-font-size-sm); --checkbox-font-size: var(--ui-font-size-sm); }
+.ui-checkbox[data-size="lg"] { --checkbox-size: calc(var(--ui-icon-size-lg) + var(--ui-space-1)); --checkbox-mark-size: var(--ui-icon-size-md); --checkbox-font-size: var(--ui-font-size-lg); }
+.ui-checkbox__label { display: flex; align-items: flex-start; gap: var(--ui-space-3); box-sizing: border-box; min-width: 0; min-height: var(--ui-hit-target-min); padding-block: var(--ui-space-2); cursor: pointer; }
+.ui-checkbox__control { position: relative; display: block; flex: none; width: var(--checkbox-size); height: var(--checkbox-size); margin-block-start: max(0px, calc((var(--checkbox-font-size) * var(--ui-line-height-normal) - var(--checkbox-size)) / 2)); }
+.ui-checkbox__input { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; outline: none; opacity: 0; cursor: inherit; }
+.ui-checkbox__box {
+  --glass-control-background: var(--ui-color-surface);
+  --glass-control-opacity: 76%;
+  position: relative;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  border: var(--ui-border-width) solid var(--ui-color-border-strong);
+  border-radius: calc(var(--ui-radius-base) / 4);
+  color: var(--ui-color-on-accent);
+  background: var(--glass-control-background);
+  box-shadow: var(--ui-shadow-sm);
+  pointer-events: none;
+  transition: border-color var(--ui-duration-hover) var(--ui-ease-standard), background-color var(--ui-duration-hover) var(--ui-ease-standard);
+}
+.ui-checkbox:is([data-material="liquid"], [data-material="frosted"]) .ui-checkbox__box { background: transparent; }
+.ui-checkbox__input:is(:checked, :indeterminate) + .ui-checkbox__box { --glass-control-background: var(--ui-color-accent); --glass-control-opacity: 76%; border-color: var(--ui-color-accent-active); }
+.ui-checkbox__mark { position: relative; z-index: 1; display: none; grid-area: 1 / 1; width: var(--checkbox-mark-size); height: var(--checkbox-mark-size); stroke-width: var(--ui-icon-stroke-width); }
+.ui-checkbox__input:checked:not(:indeterminate) + .ui-checkbox__box .ui-checkbox__check,
+.ui-checkbox__input:indeterminate + .ui-checkbox__box .ui-checkbox__mixed { display: block; }
+.ui-checkbox__text { min-width: 0; overflow-wrap: anywhere; }
+.ui-checkbox__required { color: var(--ui-color-danger); }
+.ui-checkbox__description, .ui-checkbox__error { margin: 0; padding-inline-start: calc(var(--checkbox-size) + var(--ui-space-3)); font-size: var(--ui-font-size-sm); overflow-wrap: anywhere; }
+.ui-checkbox__description { color: var(--ui-color-text-secondary); }
+.ui-checkbox__error { color: var(--ui-color-danger); }
+.ui-checkbox__input[aria-invalid]:not([aria-invalid="false"]) + .ui-checkbox__box { border-color: var(--ui-color-danger); }
+.ui-checkbox:has(.ui-checkbox__input:disabled) { color: var(--ui-color-text-disabled); }
+.ui-checkbox:has(.ui-checkbox__input:disabled) .ui-checkbox__label { cursor: not-allowed; }
+.ui-checkbox__input:disabled + .ui-checkbox__box { background: var(--ui-color-surface-subtle); color: var(--ui-color-text-disabled); border-color: var(--ui-color-border); box-shadow: none; }
+.ui-checkbox__input:disabled + .ui-checkbox__box > .ui-glass-decoration { display: none; }
+@media (hover: hover) { .ui-checkbox__label:hover .ui-checkbox__input:enabled:not(:checked):not(:indeterminate) + .ui-checkbox__box { --glass-control-background: var(--ui-color-surface-hover); } }
+@media (prefers-reduced-motion: reduce) { .ui-checkbox__box { transition: none; } }
+@media (forced-colors: active) {
+  .ui-checkbox .ui-checkbox__box { background: Canvas; border-color: CanvasText; color: CanvasText; box-shadow: none; }
+  .ui-checkbox .ui-checkbox__input:is(:checked, :indeterminate) + .ui-checkbox__box { background: Highlight; color: HighlightText; border-color: Highlight; }
+  .ui-checkbox .ui-checkbox__input:disabled + .ui-checkbox__box { background: Canvas; color: GrayText; border-color: GrayText; }
+}

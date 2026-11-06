@@ -1,0 +1,47 @@
+.ui-glass-dialog {
+  --dialog-width: 35rem;
+  --dialog-max-height: calc(100dvh - 2 * var(--ui-space-4));
+  box-sizing: border-box;
+  width: calc(100% - 2 * var(--ui-space-4));
+  max-width: var(--dialog-width);
+  max-height: var(--dialog-max-height);
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ui-radius-dialog);
+  outline: none;
+  color: var(--ui-color-text);
+  background: transparent;
+  overflow: visible;
+}
+.ui-glass-dialog[data-size="sm"] { --dialog-width: 25rem; }
+.ui-glass-dialog[data-size="lg"] { --dialog-width: 50rem; }
+.ui-glass-dialog::backdrop {
+  background: var(--ui-color-overlay, rgb(20 35 47 / 36%));
+  animation: ui-glass-dialog-backdrop-in var(--ui-duration-enter, 240ms) var(--ui-ease-enter, ease-out) both;
+}
+.ui-glass-dialog[open][data-state="open"] { animation: ui-glass-dialog-in var(--ui-duration-enter) var(--ui-ease-enter) both; }
+.ui-glass-dialog[open][data-state="closing"] { animation: ui-glass-dialog-out var(--ui-duration-exit) var(--ui-ease-exit) both; }
+.ui-glass-dialog[data-state="closing"]::backdrop { animation: ui-glass-dialog-backdrop-out var(--ui-duration-exit, 160ms) var(--ui-ease-exit, ease-in) both; }
+.ui-glass-dialog__surface { max-height: var(--dialog-max-height); overflow: hidden; }
+.ui-glass-dialog__surface > .ui-glass-surface__content { display: flex; flex-direction: column; max-height: var(--dialog-max-height); min-height: 0; }
+.ui-glass-dialog__header { display: flex; flex: none; align-items: flex-start; gap: var(--ui-space-4); padding: var(--ui-space-6); }
+.ui-glass-dialog__heading { flex: 1; min-width: 0; }
+.ui-glass-dialog__title { margin: 0; font-size: var(--ui-font-size-xl); font-weight: var(--ui-font-weight-semibold); line-height: var(--ui-line-height-tight); overflow-wrap: anywhere; }
+.ui-glass-dialog__description { margin: var(--ui-space-2) 0 0; color: var(--ui-color-text-secondary); font-size: var(--ui-font-size-sm); line-height: var(--ui-line-height-normal); overflow-wrap: anywhere; }
+.ui-glass-dialog__close { margin-block-start: calc(-1 * var(--ui-space-2)); margin-inline-end: calc(-1 * var(--ui-space-2)); }
+.ui-glass-dialog__body { min-height: 0; overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; padding: 0 var(--ui-space-6) var(--ui-space-6); outline: none; line-height: var(--ui-line-height-normal); overflow-wrap: anywhere; }
+.ui-glass-dialog__body::-webkit-scrollbar { display: none; }
+.ui-glass-dialog__footer { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: var(--ui-space-3); padding: var(--ui-space-4) var(--ui-space-6) var(--ui-space-6); border-top: var(--ui-border-width) solid var(--ui-color-border); }
+/* 整个玻璃面板保持不透明；opacity < 1 会隔断内部 backdrop-filter 的背景采样。 */
+@keyframes ui-glass-dialog-in { from { transform: translateY(var(--ui-motion-distance)); } to { transform: translateY(0); } }
+@keyframes ui-glass-dialog-out { from { transform: translateY(0); } to { transform: translateY(var(--ui-motion-distance)); } }
+@keyframes ui-glass-dialog-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ui-glass-dialog-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
+@media (max-width: 480px) {
+  .ui-glass-dialog__header { padding: var(--ui-space-5); gap: var(--ui-space-2); }
+  .ui-glass-dialog__body { padding-inline: var(--ui-space-5); padding-bottom: var(--ui-space-5); }
+  .ui-glass-dialog__footer { padding: var(--ui-space-4) var(--ui-space-5) var(--ui-space-5); }
+}
+@media (prefers-reduced-motion: reduce) { .ui-glass-dialog[open], .ui-glass-dialog::backdrop, .ui-glass-dialog[data-state="closing"]::backdrop { animation: none; } }
+@media (forced-colors: active) { .ui-glass-dialog { border: var(--ui-border-width) solid CanvasText; } .ui-glass-dialog__footer { border-color: CanvasText; } }

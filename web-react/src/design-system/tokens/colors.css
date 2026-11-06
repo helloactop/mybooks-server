@@ -1,0 +1,44 @@
+/* 主题色、语义颜色与玻璃材质 */
+:root {
+  --ui-color-accent-rgb: 122 181 214;
+  --ui-color-accent: rgb(var(--ui-color-accent-rgb));
+  --ui-color-accent-hover: rgb(110, 171, 206);
+  --ui-color-accent-active: rgb(99, 160, 195);
+  --ui-color-accent-soft: rgb(var(--ui-color-accent-rgb) / 16%);
+  --ui-color-on-accent: #153043;
+  --ui-color-link: #28658a;
+  --ui-color-canvas: #f4f8fb;
+  --ui-color-surface: #ffffff;
+  --ui-color-surface-subtle: #edf3f7;
+  --ui-color-surface-hover: #e7eff5;
+  --ui-color-surface-pressed: #dce8f0;
+  --ui-color-text: #20313d;
+  --ui-color-text-secondary: #526472;
+  --ui-color-text-muted: #596976;
+  --ui-color-text-disabled: #84929d;
+  --ui-color-border: #d4e0e8;
+  --ui-color-border-strong: #b2c6d3;
+  --ui-color-sidebar: #f4f4f4;
+  --ui-color-sidebar-search: #eaeaea;
+  --ui-color-sidebar-hover: #ebebeb;
+  --ui-color-sidebar-text: #454545;
+  --ui-color-sidebar-muted: #777777;
+  --ui-color-sidebar-border: #e7e7e7;
+  --ui-color-overlay: rgb(20 35 47 / 36%);
+  --ui-color-success: #26734d;
+  --ui-color-success-soft: #eaf5ee;
+  --ui-color-warning: #87580f;
+  --ui-color-warning-soft: #fff4df;
+  --ui-color-danger: #b42332;
+  --ui-color-danger-hover: #9d1e2a;
+  --ui-color-danger-active: #871a25;
+  --ui-color-on-danger: #ffffff;
+  --ui-color-danger-soft: #fcecef;
+  --ui-glass-background: rgb(255 255 255 / 76%);
+  --ui-glass-background-opaque: var(--ui-color-surface);
+  --ui-glass-border: rgb(255 255 255 / 72%);
+  --ui-glass-highlight: rgb(255 255 255 / 82%);
+  --ui-glass-blur: 16px;
+  --ui-glass-control-blur: 4px;
+  --ui-glass-saturation: 140%;
+}

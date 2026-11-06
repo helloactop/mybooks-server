@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="480" viewBox="0 0 320 480">
+  <rect width="320" height="480" fill="#253d5c"/>
+  <circle cx="160" cy="258" r="100" fill="none" stroke="#7ab5d6" stroke-width="1"/>
+  <circle cx="160" cy="258" r="75" fill="none" stroke="#7ab5d6" stroke-width="1"/>
+  <circle cx="160" cy="258" r="50" fill="none" stroke="#7ab5d6" stroke-width="1"/>
+  <path d="M160 178V258L206 292" fill="none" stroke="#ebce96" stroke-width="3"/>
+  <text x="34" y="82" fill="#eef3f9" font-family="serif" font-size="36" letter-spacing="5">时间的回声</text>
+  <text x="36" y="117" fill="#adc8df" font-family="sans-serif" font-size="13" letter-spacing="4">ECHOES OF TIME</text>
+  <text x="36" y="438" fill="#adc8df" font-family="sans-serif" font-size="13" letter-spacing="2">MY BOOKS · 演示封面</text>
+</svg>

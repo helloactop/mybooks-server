@@ -1,0 +1,22 @@
+.book-editor-dialog__form { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 24px; }
+.book-editor-dialog__cover { min-width: 0; }
+.book-editor-dialog__cover > img { display: block; width: 100%; aspect-ratio: 2 / 3; object-fit: cover; }
+.book-editor-dialog__cover p { font-size: var(--ui-font-size-xs); color: var(--ui-color-text-secondary); overflow-wrap: anywhere; }
+.book-editor-dialog__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0; }
+.book-editor-dialog__summary { grid-column: 1 / -1; }
+.book-editor-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; width: 100%; }
+.book-editor-dialog__actions .ui-button { padding-inline: 14px; min-width: 0; }
+.book-editor-dialog__error { color: var(--ui-color-danger, #a4262c); margin: 0 0 12px; }
+.book-editor-dialog__notice { color: var(--ui-color-text-secondary); margin: 0 0 12px; }
+.book-editor-dialog__candidates { display: grid; gap: 8px; margin-top: 16px; }
+@media (max-width: 600px) {
+  .book-editor-dialog__form { grid-template-columns: 76px minmax(0, 1fr); gap: 14px; }
+  .book-editor-dialog__fields { grid-template-columns: minmax(0, 1fr); }
+  .book-editor-dialog .ui-glass-dialog__footer { padding-inline: 16px; }
+  .book-editor-dialog__actions { gap: 5px; }
+  .book-editor-dialog__actions .ui-button { padding-inline: 10px; font-size: 12px; }
+}
+
+.book-editor-dialog .ui-glass-dialog__footer { position: absolute; z-index: 2; inset-inline: 0; bottom: 0; border: 0; pointer-events: none; }
+.book-editor-dialog__actions { pointer-events: auto; width: max-content; margin-left: auto; }
+.book-editor-dialog .ui-glass-dialog__body { padding-bottom: 88px; }

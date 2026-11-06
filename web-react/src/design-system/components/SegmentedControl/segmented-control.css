@@ -1,0 +1,78 @@
+.ui-segmented-control {
+  --segment-height: var(--ui-control-height-md);
+  --segment-icon-size: var(--ui-icon-size-md);
+  --glass-control-background: var(--ui-color-surface);
+  --glass-control-opacity: 40%;
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: repeat(var(--segment-count), minmax(0, 1fr));
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  min-height: var(--segment-height);
+  padding: var(--ui-space-1);
+  border: var(--ui-border-width) solid var(--ui-color-border);
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-color-surface-subtle);
+  color: var(--ui-color-text-secondary);
+  font: var(--ui-font-size-md) / var(--ui-line-height-tight) var(--ui-font-family);
+  vertical-align: middle;
+}
+.ui-segmented-control[data-size="sm"] { --segment-height: var(--ui-control-height-sm); --segment-icon-size: var(--ui-icon-size-sm); font-size: var(--ui-font-size-sm); }
+.ui-segmented-control[data-size="lg"] { --segment-height: var(--ui-control-height-lg); --segment-icon-size: var(--ui-icon-size-lg); font-size: var(--ui-font-size-lg); }
+.ui-segmented-control[data-full-width="true"] { display: grid; width: 100%; }
+.ui-segmented-control:is([data-material="liquid"], [data-material="frosted"]) { background: transparent; }
+.ui-segmented-control__indicator {
+  --glass-control-background: var(--ui-color-accent);
+  --glass-control-opacity: 65%;
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  border-radius: inherit;
+  background: var(--ui-color-accent);
+  box-shadow: var(--ui-shadow-sm);
+  pointer-events: none;
+  transition: transform var(--ui-duration-enter) var(--ui-ease-standard), width var(--ui-duration-enter) var(--ui-ease-standard), height var(--ui-duration-enter) var(--ui-ease-standard);
+}
+.ui-segmented-control:is([data-material="liquid"], [data-material="frosted"]) > .ui-segmented-control__indicator { background: transparent; }
+.ui-segmented-control__option {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ui-space-2);
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: calc(var(--segment-height) - 2 * var(--ui-space-1) - 2 * var(--ui-border-width));
+  margin: 0;
+  padding: var(--ui-space-1) var(--ui-space-3);
+  border: 0;
+  border-radius: inherit;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--ui-font-weight-medium);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--ui-duration-hover) var(--ui-ease-standard), background-color var(--ui-duration-hover) var(--ui-ease-standard);
+}
+.ui-segmented-control__option[aria-checked="true"] { color: var(--ui-color-on-accent); font-weight: var(--ui-font-weight-semibold); }
+.ui-segmented-control__label { min-width: 0; overflow-wrap: anywhere; }
+.ui-segmented-control__icon { flex: none; width: var(--segment-icon-size); height: var(--segment-icon-size); stroke-width: var(--ui-icon-stroke-width); }
+@media (hover: hover) { .ui-segmented-control__option:hover:not(:disabled):not([aria-checked="true"]) { background: var(--ui-color-accent-soft); color: var(--ui-color-text); } }
+.ui-segmented-control__option:disabled { color: var(--ui-color-text-disabled); cursor: not-allowed; }
+.ui-segmented-control[data-disabled="true"] { background: var(--ui-color-surface-subtle); }
+.ui-segmented-control[data-disabled="true"] > .ui-glass-decoration { display: none; }
+.ui-segmented-control[data-disabled="true"] > .ui-segmented-control__indicator { --glass-control-background: var(--ui-color-surface-pressed); background: var(--ui-color-surface-pressed); box-shadow: none; }
+@media (pointer: coarse) { .ui-segmented-control__option { min-height: var(--ui-hit-target-min); } }
+@media (prefers-reduced-motion: reduce) { .ui-segmented-control__indicator, .ui-segmented-control__option { transition: none; } }
+@media (forced-colors: active) {
+  .ui-segmented-control { color: ButtonText; border-color: ButtonText; background: ButtonFace; }
+  .ui-segmented-control > .ui-segmented-control__indicator { background: Highlight; box-shadow: none; }
+  .ui-segmented-control__option[aria-checked="true"] { color: HighlightText; }
+  .ui-segmented-control__option:disabled { color: GrayText; }
+  .ui-segmented-control[data-disabled="true"] > .ui-segmented-control__indicator { background: ButtonFace; border: var(--ui-border-width) solid GrayText; }
+}

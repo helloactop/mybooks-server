@@ -1,0 +1,4 @@
+.login-dialog.ui-content-dialog { height: fit-content; }
+.login-dialog__form { display: grid; gap: var(--ui-space-4); }
+.login-dialog__form p { margin: 0; font-size: var(--ui-font-size-sm); }
+.login-dialog__error { color: var(--ui-color-danger); }

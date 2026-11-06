@@ -1,0 +1,87 @@
+.ui-select {
+  --select-height: var(--ui-control-height-md);
+  --glass-control-background: var(--ui-color-surface);
+  --glass-control-opacity: 76%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--ui-space-2);
+  min-width: 0;
+  color: var(--ui-color-text);
+  font: var(--ui-font-size-md) / var(--ui-line-height-normal) var(--ui-font-family);
+}
+.ui-select[data-size="sm"] { --select-height: var(--ui-control-height-sm); }
+.ui-select[data-size="lg"] { --select-height: var(--ui-control-height-lg); }
+.ui-select__label { width: fit-content; font-size: var(--ui-font-size-sm); font-weight: var(--ui-font-weight-medium); }
+.ui-select__required { color: var(--ui-color-danger); }
+.ui-select__frame { position: relative; box-sizing: border-box; min-width: 0; min-height: var(--select-height); border: var(--ui-border-width) solid var(--ui-color-border-strong); border-radius: var(--ui-radius-control); background: var(--glass-control-background); box-shadow: var(--ui-shadow-sm); }
+.ui-select:is([data-material="liquid"], [data-material="frosted"]) .ui-select__frame { background: transparent; }
+.ui-select__input {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  text-align: start;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: calc(var(--select-height) - 2 * var(--ui-border-width));
+  margin: 0;
+  padding-block: var(--ui-space-1);
+  padding-inline: var(--ui-space-4) var(--ui-space-10);
+  border: 0;
+  border-radius: inherit;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  color-scheme: light;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  line-height: var(--ui-line-height-tight);
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.ui-select__input:enabled[data-placeholder="true"] { color: var(--ui-color-text-muted); }
+.ui-select__value { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ui-select__input[data-show-chevron="false"] { justify-content: center; padding-inline: var(--ui-space-4); }
+.ui-select__chevron { position: absolute; z-index: 1; inset-inline-end: var(--ui-space-4); top: 50%; width: var(--ui-icon-size-md); height: var(--ui-icon-size-md); transform: translateY(-50%); color: var(--ui-color-text-secondary); stroke-width: var(--ui-icon-stroke-width); pointer-events: none; }
+.ui-select__frame:has([aria-invalid]:not([aria-invalid="false"])) { border-color: var(--ui-color-danger); }
+.ui-select__description, .ui-select__error { margin: 0; font-size: var(--ui-font-size-sm); overflow-wrap: anywhere; }
+.ui-select__description { color: var(--ui-color-text-secondary); }
+.ui-select__error { color: var(--ui-color-danger); }
+.ui-select:has(.ui-select__input:disabled) { color: var(--ui-color-text-disabled); }
+.ui-select:has(.ui-select__input:disabled) .ui-select__frame { background: var(--ui-color-surface-subtle); border-color: var(--ui-color-border); box-shadow: none; }
+.ui-select__input:disabled { color: var(--ui-color-text-disabled); -webkit-text-fill-color: var(--ui-color-text-disabled); cursor: not-allowed; opacity: 1; }
+
+.ui-select:has(.ui-select__input:disabled) .ui-glass-decoration { display: none; }
+.ui-select:has(.ui-select__input:disabled) .ui-select__chevron { color: var(--ui-color-text-disabled); }
+@media (pointer: coarse) {
+  .ui-select__frame { min-height: max(var(--select-height), var(--ui-hit-target-min)); }
+  .ui-select__input { min-height: calc(max(var(--select-height), var(--ui-hit-target-min)) - 2 * var(--ui-border-width)); }
+}
+@media (forced-colors: active) {
+  .ui-select .ui-select__frame { background: Canvas; border-color: CanvasText; box-shadow: none; }
+  .ui-select .ui-select__input, .ui-select .ui-select__chevron { color: CanvasText; }
+  .ui-select .ui-select__input:disabled { -webkit-text-fill-color: GrayText; color: GrayText; }
+  .ui-select:has(.ui-select__input:disabled) .ui-select__frame { border-color: GrayText; }
+}
+
+.ui-select__input[aria-expanded="true"] .ui-select__chevron { transform: translateY(-50%) rotate(180deg); }
+.ui-select__native { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; pointer-events: none; }
+.ui-select__current-value { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.ui-select__popover { --ui-glass-background: rgb(255 255 255 / 88%); font: var(--ui-font-size-md) / var(--ui-line-height-normal) var(--ui-font-family); }
+.ui-select__popover .ui-glass-popover__body { padding: var(--ui-space-2); }
+.ui-select__option { position: relative; display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-3); box-sizing: border-box; min-height: var(--ui-hit-target-min); padding: var(--ui-space-2) var(--ui-space-4); border-radius: calc(var(--ui-radius-base) / 2); cursor: pointer; user-select: none; }
+.ui-select__option > span { min-width: 0; overflow-wrap: anywhere; }
+.ui-select__option[data-active="true"] { background: var(--ui-color-surface-hover); }
+.ui-select__option[aria-selected="true"] { background: var(--ui-color-accent-soft); font-weight: var(--ui-font-weight-medium); }
+.ui-select__option[aria-disabled="true"] { color: var(--ui-color-text-disabled); cursor: not-allowed; }
+.ui-select__check { flex: none; width: var(--ui-icon-size-md); height: var(--ui-icon-size-md); color: var(--ui-color-link); stroke-width: var(--ui-icon-stroke-width); visibility: hidden; }
+.ui-select__option[aria-selected="true"] .ui-select__check { visibility: visible; }
+.ui-select__group + .ui-select__group { margin-top: var(--ui-space-1); padding-top: var(--ui-space-1); border-top: var(--ui-border-width) solid var(--ui-color-border); }
+.ui-select__group-label { padding: var(--ui-space-2) var(--ui-space-4); color: var(--ui-color-text-secondary); font-size: var(--ui-font-size-xs); font-weight: var(--ui-font-weight-semibold); }
+@media (forced-colors: active) {
+  .ui-select__option[data-active="true"], .ui-select__option[aria-selected="true"] { background: Highlight; color: HighlightText; forced-color-adjust: none; }
+  .ui-select__option[aria-selected="true"] .ui-select__check { color: HighlightText; }
+  .ui-select__option[aria-disabled="true"] { color: GrayText; }
+}

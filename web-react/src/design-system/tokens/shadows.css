@@ -1,0 +1,6 @@
+/* 控件、面板与浮层阴影 */
+:root {
+  --ui-shadow-sm: 0 1px 3px rgb(32 58 76 / 6%);
+  --ui-shadow-md: 0 6px 20px rgb(32 58 76 / 7%), 0 1px 4px rgb(32 58 76 / 4%);
+  --ui-shadow-lg: 0 16px 48px rgb(32 58 76 / 12%), 0 3px 10px rgb(32 58 76 / 5%);
+}

@@ -1,0 +1,9 @@
+.settings-page { padding: var(--ui-space-4) clamp(20px, 4vw, 48px) clamp(20px, 4vw, 48px); color: var(--ui-color-text); }
+.settings-page__header { margin-bottom: var(--ui-space-8); }
+.settings-page h1 { margin: 0; font-size: var(--ui-font-size-2xl); font-weight: var(--ui-font-weight-semibold); line-height: var(--ui-line-height-tight); }
+.settings-section { box-sizing: border-box; max-width: 720px; padding: var(--ui-space-5) var(--ui-space-6); border: var(--ui-border-width) solid var(--ui-color-border); border-radius: var(--ui-radius-surface); background: var(--ui-color-surface); }
+.settings-section__title { margin: 0 0 var(--ui-space-4); font-size: var(--ui-font-size-lg); font-weight: var(--ui-font-weight-semibold); line-height: var(--ui-line-height-tight); }
+.settings-section + .settings-section { margin-top: var(--ui-space-5); }
+.settings-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--ui-space-3) var(--ui-space-4); }
+.settings-row__label { font-size: var(--ui-font-size-md); font-weight: var(--ui-font-weight-medium); }
+@media (max-width: 479px) { .settings-page h1 { font-size: var(--ui-font-size-xl); } .settings-section { padding: var(--ui-space-4); } }

@@ -1,0 +1,3 @@
+.ui-badge { --badge-height: calc(var(--ui-space-6) + var(--ui-space-1)); display: inline-flex; align-items: center; justify-content: center; min-height: var(--badge-height); padding: var(--ui-space-1) var(--ui-space-3); }
+.ui-badge[data-size="sm"] { --badge-height: var(--ui-space-6); font-size: var(--ui-font-size-xs); padding-block: calc(var(--ui-space-1) / 2); padding-inline: var(--ui-space-2); }
+.ui-badge[data-size="lg"] { --badge-height: var(--ui-space-8); }

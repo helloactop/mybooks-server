@@ -32,6 +32,7 @@ Compose 从 `.env` 读取端口 `MYBOOKS_PORT`、`MYBOOKS_PUBLIC_URL` 和 `MYBOO
 
 ```sh
 npm ci
+npm run build:admin
 cp .env.example .env
 node --env-file=.env scripts/setup-admin.js
 node --env-file=.env server.js

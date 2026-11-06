@@ -1,0 +1,23 @@
+.ui-button.ui-icon-button {
+  --icon-button-size: var(--button-height);
+  flex: none;
+  box-sizing: border-box;
+  inline-size: var(--icon-button-size);
+  min-inline-size: var(--icon-button-size);
+  block-size: var(--icon-button-size);
+  min-block-size: var(--icon-button-size);
+  padding: 0;
+}
+
+.ui-icon-button .ui-button__label { display: inline-flex; align-items: center; justify-content: center; }
+.ui-icon-button:is([data-variant="secondary"], [data-variant="ghost"])[aria-pressed="true"]:not(:disabled) {
+  --button-background: var(--ui-color-accent);
+  --button-hover: var(--ui-color-accent-hover);
+  --button-active: var(--ui-color-accent-active);
+  --button-text: var(--ui-color-on-accent);
+  --button-border: var(--ui-color-link);
+}
+
+@media (pointer: coarse) {
+  .ui-button.ui-icon-button { --icon-button-size: max(var(--button-height), var(--ui-hit-target-min)); }
+}

@@ -1,0 +1,6 @@
+.ui-filter-select { width: 88px; max-width: 100%; }
+.ui-filter-select > .ui-select__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.ui-filter-select .ui-select__popover { --popover-width: max-content; }
+.ui-filter-select .ui-select__frame { transition: opacity 0s var(--ui-duration-exit); }
+.ui-filter-select .ui-select__frame:has([aria-expanded="true"]) { opacity: 0; transition: none; }
+@media (prefers-reduced-motion: reduce) { .ui-filter-select .ui-select__frame { transition: none; } }

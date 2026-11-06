@@ -1,0 +1,32 @@
+.ui-tooltip {
+  --glass-control-background: var(--ui-color-surface);
+  --glass-control-opacity: 92%;
+  position: fixed;
+  inset: auto;
+  z-index: var(--ui-z-tooltip);
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(20rem, var(--tooltip-max-width, calc(100vw - 24px)));
+  max-height: var(--tooltip-max-height, calc(100dvh - 24px));
+  margin: 0;
+  padding: var(--ui-space-3) var(--ui-space-4);
+  border: var(--ui-border-width) solid var(--ui-glass-border);
+  border-radius: var(--ui-radius-surface);
+  outline: none;
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  box-shadow: var(--ui-shadow-md);
+  font: var(--ui-font-size-sm) / var(--ui-line-height-normal) var(--ui-font-family);
+  overflow: auto;
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+}
+.ui-tooltip:is([data-material="liquid"], [data-material="frosted"]) { background: transparent; }
+.ui-tooltip[data-positioned="false"] { visibility: hidden; }
+.ui-tooltip:popover-open { animation: ui-tooltip-enter var(--ui-duration-hover) var(--ui-ease-enter); }
+.ui-tooltip::-webkit-scrollbar { display: none; }
+.ui-tooltip::backdrop { background: transparent; pointer-events: none; }
+.ui-tooltip__text { position: relative; z-index: 1; white-space: pre-line; overflow-wrap: anywhere; }
+@keyframes ui-tooltip-enter { from { transform: translateY(4px); } to { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .ui-tooltip:popover-open { animation: none; } }
+@media (forced-colors: active) { .ui-tooltip { background: Canvas; color: CanvasText; border-color: CanvasText; box-shadow: none; } }

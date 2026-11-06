@@ -5,12 +5,16 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "dev:admin": "vite --config web-react/vite.config.mts",
+    "typecheck:admin": "tsc --project web-react/tsconfig.json",
+    "build:admin": "npm run typecheck:admin && vite build --config web-react/vite.config.mts",
+    "build": "npm run build:admin",
     "test": "node scripts/test.js",
     "setup": "node scripts/setup-admin.js",
     "check:public": "node scripts/check-public.mjs"
   },
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.12.0"
   },
   "dependencies": {
     "cheerio": "1.1.2",
@@ -24,5 +28,17 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/shyshineinn/my-books.git"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.2.1",
+    "liquid-glass-react": "1.1.1",
+    "lucide-react": "1.69.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.6"
   }
 }

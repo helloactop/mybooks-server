@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
+const repoRoot = path.resolve(__dirname, '../../..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const pages = ['public/index.html', 'public/shelf.html', 'public/rank.html', 'public/stats.html', 'public/tags.html', 'public/notes.html'];
 const style = read('public/css/style.css');
@@ -170,11 +171,11 @@ test('编辑 Sheet 底栏继承面板材质，横屏不再全局 sticky 其他�
 });
 
 test('公开阅读与管理 API 分离，公开详情使用只读 BookDetails', () => {
-  const server = read('server.js');
+  const server = fs.readFileSync(path.join(repoRoot, 'server.js'), 'utf8');
   assert.match(server, /app\.use\(routesPublic\)/);
-  assert.match(server, /MANAGEMENT_PAGES/);
+  assert.match(server, /LEGACY_PAGES/);
   assert.match(server, /app\.use\('\/api', requireSession\)/);
-  assert.match(read('src/http/routes.public.js'), /publicBook/);
+  assert.match(fs.readFileSync(path.join(repoRoot, 'src/http/routes.public.js'), 'utf8'), /publicBook/);
   const common = read('public/js/common.js');
   assert.match(common, /PUBLIC_PAGES/);
   assert.match(common, /readOnly = true/);
@@ -335,7 +336,7 @@ test('双击/选择/键盘路径与资源版本保持接线', () => {
     });
   });
   const sw = read('public/sw.js');
-  assert.match(sw, /CACHE_VERSION = 'v190'/);
+  assert.match(sw, /CACHE_VERSION = 'v191'/);
   Object.entries(versions).forEach(([asset, version]) => {
     assert.match(sw, new RegExp(`'/${asset.replace(/[/.]/g, '\\$&')}\\?v=${version}'`), `sw.js 缺少 ${asset}@${version}`);
   });

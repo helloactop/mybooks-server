@@ -1,0 +1,8 @@
+/* 主要圆角统一为 32px */
+:root {
+  --ui-radius-base: 32px;
+  --ui-radius-surface: var(--ui-radius-base);
+  --ui-radius-control: var(--ui-radius-base);
+  --ui-radius-dialog: var(--ui-radius-base);
+  --ui-radius-pill: 9999px;
+}

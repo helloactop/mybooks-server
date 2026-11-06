@@ -1,0 +1,75 @@
+.ui-text-field {
+  --field-height: var(--ui-control-height-md);
+  --field-icon-size: var(--ui-icon-size-md);
+  --glass-control-background: var(--ui-color-surface);
+  --glass-control-opacity: 76%;
+  display: grid;
+  gap: var(--ui-space-2);
+  min-width: 0;
+  color: var(--ui-color-text);
+  font: var(--ui-font-size-md) / var(--ui-line-height-normal) var(--ui-font-family);
+}
+.ui-text-field[data-size="sm"] { --field-height: var(--ui-control-height-sm); --field-icon-size: var(--ui-icon-size-sm); }
+.ui-text-field[data-size="lg"] { --field-height: var(--ui-control-height-lg); --field-icon-size: var(--ui-icon-size-lg); }
+.ui-text-field__label { width: fit-content; font-size: var(--ui-font-size-sm); font-weight: var(--ui-font-weight-medium); }
+.ui-text-field__required { color: var(--ui-color-danger); }
+.ui-text-field__frame {
+  position: relative;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: var(--field-height);
+  gap: var(--ui-space-2);
+  padding-inline: var(--ui-space-4);
+  border: var(--ui-border-width) solid var(--ui-color-border-strong);
+  border-radius: var(--ui-radius-control);
+  background: var(--glass-control-background);
+  box-shadow: var(--ui-shadow-sm);
+  transition: border-color var(--ui-duration-hover) var(--ui-ease-standard);
+}
+.ui-text-field:is([data-material="liquid"], [data-material="frosted"]) .ui-text-field__frame { background: transparent; }
+.ui-text-field__input {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  flex: 1 1 0%;
+  width: 100%;
+  min-width: 0;
+  min-height: calc(var(--field-height) - 2 * var(--ui-border-width));
+  padding: var(--ui-space-1) 0;
+  border: 0;
+  border-radius: inherit;
+  outline: none;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  line-height: var(--ui-line-height-tight);
+  text-overflow: ellipsis;
+}
+.ui-text-field__input::placeholder { color: var(--ui-color-text-muted); opacity: 1; }
+.ui-text-field__input[type="search"]:focus::placeholder { opacity: 0; }
+.ui-text-field__icon { position: relative; z-index: 1; flex: none; width: var(--field-icon-size); height: var(--field-icon-size); color: var(--ui-color-text-secondary); stroke-width: var(--ui-icon-stroke-width); }
+.ui-text-field .ui-text-field__reveal { position: relative; z-index: 1; flex: none; margin-inline-end: calc(-1 * var(--ui-space-3)); }
+.ui-text-field[data-size="sm"] .ui-text-field__reveal { --icon-button-size: calc(var(--field-height) - 2 * var(--ui-border-width)); }
+.ui-text-field[data-invalid="true"] .ui-text-field__frame { border-color: var(--ui-color-danger); }
+.ui-text-field__description, .ui-text-field__error { margin: 0; font-size: var(--ui-font-size-sm); overflow-wrap: anywhere; }
+.ui-text-field__description { color: var(--ui-color-text-secondary); }
+.ui-text-field__error { color: var(--ui-color-danger); }
+.ui-text-field[data-readonly="true"] { --glass-control-background: var(--ui-color-surface-subtle); }
+.ui-text-field:has(.ui-text-field__input:disabled) { color: var(--ui-color-text-disabled); }
+.ui-text-field:has(.ui-text-field__input:disabled) .ui-text-field__frame { background: var(--ui-color-surface-subtle); border-color: var(--ui-color-border); box-shadow: none; cursor: not-allowed; }
+.ui-text-field__input:disabled { cursor: not-allowed; -webkit-text-fill-color: var(--ui-color-text-disabled); opacity: 1; }
+.ui-text-field:has(.ui-text-field__input:disabled) .ui-glass-decoration { display: none; }
+@media (pointer: coarse) {
+  .ui-text-field[data-size="sm"] .ui-text-field__reveal { --icon-button-size: var(--ui-hit-target-min); }
+  .ui-text-field__frame { min-height: max(var(--field-height), var(--ui-hit-target-min)); }
+  .ui-text-field__input { min-height: calc(max(var(--field-height), var(--ui-hit-target-min)) - 2 * var(--ui-border-width)); }
+}
+@media (prefers-reduced-motion: reduce) { .ui-text-field__frame { transition: none; } }
+@media (forced-colors: active) {
+  .ui-text-field .ui-text-field__frame { border-color: CanvasText; background: Canvas; box-shadow: none; }
+  .ui-text-field__input { color: CanvasText; }
+  .ui-text-field:has(.ui-text-field__input:disabled) .ui-text-field__frame { border-color: GrayText; }
+  .ui-text-field__input:disabled { -webkit-text-fill-color: GrayText; }
+}

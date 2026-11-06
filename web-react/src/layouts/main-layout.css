@@ -1,0 +1,18 @@
+body:has(.main-layout) { margin: 0; }
+.main-layout { --sidebar-width: 208px; --top-search-width: min(400px, max(160px, calc(100vw - var(--sidebar-width) - 2 * (clamp(20px, 4vw, 48px) + 152px)))); display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); height: 100dvh; min-width: 0; overflow: hidden; background: var(--ui-color-surface); font-family: var(--ui-font-family); }
+.main-layout__sidebar { min-width: 0; min-height: 0; }
+.main-layout[data-sidebar-collapsed="true"] { --sidebar-width: 64px; }
+.main-layout__top-bar { position: fixed; top: max(var(--ui-space-4), env(safe-area-inset-top, 0px)); left: calc((100% + var(--sidebar-width)) / 2); z-index: var(--ui-z-sticky); width: var(--top-search-width); transform: translateX(-50%); }
+.main-layout[data-top-bar="true"] .main-layout__content { box-sizing: border-box; scroll-padding-top: 76px; }
+.main-layout[data-top-bar="true"] .library-books h1 { max-width: max(128px, calc((100vw - var(--sidebar-width)) / 2 - clamp(20px, 4vw, 48px) - var(--top-search-width) / 2 - 24px)); }
+.main-layout__content { min-width: 0; min-height: 0; overflow: auto; background: var(--ui-color-surface); }
+.main-layout__mobile-header { display: none; }
+@media (max-width: 767px), (orientation: portrait) {
+  .main-layout { grid-template-columns: minmax(0, 1fr); }
+  .main-layout__sidebar { display: none; }
+  .main-layout[data-top-bar="true"] .main-layout__content { padding-top: 0; scroll-padding-top: 60px; }
+  .main-layout[data-top-bar="true"] .library-books h1 { max-width: 100%; }
+  .main-layout__top-bar { top: 8px; left: 72px; right: 16px; width: auto; transform: none; z-index: calc(var(--ui-z-sticky) + 1); }
+  .main-layout[data-top-bar="true"] .library-workspace__brand { display: none; }
+  .main-layout__mobile-header { position: sticky; top: 0; z-index: var(--ui-z-sticky); display: flex; align-items: center; min-height: 60px; padding-inline: var(--ui-space-3); border-bottom: var(--ui-border-width) solid var(--ui-color-sidebar-border); background: var(--ui-color-surface); }
+}

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="480" viewBox="0 0 320 480">
+  <rect width="320" height="480" fill="#bfd4d1"/>
+  <circle cx="247" cy="121" r="39" fill="#e9dfbb"/>
+  <path d="M0 307 112 168 225 330 280 246 320 298V480H0Z" fill="#709d9a"/>
+  <path d="M0 366 69 296 161 389 231 315 320 402V480H0Z" fill="#396866"/>
+  <text x="34" y="82" fill="#234a48" font-family="serif" font-size="36" letter-spacing="6">山海之间</text>
+  <text x="36" y="115" fill="#396866" font-family="sans-serif" font-size="13" letter-spacing="3">BETWEEN LAND AND SEA</text>
+  <text x="36" y="438" fill="#e3efeb" font-family="sans-serif" font-size="13" letter-spacing="2">MY BOOKS · 演示封面</text>
+</svg>

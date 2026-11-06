@@ -1,0 +1,45 @@
+.ui-glass-popover {
+  --popover-width: 20rem;
+  --popover-max-height: calc(100dvh - 24px);
+  position: fixed;
+  inset: auto;
+  z-index: var(--ui-z-dropdown);
+  box-sizing: border-box;
+  width: var(--popover-width);
+  max-width: var(--popover-viewport-width, calc(100vw - 24px));
+  max-height: var(--popover-max-height);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ui-radius-surface);
+  outline: none;
+  color: var(--ui-color-text);
+  background: transparent;
+  overflow: visible;
+  transform: translateY(var(--ui-motion-distance));
+  /* 仅移动面板，避免整体透明度过渡使子控件的玻璃采样短暂变黑。 */
+  transition: transform var(--ui-duration-exit) var(--ui-ease-exit),
+    display var(--ui-duration-exit) allow-discrete, overlay var(--ui-duration-exit) allow-discrete;
+}
+.ui-glass-popover[data-size="sm"] { --popover-width: 15rem; }
+.ui-glass-popover[data-size="lg"] { --popover-width: 25rem; }
+.ui-glass-popover:popover-open { transform: translateY(0); transition-duration: var(--ui-duration-enter); }
+.ui-glass-popover[data-positioned="false"] { visibility: hidden; }
+.ui-glass-popover[data-animation="morph"] {
+  transform-origin: 0 0;
+  transform: var(--popover-morph-transform, none);
+  border-radius: var(--popover-morph-radius, var(--ui-radius-surface));
+  transition: transform var(--ui-duration-exit) var(--ui-ease-exit),
+    border-radius var(--ui-duration-exit) var(--ui-ease-exit),
+    display var(--ui-duration-exit) allow-discrete, overlay var(--ui-duration-exit) allow-discrete;
+}
+.ui-glass-popover[data-animation="morph"]:popover-open { transform: translate(0px, 0px) scale(1, 1); border-radius: var(--ui-radius-surface); transition-duration: var(--ui-duration-enter); }
+.ui-glass-popover[data-animation="morph"] > .ui-glass-popover__surface { border-radius: inherit; }
+.ui-glass-popover::backdrop { background: transparent; pointer-events: none; }
+.ui-glass-popover__surface { overflow: hidden; }
+.ui-glass-popover__body { box-sizing: border-box; max-height: var(--popover-max-height); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; padding: var(--ui-space-5); outline: none; }
+.ui-glass-popover__body::-webkit-scrollbar { display: none; }
+.ui-glass-popover__content { min-width: 0; overflow-wrap: anywhere; line-height: var(--ui-line-height-normal); }
+@starting-style { .ui-glass-popover:popover-open { transform: translateY(var(--ui-motion-distance)); } }
+@media (prefers-reduced-motion: reduce) { .ui-glass-popover { transition: none; transform: none; } @starting-style { .ui-glass-popover:popover-open { transform: none; } } }
+@media (prefers-reduced-motion: reduce) { .ui-glass-popover[data-animation="morph"] { transition: none; transform: none; border-radius: var(--ui-radius-surface); } }

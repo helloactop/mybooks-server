@@ -1,0 +1,4 @@
+.toast-preview .button-preview__grid { margin-top: var(--ui-space-6); }
+.toast-preview__stack { display: grid; gap: var(--ui-space-4); min-width: 0; }
+.toast-preview__stack > .ui-button { justify-self: start; }
+.toast-preview__stack output { font-size: var(--ui-font-size-sm); color: var(--ui-color-text-secondary); overflow-wrap: anywhere; }

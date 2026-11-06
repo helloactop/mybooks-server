@@ -10,6 +10,7 @@
 
 ```sh
 npm ci
+npm run build:admin
 npm test
 npm run check:public
 ```
@@ -17,6 +18,7 @@ npm run check:public
 运行测试不需要管理员密码或真实书库。`scripts/test.js` 为整套测试创建独立临时存储。
 不要直接运行可能加载默认数据库单例的测试文件，避免访问自己的 `data/`。
 本地服务的初始化和启动见 [自部署指南](docs/SELF_HOSTING.md)。
+React 前端开发、热更新与构建见 [前端工程说明](docs/FRONTEND.md)。
 
 ## 修改边界
 
@@ -24,7 +26,8 @@ npm run check:public
 - 新测试使用临时数据；不要用默认数据库句柄造数据。
 - 数据库迁移只追加，保持旧数据和回退说明；多表写入放在事务中。
 - 改同步行为时同时检查旧客户端兼容、冲突、删除与恢复，更新 [协议说明](docs/SYNC_PROTOCOL.md)。
-- 前端修改同步更新 HTML 资源查询版本与 Service Worker 缓存版本。
+- 旧版前端修改同步更新 HTML 资源查询版本与 Service Worker 缓存版本；
+  `web-react/` 由 Vite 生成资源哈希，不接入旧版离线缓存。
 - 应用和包版本由维护者决定，日常贡献不要自行递增。
 
 ## 提交问题与 PR

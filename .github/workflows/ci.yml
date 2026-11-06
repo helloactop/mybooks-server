@@ -1,4 +1,4 @@
-name: Backend checks
+name: Project checks
 on: [push, pull_request]
 permissions:
   contents: read
@@ -11,6 +11,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci --ignore-scripts
+      - run: npm ci --include=dev --include=optional --ignore-scripts --fetch-retries=4
       - run: npm run check:public
+      - run: npm run build:admin
       - run: npm test

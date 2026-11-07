@@ -79,14 +79,12 @@ echo "    文件快照保留最近 10 份:$BACKUP_FILES"
 echo "==> 2/5 拉取最新代码"
 git pull --ff-only
 
-echo "==> 3/5 安装依赖并构建管理面板"
+echo "==> 3/5 安装依赖"
 if [ -f package-lock.json ]; then
-  npm ci --include=dev --include=optional --fetch-retries=4
+  npm ci --omit=dev
 else
-  npm install --include=dev --include=optional --fetch-retries=4
+  npm install --omit=dev
 fi
-npm run build:admin
-npm prune --omit=dev
 
 echo "==> 4/5 重启进程"
 if command -v pm2 >/dev/null 2>&1 && pm2 describe "$APP_NAME" >/dev/null 2>&1; then

@@ -1,6 +1,5 @@
 # 依赖
 node_modules/
-web-react/dist/
 
 # 数据库（本地数据，不要上传）
 data/*.db
@@ -64,7 +63,6 @@ data/admin-token
 data/auth.json
 data/auth.json.*
 .tmp-client/
-.codex-remote-attachments/
 
 # calibre 参考源码(只读借鉴,严禁入库)
 calibre-master/

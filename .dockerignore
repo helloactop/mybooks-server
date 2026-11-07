@@ -1,7 +1,6 @@
 .git
 .github
 node_modules
-web-react/dist
 data
 uploads
 books-files
@@ -9,7 +8,6 @@ notes-files
 calibre-master
 .npm-cache
 .tmp-client
-.codex-remote-attachments
 .env
 .env.*
 storage
@@ -22,7 +20,6 @@ storage
 *.apk
 *.aab
 .mimocode
-.merkle-snapshot.json
 *.log
 *.bundle
 PROJECT_MEMORY.md

@@ -37,7 +37,7 @@ function sendRankFeed(req, res) {
   res.json({ total: feed.total, done: feed.done, reread: feed.reread.map(publicBook) });
 }
 
-// /api/home/feed 保留给外部只读客户端与兼容测试；新代码统一走 /api/public/*。
+// /api/home/feed 保留给旧公开页/测试；新代码统一走 /api/public/*。
 router.get('/api/home/feed', sendHomeFeed);
 router.get('/api/public/home/feed', sendHomeFeed);
 router.get('/api/rank/feed', sendRankFeed);

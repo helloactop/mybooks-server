@@ -9,8 +9,6 @@ const express = require('express');
 
 const { db } = require('../db/index');
 const categories = require('../db/categories');
-const publishers = require('../db/publishers');
-const translators = require('../db/translators');
 const { facetOptions } = require('./facet-params');
 
 const router = express.Router();
@@ -102,16 +100,6 @@ router.delete('/api/tags/:id', (req, res) => {
 });
 
 /* ---------- 作者 ---------- */
-router.get('/api/publishers', (req, res) => facetList(req, res, {
-  full: (scopeIds) => publishers.listPublishers(db, { scopeIds }),
-  paged: (scopeIds, options) => publishers.searchPublishers(db, { scopeIds, q: options.q, limit: options.limit, offset: options.offset }),
-}));
-
-router.get('/api/translators', (req, res) => facetList(req, res, {
-  full: (scopeIds) => translators.listTranslators(db, { scopeIds }),
-  paged: (scopeIds, options) => translators.searchTranslators(db, { scopeIds, q: options.q, limit: options.limit, offset: options.offset }),
-}));
-
 router.get('/api/authors', (req, res) => facetList(req, res, {
   full: (scopeIds) => categories.listAuthors(db, { scopeIds }),
   paged: (scopeIds, options) => categories.searchAuthors(db, {

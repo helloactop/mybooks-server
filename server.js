@@ -26,7 +26,6 @@ const routesImport = require('./src/http/routes.import');
 const routesPublic = require('./src/http/routes.public');
 const { auth, requireSession } = require('./src/http/middleware.auth');
 const routesAuth = require('./src/http/routes.auth');
-const { createAdminRouter } = require('./src/http/routes.admin');
 const routesSync = require('./src/http/routes.sync');
 const { UPLOAD_DIR, FILES_DIR } = require('./src/core/paths');
 const { attachVlScope } = require('./src/http/middleware.vl');
@@ -59,42 +58,33 @@ app.use('/api/import.csv', express.text({ type: ['text/csv', 'text/plain'], limi
 app.use(routesPublic);
 app.use(routesProxy);
 
-// 旧面板已归档到 archive/legacy-panel；旧地址永久跳到新面板对应页面。
-const LEGACY_PAGES = new Map([
-  ['/', '/mybooks/'],
-  ['/index.html', '/mybooks/'],
-  ['/shelf', '/mybooks/books/all'],
-  ['/shelf.html', '/mybooks/books/all'],
-  ['/tags', '/mybooks/'],
-  ['/tags.html', '/mybooks/'],
-  ['/stats', '/mybooks/statistics'],
-  ['/stats.html', '/mybooks/statistics'],
-  ['/notes', '/mybooks/notes'],
-  ['/notes.html', '/mybooks/notes'],
-  ['/rank', '/mybooks/'],
-  ['/rank.html', '/mybooks/'],
-  ['/login', '/mybooks/'],
-  ['/login.html', '/mybooks/'],
-  ['/glass-lab.html', '/mybooks/'],
-]);
+// 管理页面在静态目录之前拦截：未登录时跳登录页并保留原始路径；API 仍返回 401 JSON。
+const MANAGEMENT_PAGES = new Set(['/shelf', '/shelf.html', '/tags', '/tags.html', '/notes', '/notes.html']);
 app.use((req, res, next) => {
   if (!['GET', 'HEAD'].includes(req.method)) return next();
   const normal = String(req.path || '/').toLowerCase().replace(/\/+$/, '') || '/';
-  const target = LEGACY_PAGES.get(normal) ?? (normal.startsWith('/notes/') ? '/mybooks/notes' : null);
-  if (!target) return next();
+  const management = MANAGEMENT_PAGES.has(normal)
+    || normal === '/notes' || normal.startsWith('/notes/');
+  if (!management) return next();
+  if (auth.authenticate(req)) return next();
   res.set('Cache-Control', 'no-store');
-  return res.redirect(308, target);
+  return res.redirect(302, '/login?next=' + encodeURIComponent(req.originalUrl || req.path));
 });
 
-// React 管理面板；原生多页面面板已归档，仅保留旧路径跳转。
-app.use('/admin', (req, res) => {
-  const rest = req.originalUrl.slice(req.baseUrl.length) || '/';
-  res.redirect(308, '/mybooks' + (rest.startsWith('/') ? rest : '/' + rest));
-});
-app.use('/mybooks', createAdminRouter());
+// 静态资源缓存策略:HTML 一律 no-cache(每次向服务器验证新鲜度),
+// 解决"备案号/新功能要强制刷新才出现"—— index.html 自身没有 ?v= 缓存戳,
+// 浏览器会缓存它,导致新发布的页面内容看不到。其余资源靠 ?v= 长缓存不受影响。
+// extensions:['html'] 提供干净 URL:/shelf → shelf.html、/rank → rank.html、/stats → stats.html
+// 注意:/notes 裸路径要重定向,必须挂在 static 之前 —— 否则会被 extensions
+// 的 /notes → /notes.html 内部重写抢先命中(无 id 的心得页只能显示"找不到")。
+app.get('/notes', (req, res) => res.redirect('/shelf'));
 
-// public 仅保留 Service Worker 注销脚本；旧页面与旧前端资源已归档。
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  extensions: ['html'],
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+  },
+}));
 // 封面是公开页面的展示资源；上传接口本身仍需要登录。
 app.use('/uploads', express.static(UPLOAD_DIR));
 // 原始电子书始终私有：即使公开首页可匿名浏览，也不能直接取正文原文件。
@@ -103,6 +93,14 @@ app.use('/books-files', requireSession, (req, res, next) => {
   next();
 }, express.static(FILES_DIR));
 
+// 读书心得页:/notes/<书籍 id> —— 带路径参数,静态目录兜不住,显式路由。
+// 与 *.html 同一套 no-cache 策略;非法 id 直接回书架(旧 hash 深链也收敛到这里)。
+app.get('/notes/:id(\\d+)', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'notes.html'));
+});
+// 非法/缺失 id 的心得链接:/notes/abc → 书架(页面脚本会给出"找不到这本书"的引导)
+app.get('/notes/:rest(.*)', (req, res) => res.redirect('/shelf'));
 
 // 管理 API 全部要求设备会话/Bearer；公开读取只走上面的 /api/public 与公开 feed。
 // 不再用 MYBOOKS_PUBLIC_READ 放开整个 /api 读接口。

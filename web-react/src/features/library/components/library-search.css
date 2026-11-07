@@ -1,6 +1,0 @@
-.library-search { position: relative; margin: 0; }
-.library-search__field > .ui-text-field__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.library-search__field .ui-text-field__frame { box-shadow: var(--ui-shadow-md); }
-.library-search__field .ui-text-field__input { padding-inline-end: var(--ui-space-8); }
-.library-search input::-webkit-search-cancel-button { display: none; }
-.library-search .library-search__clear { position: absolute; z-index: 2; inset-inline-end: 6px; inset-block: 0; margin-block: auto; }

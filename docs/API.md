@@ -157,12 +157,6 @@ GET /api/rank/feed?size=8          -> {total, done, reread[]}
 公开书库模式也不会公开个人资料。协议 3 增量头的 `portable_sync` 与 `portable_revision` 声明能力及当前状态版本。
 书籍身份通过 `data.bookIdentities` 的 `mybooks-ID → UUID` 对照校验；逐本阅读内容继续走阅读接口，禁止混入便携快照。
 
-### App 同步分类
-
-`GET /api/sync/folders`（要求登录，`private, no-store`）返回 `{revision, folders:[{id,name,parentId}]}`，只读投影 App 便携快照中的分类树，不返回其他个人设置或磁盘授权路径。未同步时返回版本 0 与空数组。
-
-`GET /api/books?folder=<分类 ID>&size=48&start=0` 筛选该分类及其子分类中的服务器图书，支持原有搜索、作者、出版社、译者、排序、分页和虚拟书库作用域。ID 为 App 的不透明字符串；不存在或已删除分类返回空列表。归属校验快照中的书籍 UUID，并排除回收站图书，避免旧快照命中重用的数字 ID。读取不改变书目或便携快照版本；分类名称、层级和归属继续由 App 同步管理。
-
 ### 手动藏书集
 
 藏书集是独立分组，不修改书目元数据，也不推进 `revision`；删除分组不会删书。

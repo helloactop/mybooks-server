@@ -1,9 +1,0 @@
-.book-card { position: relative; max-width: 220px; margin-inline: auto; color: var(--ui-color-text); }
-.book-card__open { position: absolute; z-index: 1; inset: 0; width: 100%; padding: 0; border: 0; outline: none; border-radius: 4px; background: transparent; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.book-card__cover { margin-bottom: var(--ui-space-3); }
-.book-card__title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; margin: 0 0 var(--ui-space-1); font-size: var(--ui-font-size-sm); line-height: 1.5; font-weight: var(--ui-font-weight-medium); }
-.book-card__author, .book-card__translators { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ui-color-text-secondary); font-size: var(--ui-font-size-xs); line-height: 1.7; }
-
-.book-card__heading { display: flex; align-items: flex-start; gap: 4px; }
-.book-card__heading h2 { flex: 1; min-width: 0; }
-.book-card__edit { position: relative; z-index: 2; flex: none; margin-top: -4px; }

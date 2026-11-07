@@ -19,7 +19,6 @@ const { parseQuery } = require('../core/query');
 const { scopeClause } = require('../core/sql');
 const customFieldsRepo = require('./custom_fields');
 const savedSearches = require('./saved_searches');
-const { mobileFolderScope } = require('./mobile-folders');
 
 const TRIGRAM_MIN = 3; // trigram 只索引/匹配 >=3 字符的片段
 const MAX_VL_DEPTH = 10; // 虚拟书库最多嵌套 10 层(循环引用另有显式检测)
@@ -784,7 +783,7 @@ function nextDayIso(isoStr) {
 // legacy,一处生效,避免新增查询路径时漏掉 deleted_at。
 // scopeIds 是「虚拟书库 / 外部作用域」:null = 不限定;
 // 数组 = 旧版 id 集合(空数组 = 什么都不命中);{sql, params} = 新版子查询片段。
-function legacyFilterClauses(status, tag, author, scopeIds = null, series = '', collection = null, authorExact = '', publisher = '', translator = '') {
+function legacyFilterClauses(status, tag, author, scopeIds = null, series = '', collection = null) {
   const STATUSES = ['wish', 'reading', 'done'];
   const clauses = [{ sql: 'b.deleted_at IS NULL', params: [] }];
   const scope = scopeClause('b.id', scopeIds);
@@ -792,9 +791,6 @@ function legacyFilterClauses(status, tag, author, scopeIds = null, series = '', 
   if (status && STATUSES.includes(status)) clauses.push({ sql: 'b.status = ?', params: [status] });
   if (tag) clauses.push({ sql: 'b.tags LIKE ?', params: [`%"${escapeLike(tag)}"%`] });
   if (author) clauses.push({ sql: 'b.author LIKE ?', params: [`%${escapeLike(author)}%`] });
-  if (authorExact) clauses.push({ sql: 'EXISTS (SELECT 1 FROM book_authors ba JOIN authors a ON a.id = ba.author WHERE ba.book = b.id AND a.name = ?)', params: [String(authorExact).trim()] });
-  if (publisher) clauses.push({ sql: 'TRIM(b.publisher) = ? COLLATE NOCASE', params: [String(publisher).trim()] });
-  if (translator) clauses.push({ sql: 'has_translator(b.translators, ?) = 1', params: [String(translator)] });
   if (series) clauses.push({ sql: 'b.series = ? COLLATE NOCASE', params: [String(series).trim()] });
   if (collection !== undefined && collection !== null && collection !== '') {
     const id = Number(collection);
@@ -930,14 +926,12 @@ function buildStructuredSearch(db, parsed, legacy, order, columns, vlStack = [],
 
 // 把一次检索编译成 SQL(不执行)。虚拟书库作用域用它嵌入子查询;
 // select 可换成 b.id 只取 id,page 用于列表分页。
-function buildSearchSql(db, { q, status, tag, author, author_exact, publisher, translator, series, collection, folder, sort, scopeIds } = {}, vlStack = [],
+function buildSearchSql(db, { q, status, tag, author, series, collection, sort, scopeIds } = {}, vlStack = [],
   { page = null, select = 'b.*', forceLike = false, noOrder = false } = {}) {
   // sort 省略或写 relevance = 相关度;显式白名单排序则覆盖 BM25。
   const relevance = !sort || sort === 'relevance';
   const order = SORTS[sort] || SORTS.updated;
-  if (translator && typeof db.function !== 'function') throw Object.assign(new Error('当前 Node.js 版本不支持译者筛选，请使用 Node.js 24'), { code: 'VALIDATION' });
-  const legacy = legacyFilterClauses(status, tag, author, scopeIds, series, collection, author_exact, publisher, translator);
-  if (folder !== undefined) legacy.push(scopeClause('b.id', mobileFolderScope(db, folder)));
+  const legacy = legacyFilterClauses(status, tag, author, scopeIds, series, collection);
   const paging = pagingParts(page);
   const orderSql = noOrder ? '' : ` ORDER BY ${order}`;
 

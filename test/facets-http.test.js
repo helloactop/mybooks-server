@@ -58,33 +58,6 @@ function start() {
 
 test('facets 分页:数组响应 + X-Total-Count,非法参数 400', async () => {
   const base = await start();
-  db.prepare("UPDATE books SET publisher = CASE title WHEN '甲' THEN '青禾出版社' WHEN '乙' THEN '青禾出版社·子品牌' ELSE '100%_出版社' END").run();
-  db.prepare('UPDATE books SET translators = ? WHERE title = ?').run('["李青","江明"]', '甲');
-  db.prepare('UPDATE books SET translators = ? WHERE title = ?').run('["李青二"]', '乙');
-  const translatorPage = await fetch(base + '/api/translators?limit=1');
-  assert.equal(translatorPage.status, 200);
-  assert.equal(translatorPage.headers.get('x-total-count'), '3');
-  assert.equal((await translatorPage.json()).length, 1);
-  assert.equal((await fetch(base + '/api/translators?offset=-1')).status, 400);
-  const translatedBooks = await (await fetch(base + '/api/books?' + new URLSearchParams({ translator: '李青', size: '48' }))).json();
-  assert.deepEqual(translatedBooks.map((row) => row.title), ['甲']);
-  db.prepare('UPDATE books SET isbn = ?, rating = ?, summary = ? WHERE title = ?').run('9780000000001', 8.6, '简介\n第二段', '甲');
-  search.reindexAll(db);
-  const fullDetail = await (await fetch(base + '/api/books/' + translatedBooks[0].id)).json();
-  assert.deepEqual(fullDetail.translators, ['李青', '江明']);
-  assert.equal(fullDetail.isbn, '9780000000001');
-  assert.equal(fullDetail.rating, 8.6);
-  assert.equal(fullDetail.summary, '简介\n第二段');
-  const publisherPage = await fetch(base + '/api/publishers?limit=1');
-  assert.equal(publisherPage.status, 200);
-  assert.equal(publisherPage.headers.get('x-total-count'), '3');
-  assert.equal((await publisherPage.json()).length, 1);
-  const publisherSearch = await fetch(base + '/api/publishers?q=' + encodeURIComponent('%'));
-  assert.deepEqual((await publisherSearch.json()).map((row) => row.name), ['100%_出版社']);
-  assert.equal((await fetch(base + '/api/publishers?limit=201')).status, 400);
-  const exactBooks = await fetch(base + '/api/books?' + new URLSearchParams({ author_exact: '王小明', publisher: '青禾出版社', size: '48' }));
-  assert.equal(exactBooks.headers.get('x-total-count'), '1');
-  assert.deepEqual((await exactBooks.json()).map((book) => book.title), ['甲']);
 
   const page = await fetch(base + '/api/authors?limit=1');
   assert.equal(page.status, 200);
@@ -94,9 +67,9 @@ test('facets 分页:数组响应 + X-Total-Count,非法参数 400', async () => 
   const second = await fetch(base + '/api/authors?limit=1&offset=1');
   assert.deepEqual((await second.json()).map((x) => x.name), ['李四']);
 
-  const tagSearch = await fetch(base + '/api/tags?q=' + encodeURIComponent('科') + '&limit=100');
-  assert.equal(tagSearch.headers.get('x-total-count'), '1');
-  const tags = await tagSearch.json();
+  const search = await fetch(base + '/api/tags?q=' + encodeURIComponent('科') + '&limit=100');
+  assert.equal(search.headers.get('x-total-count'), '1');
+  const tags = await search.json();
   assert.deepEqual(tags.map((x) => x.name), ['科幻']);
   assert.equal(tags[0].count, 2);
 

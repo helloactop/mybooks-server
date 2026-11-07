@@ -1,4 +1,0 @@
-.ui-content-dialog { position: fixed; height: min(500px, var(--dialog-max-height)); --ui-glass-background: rgb(255 255 255 / 88%); }
-.ui-content-dialog .ui-glass-dialog__surface, .ui-content-dialog .ui-glass-dialog__surface > .ui-glass-surface__content { height: 100%; }
-.ui-content-dialog .ui-glass-dialog__body { flex: 1; }
-@media (orientation: portrait) { .ui-content-dialog { height: min(400px, var(--dialog-max-height)); } }

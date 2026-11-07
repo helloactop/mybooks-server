@@ -1,7 +1,0 @@
-.radio-group-preview .button-preview__grid { margin-top: var(--ui-space-6); }
-.radio-group-preview__scene { grid-column: 1 / -1; padding: var(--ui-space-8); border-radius: var(--ui-radius-surface); background: radial-gradient(ellipse at 15% 20%, rgb(var(--ui-color-accent-rgb) / 45%), transparent 65%), repeating-linear-gradient(120deg, #f0f7fb 0 20px, #9cbfd8 20px 40px, #d0e3ed 40px 60px); }
-.radio-group-preview__materials { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ui-space-6); }
-.radio-group-preview__stack { display: grid; gap: var(--ui-space-4); min-width: 0; }
-.radio-group-preview__stack output { font-size: var(--ui-font-size-sm); color: var(--ui-color-text-secondary); overflow-wrap: anywhere; }
-.radio-group-preview__external { margin-top: var(--ui-space-6); padding-top: var(--ui-space-4); border-top: var(--ui-border-width) solid var(--ui-color-border); }
-@media (max-width: 760px) { .radio-group-preview__scene { padding: var(--ui-space-4); } .radio-group-preview__materials { grid-template-columns: 1fr; } }

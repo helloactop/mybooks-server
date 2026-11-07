@@ -3,7 +3,6 @@ const { db } = require('../db/index');
 const { getSyncChanges, getReadingState, putReadingState } = require('../db/sync-v3');
 const { requireSession } = require('./middleware.auth');
 const { getPortableState, putPortableState } = require('../db/mobile-portable');
-const { listMobileFolders } = require('../db/mobile-folders');
 const { MAX_ASSET_BYTES, assetNamePattern } = require('../core/mobile-portable');
 const { DATA_DIR } = require('../core/paths');
 const { fileDigest } = require('../core/file-digest');
@@ -17,7 +16,6 @@ const router = express.Router();
 router.use('/api/sync', requireSession, (req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
 
 router.get('/api/sync/state', (req, res) => res.json(getPortableState(db)));
-router.get('/api/sync/folders', (req, res) => res.json(listMobileFolders(db)));
 router.put('/api/sync/state', (req, res) => {
   const { status, ...body } = putPortableState(db, req.body);
   res.status(status).json(body);

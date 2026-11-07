@@ -702,11 +702,6 @@ function openDb(dataDir = DATA_DIR, { seedDemo = process.env.MYBOOKS_SEED_DEMO =
       }
     });
     db.function('fold_variants', { deterministic: true }, (value) => foldVariants(value));
-    const { parseTranslators } = require('../core/translators');
-    db.function('has_translator', { deterministic: true }, (raw, selected) => {
-      const name = String(selected ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
-      return parseTranslators(raw).some((item) => item.toLowerCase() === name) ? 1 : 0;
-    });
     db.__mybooksFns = true;
   }
 

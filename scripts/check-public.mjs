@@ -10,7 +10,7 @@ const findings = new Set();
 let checked = 0;
 let skipped = 0;
 const forbidden = /(^|\/)(?:local\.properties|auth\.json(?:\..*)?|admin-token|douban-cookie|\.env(?:\.(?!example$|sample$|template$)[^/]+)?|[^/]+\.(?:jks|keystore|p12|pfx|pem|key|db|sqlite|sqlite3)(?:-(?:wal|shm|journal))?)$/i;
-const binary = /\.(?:apk|aab|jar|aar|zip|gz|7z|png|jpe?g|gif|webp|ico|pdf|epub|mobi|azw3|cbz|ttf|otf|woff2?|mp[34]|wav|so|dll|exe|db|sqlite3?)$/i;
+const binary = /\.(?:apk|aab|jar|aar|zip|gz|7z|png|jpe?g|gif|webp|ico|pdf|epub|mobi|azw|azw3|cbz|ttf|otf|woff2?|mp[34]|wav|so|dll|exe|db|sqlite3?)$/i;
 const patterns = [
   ['private-key', /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/],
   ['github-token', /\b(?:gh[pousr]_[A-Za-z0-9_]{30,}|github_pat_[A-Za-z0-9_]{40,})\b/],

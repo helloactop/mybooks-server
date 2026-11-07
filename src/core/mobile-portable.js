@@ -38,7 +38,7 @@ function validatePortableState(data, db) {
     if (!object(book) || !/^mybooks-[1-9][0-9]*$/.test(book.id) || !Number.isSafeInteger(Number(book.id.slice(8))) ||
         !text(data.bookIdentities[book.id], 200) || book.bodyAssetId !== null ||
         typeof book.title !== 'string' || typeof book.author !== 'string' ||
-        !['EPUB','PDF','TXT','MOBI','CBZ','MARKDOWN'].includes(book.format) ||
+        !['EPUB','PDF','TXT','MOBI','AZW','AZW3','CBZ','MARKDOWN'].includes(book.format) ||
         !['lastReadTime','createdAt','metadataUpdatedAt','remoteFileSize'].every((key) => integer(book[key])) ||
         typeof book.readingProgress !== 'number' || !Number.isFinite(book.readingProgress) || book.readingProgress < 0 || book.readingProgress > 1 ||
         typeof book.isFavorite !== 'boolean' || typeof book.isCloudOnly !== 'boolean' ||

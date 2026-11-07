@@ -499,13 +499,13 @@ function overlaysHtml() {
                   </div>
                 </div>
                 <div class="field field-full">
-                  <label>电子书文件 <span class="label-sub">epub / pdf / mobi / azw3 / txt，≤80MB；同格式会替换</span></label>
+                  <label>电子书文件 <span class="label-sub">epub / pdf / mobi / azw / azw3 / txt，≤80MB；同格式会替换</span></label>
                   <div class="ebook-editor">
                     <div class="ebook-actions">
                       <div class="cover-btns">
                         <label class="btn btn-ghost">
                           <span id="ebookUploadText">选择文件上传</span>
-                          <input type="file" id="fEbookFile" accept=".epub,.pdf,.mobi,.azw3,.txt" hidden>
+                          <input type="file" id="fEbookFile" accept=".epub,.pdf,.mobi,.azw,.azw3,.txt" hidden>
                         </label>
                       </div>
                       <div id="ebookInfo" class="ebook-info"><span class="ebook-info-empty">未上传文件</span></div>

@@ -11,7 +11,7 @@ function validateReadingData(data) {
   if (keys.some((key) => !Array.isArray(data[key]) || data[key].length > 10000)) return false;
   const unique = (items, key) => new Set(items.map(key)).size === items.length;
   for (const p of data.positions) {
-    if (!object(p) || !['EPUB','PDF','TXT','MOBI','CBZ','MARKDOWN'].includes(p.format) ||
+    if (!object(p) || !['EPUB','PDF','TXT','MOBI','AZW','AZW3','CBZ','MARKDOWN'].includes(p.format) ||
         !integer(p.lastReadTime) || typeof p.readingProgress !== 'number' ||
         !Number.isFinite(p.readingProgress) || p.readingProgress < 0 || p.readingProgress > 1 ||
         !text(p.sourceDeviceId) || (p.fileSha256 !== '' && !/^[a-f0-9]{64}$/.test(p.fileSha256)) ||
@@ -32,7 +32,7 @@ function validateReadingData(data) {
           Object.values(item).some((v) => v !== null && !['string','number','boolean'].includes(typeof v)) ||
           Object.values(item).some((v) => typeof v === 'string' && v.length > 100000) ||
           Object.values(item).some((v) => typeof v === 'number' && !Number.isFinite(v))) return false;
-      if (item.format !== undefined && !['EPUB','PDF','TXT','MOBI','CBZ','MARKDOWN'].includes(item.format)) return false;
+      if (item.format !== undefined && !['EPUB','PDF','TXT','MOBI','AZW','AZW3','CBZ','MARKDOWN'].includes(item.format)) return false;
       if (item.fileSha256 !== undefined && (typeof item.fileSha256 !== 'string' || item.fileSha256 !== '' && !/^[a-f0-9]{64}$/.test(item.fileSha256))) return false;
     }
     if (!unique(data[name], (item) => item.syncId)) return false;

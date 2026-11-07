@@ -3,11 +3,11 @@
  * 路 B 第一步:存储与阅读。转换能力后续接 ebook-convert,不在本层。
  *
  * 支持格式:EPUB / PDF(站内阅读)
- *           MOBI / AZW3 / TXT(存储+下载,暂不站内阅读)
+ *           MOBI / AZW / AZW3 / TXT(存储+下载,暂不站内阅读)
  * 上限:80MB(扫版 PDF 留余量;Nginx client_max_body_size 需同步调大)
  * ============================================================ */
 
-const EBOOK_FORMATS = ['epub', 'pdf', 'mobi', 'azw3', 'txt'];
+const EBOOK_FORMATS = ['epub', 'pdf', 'mobi', 'azw', 'azw3', 'txt'];
 const EBOOK_READABLE = ['epub', 'pdf']; // 支持站内阅读的格式
 const EBOOK_MAX_SIZE = 80 * 1024 * 1024; // 80MB
 

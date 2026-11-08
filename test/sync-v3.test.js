@@ -98,3 +98,25 @@ test('阅读删除记录长期保留，重复或含非有限进度的负载会�
     assert.equal(getSyncChanges(db,deletedCursor).reading[0].revision,1);
   }finally{db.close();}
 });
+
+test('reading updates preserve independently accumulated listening time from older clients', () => {
+  const db = fixture();
+  try {
+    const book = add(db);
+    const { library_id } = getSyncChanges(db);
+    const record = { date: '2026-10-28', sourceDeviceId: 'device-a', duration: 50,
+      startTime: 1, endTime: 100, updatedAt: 100 };
+    const input = { library_id, expected_uuid: book.uuid };
+    const save = (revision, row) => putReadingState(db, book.id, {
+      ...input, expected_revision: revision, data: { ...EMPTY_READING_DATA(), reading_records: [row] },
+    });
+    assert.equal(save(0, { ...record, listeningDuration: -1 }).status, 400);
+    assert.equal(save(0, { ...record, listeningDuration: 45 }).status, 200);
+    assert.equal(save(1, { ...record, duration: 80, endTime: 130, updatedAt: 130 }).status, 200);
+    assert.deepEqual(getReadingState(db, book).data.reading_records, [
+      { ...record, duration: 80, endTime: 130, updatedAt: 130, listeningDuration: 45 },
+    ]);
+  } finally {
+    db.close();
+  }
+});

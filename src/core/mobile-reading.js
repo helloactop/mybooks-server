@@ -40,7 +40,8 @@ function validateReadingData(data) {
   for (const record of data.reading_records) {
     if (!object(record) || !/^\d{4}-\d{2}-\d{2}$/.test(record.date) || !text(record.sourceDeviceId) ||
         ['duration','startTime','endTime','updatedAt'].some((key) => !integer(record[key])) ||
-        Object.keys(record).some((key) => !['date','sourceDeviceId','duration','startTime','endTime','updatedAt'].includes(key))) return false;
+        (record.listeningDuration !== undefined && !integer(record.listeningDuration)) ||
+        Object.keys(record).some((key) => !['date','sourceDeviceId','duration','listeningDuration','startTime','endTime','updatedAt'].includes(key))) return false;
   }
   if (!unique(data.reading_records, (r) => `${r.date}:${r.sourceDeviceId}`)) return false;
   for (const tombstone of data.tombstones) {

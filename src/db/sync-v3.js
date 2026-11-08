@@ -53,6 +53,21 @@ function getReadingState(db, book) {
   return { book_id: book.id, book_uuid: book.uuid, revision: row?.revision || 0,
     data: row ? JSON.parse(row.data) : EMPTY_READING_DATA() };
 }
+const readingRecordKey = (record) => `${record.date}:${record.sourceDeviceId}`;
+
+function mergeReadingRecord(current, incoming) {
+  if (!current) return incoming;
+  const listeningDuration = Math.max(current.listeningDuration ?? 0, incoming.listeningDuration ?? 0);
+  return {
+    ...incoming,
+    duration: Math.max(current.duration, incoming.duration),
+    ...(listeningDuration > 0 ? { listeningDuration } : {}),
+    startTime: Math.min(current.startTime, incoming.startTime),
+    endTime: Math.max(current.endTime, incoming.endTime),
+    updatedAt: Math.max(current.updatedAt, incoming.updatedAt),
+  };
+}
+
 function putReadingState(db, bookId, input) {
   if (!input || typeof input !== 'object' || !Number.isSafeInteger(input.expected_revision) || input.expected_revision < 0 ||
       typeof input.expected_uuid !== 'string' || !validateReadingData(input.data)) {
@@ -71,9 +86,14 @@ function putReadingState(db, bookId, input) {
       const current = getReadingState(db, book);
       if (current.revision !== input.expected_revision) result = { status: 409, code: 'CONFLICT', error: '阅读数据已在其他设备更新', current };
       else {
+        const priorRecords = new Map(current.data.reading_records.map((row) => [readingRecordKey(row), row]));
+        const data = {
+          ...input.data,
+          reading_records: input.data.reading_records.map((row) => mergeReadingRecord(priorRecords.get(readingRecordKey(row)), row)),
+        };
         db.prepare(`INSERT INTO mobile_reading_state(book_id,book_uuid,revision,data,updated_at) VALUES(?,?,?,?,?)
           ON CONFLICT(book_id) DO UPDATE SET book_uuid=excluded.book_uuid,revision=excluded.revision,data=excluded.data,updated_at=excluded.updated_at`)
-          .run(book.id, book.uuid, current.revision + 1, JSON.stringify(input.data), new Date().toISOString());
+          .run(book.id, book.uuid, current.revision + 1, JSON.stringify(data), new Date().toISOString());
         result = { status: 200, ...getReadingState(db, book) };
       }
     }
@@ -117,10 +137,11 @@ function mergeReadingData(targetData, sourceData) {
   );
   const bookmarks = mergeByKey(targetData.bookmarks, sourceData.bookmarks, (b) => b.syncId, 'updatedAt');
   const notes = mergeByKey(targetData.notes, sourceData.notes, (n) => n.syncId, 'updatedAt');
-  const reading = mergeByKey(
-    targetData.reading_records, sourceData.reading_records,
-    (r) => `${r.date}:${r.sourceDeviceId}`, 'updatedAt',
-  );
+  const records = new Map(targetData.reading_records.map((row) => [readingRecordKey(row), row]));
+  for (const row of sourceData.reading_records) {
+    const key = readingRecordKey(row);
+    records.set(key, mergeReadingRecord(records.get(key), row));
+  }
   const tombstones = mergeByKey(
     targetData.tombstones, sourceData.tombstones,
     (t) => `${t.namespace}:${t.itemId}`, 'deletedAt',
@@ -143,7 +164,7 @@ function mergeReadingData(targetData, sourceData) {
     positions,
     bookmarks: [...items.bookmark.values()],
     notes: [...items.note.values()],
-    reading_records: reading,
+    reading_records: [...records.values()],
     tombstones: keptTombstones,
   };
 }

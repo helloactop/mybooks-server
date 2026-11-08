@@ -66,9 +66,10 @@ function writeRuntimeState(tools) {
   };
   const target = statePath();
   const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(tmp, JSON.stringify(payload, null, 2) + '\n', { mode: 0o600 });
+  // 不包含密钥；Worker 以 UID 1000 运行时需要读取（PM2 下 Node 可能以 root 运行）。
+  fs.writeFileSync(tmp, JSON.stringify(payload, null, 2) + '\n', { mode: 0o644 });
   fs.renameSync(tmp, target);
-  try { fs.chmodSync(target, 0o600); } catch { /* Windows */ }
+  try { fs.chmodSync(target, 0o644); } catch { /* Windows */ }
   return payload;
 }
 

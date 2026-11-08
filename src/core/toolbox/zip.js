@@ -16,6 +16,17 @@ const { ToolboxError, assertInside } = require('./security');
 const ZIP_MAGIC = [Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from([0x50, 0x4b, 0x05, 0x06])];
 const SEVEN_ZIP_MAGIC = Buffer.from([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]);
 
+// npm tarball 里的 7za 在 Linux 镜像中可能没有执行位；运行时补一次 0755。
+// node_modules 在 Node 容器里属于 node 用户，chmod 不需要 root。
+let sevenBinaryPath = '';
+function sevenBinPath() {
+  if (!sevenBinaryPath) {
+    sevenBinaryPath = sevenBin.path7za;
+    try { fs.chmodSync(sevenBinaryPath, 0o755); } catch { /* 只读 FS 时交给调用方报错 */ }
+  }
+  return sevenBinaryPath;
+}
+
 const LIMITS = {
   maxEntries: 2000,
   maxEntryBytes: 100 * 1024 * 1024,
@@ -194,7 +205,7 @@ async function extractZip(archivePath, destDir, { limits = LIMITS } = {}) {
 function list7z(archivePath) {
   return new Promise((resolve, reject) => {
     const items = [];
-    Seven.list(archivePath, { $bin: sevenBin.path7za })
+    Seven.list(archivePath, { $bin: sevenBinPath() })
       .on('data', (item) => items.push(item))
       .on('end', () => resolve(items))
       .on('error', (err) => reject(new ToolboxError('ARCHIVE_INVALID', `读取 7z 目录失败：${err.message || err}`)));
@@ -233,7 +244,7 @@ function extract7z(archivePath, destDir, limits) {
     validate7zList(items, fs.statSync(archivePath).size, limits);
     return new Promise((resolve, reject) => {
       const stream = Seven.extractFull(archivePath, destDir, {
-        $bin: sevenBin.path7za,
+        $bin: sevenBinPath(),
         recursive: true,
       });
       let settled = false;

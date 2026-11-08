@@ -24,6 +24,9 @@ const routesExport = require('./src/http/routes.export');
 const routesEnrich = require('./src/http/routes.enrich');
 const routesImport = require('./src/http/routes.import');
 const routesPublic = require('./src/http/routes.public');
+const routesToolbox = require('./src/http/routes.toolbox');
+const routesToolboxInternal = require('./src/http/routes.toolbox.internal');
+const routesToolboxUi = require('./src/http/routes.toolbox.ui');
 const { auth, requireSession } = require('./src/http/middleware.auth');
 const routesAuth = require('./src/http/routes.auth');
 const routesSync = require('./src/http/routes.sync');
@@ -32,6 +35,8 @@ const { attachVlScope } = require('./src/http/middleware.vl');
 const { db } = require('./src/db/index');
 const books = require('./src/db/books');
 const notes = require('./src/db/notes');
+const toolboxRepo = require('./src/db/toolbox');
+const toolboxInstaller = require('./src/core/toolbox/installer');
 const { removeBookAssets } = require('./src/core/fs-utils');
 
 const app = express();
@@ -57,19 +62,26 @@ app.use('/api/import.csv', express.text({ type: ['text/csv', 'text/plain'], limi
 // 必须在下面的 /api 会话守卫之前注册。外链封面代理也属于公开图片资源。
 app.use(routesPublic);
 app.use(routesProxy);
+// Python runtime 的内部接口：独立密钥鉴权，不经过用户会话。
+app.use(routesToolboxInternal);
 
 // 管理页面在静态目录之前拦截：未登录时跳登录页并保留原始路径；API 仍返回 401 JSON。
-const MANAGEMENT_PAGES = new Set(['/shelf', '/shelf.html', '/tags', '/tags.html', '/notes', '/notes.html']);
+const MANAGEMENT_PAGES = new Set(['/shelf', '/shelf.html', '/tags', '/tags.html', '/notes', '/notes.html',
+  '/toolbox', '/toolbox.html']);
 app.use((req, res, next) => {
   if (!['GET', 'HEAD'].includes(req.method)) return next();
   const normal = String(req.path || '/').toLowerCase().replace(/\/+$/, '') || '/';
   const management = MANAGEMENT_PAGES.has(normal)
-    || normal === '/notes' || normal.startsWith('/notes/');
+    || normal === '/notes' || normal.startsWith('/notes/')
+    || normal === '/toolbox' || normal.startsWith('/toolbox/');
   if (!management) return next();
   if (auth.authenticate(req)) return next();
   res.set('Cache-Control', 'no-store');
   return res.redirect(302, '/login?next=' + encodeURIComponent(req.originalUrl || req.path));
 });
+
+// 工具箱页面、插件前端资源（不透明源 iframe）与 /book 深链。
+app.use(routesToolboxUi);
 
 // 静态资源缓存策略:HTML 一律 no-cache(每次向服务器验证新鲜度),
 // 解决"备案号/新功能要强制刷新才出现"—— index.html 自身没有 ?v= 缓存戳,
@@ -107,6 +119,9 @@ app.get('/notes/:rest(.*)', (req, res) => res.redirect('/shelf'));
 app.use('/api', requireSession);
 // 虚拟书库作用域(?vl=名称):解析一次挂到 req.vlScope,各路由只管取用
 app.use('/api', attachVlScope);
+
+// 工具箱：商店/安装管理/任务/插件接口代理（全部要求会话）
+app.use(routesToolbox);
 
 // 电子书文件路由(multipart 上传/列表/删除/下载登记)
 app.use(routesFiles);
@@ -191,6 +206,29 @@ function runTrashMaintenance() {
 }
 runTrashMaintenance();
 setInterval(runTrashMaintenance, TRASH_MAINTENANCE_INTERVAL_MS).unref();
+
+// 工具箱启动恢复：上次进程中断时仍在 running 的任务标记失败；
+// 把数据库里的启用清单写回共享卷，Python runtime 启动时即可读取。
+try {
+  const recovered = toolboxRepo.recoverRunningTasks(db);
+  if (recovered) console.log(`[toolbox] 已标记 ${recovered} 个中断任务为失败`);
+  const tools = toolboxInstaller.syncInstalledState(db);
+  if (tools.length) {
+    // 这是“服务启动加载”，不是安装时执行：Python Worker 可能比 Node 晚几秒启动，
+    // 因此短暂重试；加载报告会写回 pending_restart/last_error。
+    let attempt = 0;
+    const warm = () => {
+      toolboxInstaller.reloadAndSync(db).then((result) => {
+        if (result.ok) return;
+        attempt += 1;
+        if (attempt <= 2) setTimeout(warm, attempt * 5000).unref();
+      }).catch(() => {});
+    };
+    setTimeout(warm, 1500).unref();
+  }
+} catch (err) {
+  console.error('[toolbox] 启动恢复失败:', err.stack || err);
+}
 
 const server = app.listen(PORT, HOST, () => {
   console.log(`My books 已启动: http://${HOST === '0.0.0.0' || HOST === '127.0.0.1' ? 'localhost' : HOST}:${server.address().port}`);

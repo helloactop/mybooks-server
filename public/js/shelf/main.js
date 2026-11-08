@@ -1023,6 +1023,12 @@
       S.grid.setupSentinel(loadMore);
       restoreScroll();
       if (page && page.rows.length && state().hasMore) ensureFill();
+      // 工具箱入库结果 / 外部深链：打开指定书籍的 Inspector。
+      // 不在第一页也能打开，Inspector 会按 id 单独取完整详情。
+      const focusBook = Number(new URLSearchParams(location.search).get('book') || 0);
+      if (Number.isSafeInteger(focusBook) && focusBook > 0) {
+        S.actions.selectOnly(focusBook);
+      }
     } catch (err) {
       if (seq !== viewSeq) return;
       hideSkeleton();

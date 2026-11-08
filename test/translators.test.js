@@ -51,7 +51,7 @@ test('v24→v25 增量迁移保留完整原行、UUID、版本及同步游标；
       .run(old.title, old.author, old.publisher, old.pub_year, old.rating, old.douban_id, 'stable-uuid');
     const before = db.prepare('SELECT * FROM books').get();
     const cursor = getSyncChanges(db).cursor;
-    assert.deepEqual(runMigrations(db, dir), { from: 24, to: 25, ran: 1 });
+    assert.deepEqual(runMigrations(db, dir), { from: 24, to: migrations.length, ran: migrations.length - 24 });
     const after = db.prepare('SELECT * FROM books').get();
     const { translators, ...unchanged } = after;
     assert.deepEqual(unchanged, { ...before });
@@ -73,7 +73,7 @@ test('v24→v25 增量迁移保留完整原行、UUID、版本及同步游标；
     const delta = getSyncChanges(db, sync.cursor);
     assert.deepEqual(delta.books[0].translators, ['甲', '乙']);
     assert.ok(updated.revision > created.revision);
-    assert.deepEqual(runMigrations(db, dir), { from: 25, to: 25, ran: 0 });
+    assert.deepEqual(runMigrations(db, dir), { from: migrations.length, to: migrations.length, ran: 0 });
     const patch = buildPatch(updated, toIncoming({ translators: [] }), { overwrite: true }).patch;
     assert.equal('translators' in patch, false);
     const filled = books.enrichBook(db, updated.id, buildPatch(updated, toIncoming({ translators: ['丙'] }), { overwrite: true }).patch);

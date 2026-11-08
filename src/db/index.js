@@ -644,8 +644,59 @@ function migrateV25(db) {
   if (!cols.includes('translators')) db.exec("ALTER TABLE books ADD COLUMN translators TEXT NOT NULL DEFAULT '[]'");
 }
 
+// v26:工具箱插件与任务。纯增量表，不触碰书籍、文件与同步表。
+// install_path 存相对 TOOLBOX_DIR 的路径，换部署目录/容器挂载不用改库。
+function migrateV26(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS toolbox_tools (
+      tool_id           TEXT PRIMARY KEY,
+      name              TEXT NOT NULL DEFAULT '',
+      revision          TEXT NOT NULL,
+      runtime           TEXT NOT NULL DEFAULT 'python',
+      enabled           INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+      install_path      TEXT NOT NULL,
+      sha256            TEXT NOT NULL DEFAULT '',
+      source            TEXT NOT NULL DEFAULT 'store',
+      compatibility     TEXT NOT NULL DEFAULT '{}',
+      manifest          TEXT NOT NULL DEFAULT '{}',
+      previous_path     TEXT NOT NULL DEFAULT '',
+      previous_revision TEXT NOT NULL DEFAULT '',
+      installed_at      TEXT NOT NULL,
+      updated_at        TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS toolbox_tasks (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      tool_id         TEXT NOT NULL,
+      operation       TEXT NOT NULL DEFAULT 'download',
+      status          TEXT NOT NULL DEFAULT 'running'
+                       CHECK (status IN ('running', 'completed', 'failed', 'cancelled')),
+      stage           TEXT NOT NULL DEFAULT '',
+      progress        INTEGER NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
+      created_at      TEXT NOT NULL,
+      finished_at     TEXT,
+      error           TEXT NOT NULL DEFAULT '',
+      message         TEXT NOT NULL DEFAULT '',
+      result_book_id  INTEGER,
+      runtime_task_id INTEGER,
+      details         TEXT NOT NULL DEFAULT '{}'
+    );
+    CREATE INDEX IF NOT EXISTS toolbox_tasks_status_idx ON toolbox_tasks (status, id DESC);
+    CREATE INDEX IF NOT EXISTS toolbox_tasks_tool_idx ON toolbox_tasks (tool_id, id DESC);
+  `);
+}
+
+// v27:对齐上游 InstalledTool 的 type/pending_restart/last_error。
+// pending_restart 只表示“磁盘状态与 Worker 当前加载状态不一致”，
+// 安装/更新/启停后置 1，Worker 成功 reload 后由 Node 按实际加载结果清 0。
+function migrateV27(db) {
+  const cols = db.prepare('PRAGMA table_info(toolbox_tools)').all().map((c) => c.name);
+  if (!cols.includes('tool_type')) db.exec("ALTER TABLE toolbox_tools ADD COLUMN tool_type TEXT NOT NULL DEFAULT 'tool'");
+  if (!cols.includes('pending_restart')) db.exec('ALTER TABLE toolbox_tools ADD COLUMN pending_restart INTEGER NOT NULL DEFAULT 0 CHECK (pending_restart IN (0,1))');
+  if (!cols.includes('last_error')) db.exec("ALTER TABLE toolbox_tools ADD COLUMN last_error TEXT NOT NULL DEFAULT ''");
+}
+
 // 迁移注册表:顺序即版本，历史迁移保持不变。
-const migrations = [migrateV1, migrateV2, migrateV3, migrateV4, migrateV5, migrateV6, migrateV7, migrateV8, migrateV9, migrateV10, migrateV11, migrateV12, migrateV13, migrateV14, migrateV15, migrateV16, migrateV17, migrateV18, migrateV19, migrateV20, migrateV21, migrateV22, migrateV23, migrateV24, migrateV25];
+const migrations = [migrateV1, migrateV2, migrateV3, migrateV4, migrateV5, migrateV6, migrateV7, migrateV8, migrateV9, migrateV10, migrateV11, migrateV12, migrateV13, migrateV14, migrateV15, migrateV16, migrateV17, migrateV18, migrateV19, migrateV20, migrateV21, migrateV22, migrateV23, migrateV24, migrateV25, migrateV26, migrateV27];
 
 function runMigrations(db, dataDir) {
   const current = db.prepare('PRAGMA user_version').get().user_version;

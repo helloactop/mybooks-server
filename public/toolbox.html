@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>工具箱 · My books</title>
+  <link rel="icon" type="image/png" href="/logo.png?v=2">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="My books">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="stylesheet" href="/css/style.css?v=122">
+  <link rel="stylesheet" href="/css/toolbox.css?v=4">
+</head>
+<body data-page="toolbox">
+  <main class="tb-page">
+    <header class="tb-hero">
+      <div>
+        <p class="tb-eyebrow">TOOLBOX</p>
+        <h1 class="tb-title">工具箱</h1>
+        <p class="tb-lede">安装并运行带自己界面的第三方工具。工具代码在独立 Python 运行时中执行，入库仍走 Mybooks 现有规则。</p>
+      </div>
+      <div class="tb-runtime-box">
+        <div class="tb-runtime" id="tbRuntime" role="status" aria-live="polite">
+          <span class="tb-runtime-dot" aria-hidden="true"></span>
+          <span id="tbRuntimeText">正在检测插件运行时…</span>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="tbRestartRuntime">重启插件运行时</button>
+      </div>
+    </header>
+
+    <nav class="tb-tabs" role="tablist" aria-label="工具箱分区">
+      <button type="button" role="tab" id="tbTabStore" data-tab="store" aria-selected="true">商店</button>
+      <button type="button" role="tab" id="tbTabInstalled" data-tab="installed" aria-selected="false">已安装 <span class="tb-count" id="tbInstalledCount"></span></button>
+      <button type="button" role="tab" id="tbTabTasks" data-tab="tasks" aria-selected="false">任务 <span class="tb-count" id="tbTaskCount"></span></button>
+    </nav>
+
+    <section class="tb-panel" id="tbPanelStore" role="tabpanel" aria-labelledby="tbTabStore">
+      <div class="tb-panel-head">
+        <div>
+          <h2>商店</h2>
+          <p class="tb-muted" id="tbStoreMeta">正在获取工具商店…</p>
+        </div>
+        <div class="tb-panel-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="tbRefreshStore">刷新商店</button>
+        </div>
+      </div>
+      <div class="tb-note" id="tbStoreNote" hidden></div>
+      <div class="tb-grid" id="tbStoreList" aria-busy="true"></div>
+      <div class="tb-empty hidden" id="tbStoreEmpty">商店暂时没有可用工具。</div>
+    </section>
+
+    <section class="tb-panel hidden" id="tbPanelInstalled" role="tabpanel" aria-labelledby="tbTabInstalled">
+      <div class="tb-panel-head">
+        <div>
+          <h2>已安装</h2>
+          <p class="tb-muted">停用会立即阻断插件接口；卸载默认保留插件私有数据。</p>
+        </div>
+      </div>
+      <div class="tb-list" id="tbInstalledList"></div>
+      <div class="tb-empty hidden" id="tbInstalledEmpty">还没有安装工具。去商店安装第一个吧。</div>
+    </section>
+
+    <section class="tb-panel hidden" id="tbPanelTasks" role="tabpanel" aria-labelledby="tbTabTasks">
+      <div class="tb-panel-head">
+        <div>
+          <h2>任务</h2>
+          <p class="tb-muted">插件下载与入库任务。任务记录保存在 Mybooks 数据库，插件进度由工具自己回报。</p>
+        </div>
+        <div class="tb-panel-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="tbRefreshTasks">刷新</button>
+        </div>
+      </div>
+      <div class="tb-list" id="tbTaskList"></div>
+      <div class="tb-empty hidden" id="tbTaskEmpty">还没有任务记录。</div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/js/icon.js?v=1"></script>
+  <script src="/js/chrome.js?v=40"></script>
+  <script src="/js/base.js?v=1"></script>
+  <script src="/js/page-toolbox.js?v=3"></script>
+</body>
+</html>

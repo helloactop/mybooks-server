@@ -5,6 +5,9 @@ data
 uploads
 books-files
 notes-files
+toolbox
+toolbox-runtime/__pycache__
+toolbox-runtime/**/__pycache__
 calibre-master
 .npm-cache
 .tmp-client

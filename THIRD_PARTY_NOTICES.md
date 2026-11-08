@@ -15,9 +15,25 @@
 | cheerio | 1.1.2 | MIT |
 | marked | 18.0.11 | MIT |
 | dompurify | 3.4.14 | MPL-2.0 OR Apache-2.0 |
+| yauzl | 3.2.0 | MIT |
+| node-7z | 3.0.0 | ISC |
+| 7zip-bin | 5.2.0 | MIT 包装；内含 7-Zip 可执行文件，按 7-Zip 自身许可（LGPL-2.1+，含 unRAR 限制）分发 |
 
 前端通过 `/vendor/marked.umd.js` 和 `/vendor/purify.min.js` 提供安装包中的文件，
 上游内嵌的许可头需要保留。依赖升级时请一并核查许可证与通知文件。
+
+图标源 `lucide-static@1.70.0` 作为开发依赖安装，仅用于生成静态 sprite，不进入运行时；
+详见下方“图标（Lucide）”。
+
+## 图标（Lucide）
+
+- 项目：[Lucide](https://github.com/lucide-icons/lucide)，npm 包 `lucide-static@1.70.0`。
+- 文件：`public/vendor/lucide-sprite.svg`、`public/vendor/lucide/LICENSE`。
+- 生成：`scripts/build-icons.mjs` 读取 `scripts/lucide-icons.json`，只把项目实际使用的图标
+  包装为 `<symbol>`；不修改图标的路径数据，只去掉固定 `stroke-width` 以便按尺寸调平描边。
+- 更新：修改清单后运行 `npm run icons`；`npm run check:icons` 校验生成物与引用是否漂移。
+- 许可证：ISC，版权 (c) 2026 Lucide Icons and Contributors。
+  ISC 与项目的 GPL-3.0-only 兼容；完整许可见 `public/vendor/lucide/LICENSE`。
 
 ## 本地打包的扫码库
 
@@ -44,6 +60,25 @@
 - 许可：[MIT 全文](public/vendor/liquid-glass/LICENSE)；MIT 与 GPL-3.0-only 兼容。
 - 未采用的候选：[rdev/liquid-glass-react](https://github.com/rdev/liquid-glass-react)
   （React-only）与 dpawlikowski 的静态 scene 复制层（Safari/Firefox 无实时折射）。
+
+## Python 插件运行时依赖
+
+`toolbox-runtime/` 是独立容器，不进入 Node 进程。版本范围见
+`toolbox-runtime/requirements.txt`，安装后的许可证在镜像内的包目录中。
+
+| 直接依赖 | 用途 | 包声明的许可 |
+| --- | --- | --- |
+| tornado | 插件 Handler 兼容层 | Apache-2.0 |
+| requests | 插件网络客户端依赖 | Apache-2.0 |
+| beautifulsoup4 | 插件 HTML 解析依赖 | MIT |
+| cryptography | 插件配置 AES-GCM 加密 | Apache-2.0 OR BSD-3-Clause |
+| Pillow | quality_check 的图片检查 | HPND |
+| lxml | quality_check / md_to_epub 的 XML 处理 | BSD-3-Clause |
+| markdown-it-py | md_to_epub 的 Markdown 解析 | MIT |
+| mdit-py-plugins | md_to_epub 的 Markdown 插件 | MIT |
+
+第三方插件本身（例如 Z-Library 工具）由各自仓库提供，许可与内容合规性由插件作者
+和使用者负责；本项目不把插件代码并入 GPL 源码。
 
 ## 安卓来源
 

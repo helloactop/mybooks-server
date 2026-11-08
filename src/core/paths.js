@@ -15,6 +15,11 @@ const ROOT = path.join(__dirname, '..', '..');
 const STORAGE_ROOT = process.env.MYBOOKS_STORAGE_DIR
   ? path.resolve(process.env.MYBOOKS_STORAGE_DIR) : ROOT;
 
+// 工具箱数据独立于主数据目录：Node 与 Python 共用一个卷，
+// 但 Python 永远看不到 books.db、uploads 或 books-files。
+const TOOLBOX_DIR = process.env.MYBOOKS_TOOLBOX_DIR
+  ? path.resolve(process.env.MYBOOKS_TOOLBOX_DIR) : path.join(STORAGE_ROOT, 'toolbox');
+
 module.exports = {
   ROOT,
   STORAGE_ROOT,
@@ -22,4 +27,5 @@ module.exports = {
   UPLOAD_DIR: path.join(STORAGE_ROOT, 'uploads'),
   FILES_DIR: path.join(STORAGE_ROOT, 'books-files'),
   NOTES_DIR: path.join(STORAGE_ROOT, 'notes-files'),
+  TOOLBOX_DIR,
 };

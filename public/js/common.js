@@ -5,7 +5,7 @@
  * 下拉/弹窗在 select.js、modal.js;移动菜单与搜索浮层在 overlay.js。
  *
  * 页面专属逻辑在 page-<name>.js;外壳 DOM 由 chrome.js 先行注入。
- * 加载顺序(defer 保序):chrome.js → base.js → api.js → cover.js → select.js
+ * 加载顺序(defer 保序):icon.js → chrome.js → base.js → api.js → cover.js → select.js
  *   → modal.js → overlay.js → common.js → page-*.js
  *
  * 跨页协作约定:
@@ -479,7 +479,7 @@ function renderEbookList(files) {
     <span class="ebook-item">
       <span class="ebook-tag">.${esc(f.format)}</span>
       <a href="${esc(f.download_url || `/books-files/${f.path}`)}" download title="下载该文件">${fileSizeText(f.size)}</a>
-      <button type="button" class="ebook-item-del" data-format="${esc(f.format)}" title="删除 ${esc(f.format)} 文件" aria-label="删除 ${esc(f.format)} 文件">✕</button>
+      <button type="button" class="ebook-item-del" data-format="${esc(f.format)}" title="删除 ${esc(f.format)} 文件" aria-label="删除 ${esc(f.format)} 文件">${icon('x', 12, 2.8)}</button>
     </span>`).join('');
   box.querySelectorAll('.ebook-item-del').forEach((btn) => {
     btn.addEventListener('click', () => removeEbookFile(btn.dataset.format));
@@ -705,7 +705,7 @@ function idRowHtml(type = '', value = '') {
   return `<div class="id-row" data-id-row>
     <input type="text" class="id-type" id="${u}_t" list="idTypeSuggestions" placeholder="类型(如 goodreads)" value="${esc(type)}" aria-label="标识符类型">
     <input type="text" class="id-value" id="${u}_v" placeholder="值" value="${esc(value)}" aria-label="标识符值">
-    <button type="button" class="icon-btn id-row-del" data-id-del aria-label="删除这一行" title="删除">✕</button>
+    <button type="button" class="icon-btn id-row-del" data-id-del aria-label="删除这一行" title="删除">${icon('x', 16, 2)}</button>
   </div>`;
 }
 
@@ -1074,7 +1074,7 @@ function renderReadLogs() {
       <input type="date" class="log-start" value="${esc(l.start)}" aria-label="第 ${i + 1} 次开始日期">
       <span class="log-sep">至</span>
       <input type="date" class="log-finish" value="${esc(l.finish)}" aria-label="第 ${i + 1} 次读完日期">
-      <button type="button" class="log-del" aria-label="删除这条记录">✕</button>
+      <button type="button" class="log-del" aria-label="删除这条记录">${icon('x', 14, 2.4)}</button>
     </div>`).join('');
 
   box.querySelectorAll('.log-row').forEach((row, i) => {

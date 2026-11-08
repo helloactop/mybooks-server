@@ -214,8 +214,8 @@ const SEARCH_SORT_TEXT = {
   author: '作者', series: '系列', created: '添加时间',
 };
 
-// apple.com Quick Links 行首的细箭头(9×16)
-const SEARCH_ARROW_SVG = '<svg width="9" height="16" viewBox="0 0 9 16" aria-hidden="true"><path d="m8.6124 8.1035-2.99 2.99a.5.5 0 0 1-.7071-.7071l2.1366-2.1364h-6.316a.5.5 0 0 1 0-1h6.316l-2.1368-2.1367a.5.5 0 0 1 .7071-.7071l2.99 2.99a.5.5 0 0 1 .0002.7073z" fill="currentColor"></path></svg>';
+// apple.com Quick Links 行首的细箭头（Lucide，16×16）
+const SEARCH_ARROW_SVG = icon('arrow-right', 16, 1.5);
 
 const searchFlyout = $('#searchFlyout');
 const searchCurtain = $('#searchCurtain');
@@ -287,8 +287,8 @@ function renderSaved() {
       + '</button>'
       + `<span class="search-result-actions"${savedEditMode ? '' : ' hidden'}>`
       + `<button type="button" class="search-result-act${isVl ? ' is-on' : ''}" data-act="virtual" title="${isVl ? '取消虚拟书库' : '设为虚拟书库'}" aria-label="${isVl ? '取消虚拟书库' : '设为虚拟书库'}「${esc(item.name)}」" aria-pressed="${isVl ? 'true' : 'false'}">▣</button>`
-      + `<button type="button" class="search-result-act" data-act="rename" title="重命名" aria-label="重命名「${esc(item.name)}」">✎</button>`
-      + `<button type="button" class="search-result-act is-danger" data-act="del" title="删除" aria-label="删除「${esc(item.name)}」">✕</button>`
+      + `<button type="button" class="search-result-act" data-act="rename" title="重命名" aria-label="重命名「${esc(item.name)}」">${icon('pencil', 14, 2.4)}</button>`
+      + `<button type="button" class="search-result-act is-danger" data-act="del" title="删除" aria-label="删除「${esc(item.name)}」">${icon('x', 14, 2.4)}</button>`
       + '</span></div></li>';
   }).join('');
   syncSearchTools();

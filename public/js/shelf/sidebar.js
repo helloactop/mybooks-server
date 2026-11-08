@@ -372,8 +372,8 @@
           <span class="wb-row-count">${c.count}</span>
         </button>
         <span class="wb-row-actions">
-          <button type="button" class="wb-row-act" data-collection-act="rename" data-id="${c.id}" title="重命名" aria-label="重命名 ${esc(c.name)}">✎</button>
-          <button type="button" class="wb-row-act is-danger" data-collection-act="delete" data-id="${c.id}" title="删除" aria-label="删除 ${esc(c.name)}">✕</button>
+          <button type="button" class="wb-row-act" data-collection-act="rename" data-id="${c.id}" title="重命名" aria-label="重命名 ${esc(c.name)}">${icon('pencil', 14, 2.4)}</button>
+          <button type="button" class="wb-row-act is-danger" data-collection-act="delete" data-id="${c.id}" title="删除" aria-label="删除 ${esc(c.name)}">${icon('x', 14, 2.4)}</button>
         </span>
       </div>`;
     }).join('');
@@ -410,7 +410,7 @@
 
     root.innerHTML = `<div class="wb-side-head">
       <span>资料库</span>
-      <button type="button" class="wb-side-close" data-sidebar-close aria-label="关闭资料库">✕</button>
+      <button type="button" class="wb-side-close" data-sidebar-close aria-label="关闭资料库">${icon('x', 16, 2)}</button>
     </div>
     <div class="wb-side-scroll">
       <section class="wb-section">

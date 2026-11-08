@@ -1,7 +1,7 @@
 /* ============================================================
  * 封面渲染原语(全站公共)
  * 依赖 base.js 的 esc;不依赖 api.js / common.js。
- * 加载顺序:chrome.js → base.js → api.js → cover.js → common.js → page-*.js
+ * 加载顺序:icon.js → chrome.js → base.js → api.js → cover.js → common.js → page-*.js
  * ============================================================ */
 
 /* ============ 占位封面 ============ */

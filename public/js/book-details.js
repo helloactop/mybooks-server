@@ -32,7 +32,7 @@
       <a class="bd-file" href="${esc(f.download_url || `/books-files/${f.path}`)}" download>
         <span class="bd-file-format">.${esc(f.format)}</span>
         <span class="bd-file-size">${fileSizeText(f.size)}</span>
-        <span class="bd-file-arrow" aria-hidden="true">↓</span>
+        <span class="bd-file-arrow" aria-hidden="true">${icon('download', 14, 2.2)}</span>
       </a>`).join('')}</div>`;
   }
 
@@ -41,7 +41,7 @@
     const rest = list.filter((x) => !['isbn', 'douban', 'douban_id'].includes(String(x.type).toLowerCase()));
     if (!rest.length) return '';
     return `<div class="bd-row"><span class="bd-k">标识符</span><span class="bd-v">${rest.map((x) => (x.url
-      ? `<a class="bd-link" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.label)} ↗</a>`
+      ? `<a class="bd-link" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.label)} ${icon('arrow-up-right', 12, 2)}</a>`
       : `${esc(x.label)}:${esc(x.value)}`)).join(' · ')}</span></div>`;
   }
 
@@ -115,7 +115,7 @@
     if (pub) rows += metaRow('出版', esc(pub));
     if (book.isbn) rows += metaRow('ISBN', `<span class="bd-copy-value"><span>${esc(book.isbn)}</span>${copyButton(book.isbn)}</span>`);
     if (book.douban_id) {
-      rows += metaRow('豆瓣', `<a class="bd-link" href="https://book.douban.com/subject/${esc(book.douban_id)}/" target="_blank" rel="noopener noreferrer">查看豆瓣条目 ↗</a>`);
+      rows += metaRow('豆瓣', `<a class="bd-link" href="https://book.douban.com/subject/${esc(book.douban_id)}/" target="_blank" rel="noopener noreferrer">查看豆瓣条目 ${icon('arrow-up-right', 12, 2)}</a>`);
     }
     return rows;
   }
@@ -175,7 +175,7 @@
   function headHtml() {
     return `<div class="bd-head">
       <span class="bd-grabber" data-bd-grabber aria-hidden="true"></span>
-      <button type="button" class="icon-btn bd-close" data-bd-close aria-label="关闭详情">✕</button>
+      <button type="button" class="icon-btn bd-close" data-bd-close aria-label="关闭详情">${icon('x', 16, 2)}</button>
     </div>`;
   }
 
@@ -251,9 +251,9 @@
         <div class="bd-chips">
           ${readOnly
             ? (tags.length ? tags.map((t) => `<span class="tag-chip bd-tag">${esc(t)}</span>`).join('') : '<span class="bd-missing">暂无标签</span>')
-            : `${visibleTags.map((t) => `<span class="tag-chip bd-tag">${esc(t)}<button type="button" data-bd-remove-tag="${esc(t)}" aria-label="移除标签 ${esc(t)}">✕</button></span>`).join('')}
+            : `${visibleTags.map((t) => `<span class="tag-chip bd-tag">${esc(t)}<button type="button" data-bd-remove-tag="${esc(t)}" aria-label="移除标签 ${esc(t)}">${icon('x', 12, 2.8)}</button></span>`).join('')}
                ${tags.length > TAG_PREVIEW ? `<button type="button" class="bd-chip-more" data-bd-tags-more>${state.tagsExpanded ? '收起' : `显示更多 (${tags.length - TAG_PREVIEW})`}</button>` : ''}
-               <input class="bd-chip-input" type="text" placeholder="+ 标签" data-bd-new-tag aria-label="添加标签">`}
+               <input class="bd-chip-input" type="text" placeholder="添加标签" data-bd-new-tag aria-label="添加标签">`}
         </div>
       </section>
 
@@ -261,8 +261,8 @@
         <h3 class="bd-section-title">分类</h3>
         <div class="bd-collection">
           <div class="bd-chips">
-            ${memberships.map((c) => `<span class="tag-chip bd-tag">${esc(c.name)}<button type="button" data-bd-remove-collection="${c.id}" aria-label="移出分类 ${esc(c.name)}">✕</button></span>`).join('')}
-            <button type="button" class="bd-chip-add" data-bd-collection-add>+ 分类</button>
+            ${memberships.map((c) => `<span class="tag-chip bd-tag">${esc(c.name)}<button type="button" data-bd-remove-collection="${c.id}" aria-label="移出分类 ${esc(c.name)}">${icon('x', 12, 2.8)}</button></span>`).join('')}
+            <button type="button" class="bd-chip-add" data-bd-collection-add>${icon('plus', 14, 2.4)} 分类</button>
           </div>
           ${pop}
         </div>

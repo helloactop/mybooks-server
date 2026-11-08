@@ -80,7 +80,7 @@
     const collections = state().facets.collections;
     return `<div class="wb-inspector-head">
         <span class="bd-grabber" data-bd-grabber aria-hidden="true"></span>
-        <button type="button" class="icon-btn" data-bd-close aria-label="关闭详情">✕</button>
+        <button type="button" class="icon-btn" data-bd-close aria-label="关闭详情">${icon('x', 16, 2)}</button>
       </div>
       <div class="wb-inspector-multi">
         <div class="wb-multi-covers">${covers}</div>

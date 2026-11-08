@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="My books">
   <link rel="apple-touch-icon" href="/icon-192.png">
-  <link rel="stylesheet" href="/css/style.css?v=121">
+  <link rel="stylesheet" href="/css/style.css?v=122">
   <link rel="stylesheet" href="/css/liquid-glass.css?v=6">
 </head>
 <body data-page="tags">
@@ -43,7 +43,7 @@
       <header class="cat-head">
         <h2 id="fieldsHead">自定义字段</h2>
         <span class="cat-count" id="fieldsCount"></span>
-        <button type="button" class="btn btn-primary btn-sm" id="addFieldBtn">＋ 新建字段</button>
+        <button type="button" class="btn btn-primary btn-sm" id="addFieldBtn"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="/vendor/lucide-sprite.svg?v=1#plus"></use></svg> 新建字段</button>
       </header>
       <p class="cat-hint">给书加自己的字段(如「系列」「页数」「阅读心情」)。建好后在书籍编辑弹窗里就能填,并可用 <code>#字段名:值</code> 检索。删除是软删除,可随时恢复。</p>
       <div class="cat-list" id="fieldsList"></div>
@@ -122,7 +122,7 @@
     <div class="modal-box settings-box">
       <div class="modal-head">
         <h2 id="fieldModalTitle">新建字段</h2>
-        <button type="button" class="icon-btn" data-close aria-label="关闭">✕</button>
+        <button type="button" class="icon-btn" data-close aria-label="关闭"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="/vendor/lucide-sprite.svg?v=1#x"></use></svg></button>
       </div>
       <div class="form-grid">
         <div class="field">
@@ -175,7 +175,7 @@
     <div class="modal-box settings-box">
       <div class="modal-head">
         <h2 id="mergeTitle">合并分类</h2>
-        <button type="button" class="icon-btn" data-close aria-label="关闭">✕</button>
+        <button type="button" class="icon-btn" data-close aria-label="关闭"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="/vendor/lucide-sprite.svg?v=1#x"></use></svg></button>
       </div>
       <div class="form-grid">
         <div class="field field-full">
@@ -198,17 +198,18 @@
     </div>
   </div>
 
-  <script defer src="/js/chrome.js?v=39"></script>
+  <script defer src="/js/icon.js?v=1"></script>
+  <script defer src="/js/chrome.js?v=40"></script>
   <script defer src="/js/base.js?v=1"></script>
   <script defer src="/js/api.js?v=2"></script>
   <script defer src="/js/cover.js?v=1"></script>
-  <script defer src="/js/select.js?v=3"></script>
+  <script defer src="/js/select.js?v=4"></script>
   <script defer src="/js/modal.js?v=2"></script>
-  <script defer src="/js/overlay.js?v=2"></script>
-  <script defer src="/js/common.js?v=44"></script>
+  <script defer src="/js/overlay.js?v=3"></script>
+  <script defer src="/js/common.js?v=45"></script>
   <script defer src="/js/liquid-glass.js?v=1"></script>
-  <script defer src="/js/book-details.js?v=6"></script>
-  <script defer src="/js/scanner.js?v=2"></script>
-  <script defer src="/js/page-tags.js?v=8"></script>
+  <script defer src="/js/book-details.js?v=7"></script>
+  <script defer src="/js/scanner.js?v=3"></script>
+  <script defer src="/js/page-tags.js?v=9"></script>
 </body>
 </html>

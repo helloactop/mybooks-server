@@ -16,7 +16,7 @@
       aria-label="《${esc(book.title)}》${author ? ' · ' + esc(author) : ''}${book.translators?.length ? ' · 译者：' + esc(book.translators.join('、')) : ''}">
       <div class="wb-card-cover">
         ${coverHtml(book)}
-        <span class="wb-card-check" aria-hidden="true">✓</span>
+        <span class="wb-card-check" aria-hidden="true">${icon('check', 12, 3)}</span>
         <span class="wb-card-overlay" aria-hidden="true">
           <span class="wb-card-title">${esc(book.title)}</span>
           ${author ? `<span class="wb-card-author">${esc(author)}</span>` : ''}

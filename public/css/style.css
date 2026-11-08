@@ -1281,6 +1281,8 @@ body.search-open .search-curtain {
 .search-result-act {
   width: 30px;
   height: 30px;
+  display: grid;
+  place-items: center;
   border: 0;
   border-radius: 6px;
   background: none;
@@ -1569,6 +1571,9 @@ body.search-open .search-curtain {
   border-color: rgba(192, 57, 43, 0.4);
   color: var(--danger);
 }
+
+/* Lucide sprite 图标：尺寸/描边由 icon() 传入，颜色继承 currentColor */
+.icon { display: inline-block; flex: 0 0 auto; vertical-align: middle; }
 
 .icon-btn {
   position: relative;
@@ -2519,6 +2524,9 @@ body.select-mode .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
 .ebook-item a:hover { color: var(--accent); text-decoration: underline; }
 
 .ebook-item-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   background: transparent;
   color: var(--ink-3);
@@ -2824,6 +2832,9 @@ body.select-mode .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
 
 .bd-tag { min-height: 0; padding: 5px 10px; font-size: 12.5px; gap: 5px; }
 .bd-tag button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   background: transparent;
   color: #929399;
@@ -2834,6 +2845,9 @@ body.select-mode .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
 .bd-tag button:hover { color: var(--danger); }
 
 .bd-chip-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   min-height: 24px;
   padding: 0 9px;
   border: 1px dashed var(--hairline-strong);
@@ -3438,6 +3452,9 @@ footer .footer-legal a.beian-ps img {
 .log-sep { font-size: 12.5px; color: var(--ink-3); flex: 0 0 auto; }
 
 .log-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--hairline);
   background: transparent;
   color: var(--glass-text);

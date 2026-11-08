@@ -20,8 +20,8 @@
       }
     } catch { /* 隐私模式等无法读取时按默认展开栅格预留 */ }
   </script>
-  <link rel="stylesheet" href="/css/style.css?v=121">
-  <link rel="stylesheet" href="/css/shelf-workbench.css?v=48">
+  <link rel="stylesheet" href="/css/style.css?v=122">
+  <link rel="stylesheet" href="/css/shelf-workbench.css?v=49">
   <link rel="stylesheet" href="/css/liquid-glass.css?v=6">
 </head>
 <body data-page="shelf">
@@ -43,6 +43,7 @@
           <a href="/rank">榜单</a>
           <a href="/stats">统计</a>
           <a href="/tags">分类管理</a>
+          <a href="/toolbox">工具箱</a>
           <a href="/login">账号</a>
         </nav>
 
@@ -59,17 +60,17 @@
           </div>
           <div class="seg seg--track wb-view" id="wbViewToggle" role="group" aria-label="显示方式" data-glass="refract">
             <button type="button" data-view="grid" class="active" aria-label="封面网格" title="封面网格">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="1.6" y="1.6" width="5.4" height="5.4" rx="1.2"/><rect x="9" y="1.6" width="5.4" height="5.4" rx="1.2"/><rect x="1.6" y="9" width="5.4" height="5.4" rx="1.2"/><rect x="9" y="9" width="5.4" height="5.4" rx="1.2"/></svg>
+              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="/vendor/lucide-sprite.svg?v=1#layout-grid"></use></svg>
             </button>
             <button type="button" data-view="list" aria-label="列表" title="列表">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true"><rect x="1.7" y="2.5" width="2.4" height="2.4" rx="0.6"/><path d="M6.7 3.7h7.6"/><rect x="1.7" y="6.8" width="2.4" height="2.4" rx="0.6"/><path d="M6.7 8h7.6"/><rect x="1.7" y="11.1" width="2.4" height="2.4" rx="0.6"/><path d="M6.7 12.3h7.6"/></svg>
+              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="/vendor/lucide-sprite.svg?v=1#list"></use></svg>
             </button>
           </div>
           <button type="button" class="wb-circle" id="wbLayoutBtn" title="视图设置" aria-label="视图设置" aria-expanded="false" aria-controls="wbLayoutMenu" data-glass="refract">
-            <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="6" cy="4" r="1.4" fill="#fff"/><circle cx="10" cy="8" r="1.4" fill="#fff"/><circle cx="5" cy="12" r="1.4" fill="#fff"/></g></svg>
+            <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="/vendor/lucide-sprite.svg?v=1#sliders-horizontal"></use></svg>
           </button>
           <button type="button" class="wb-circle" id="wbAdd" title="添加书籍" aria-label="添加书籍" data-glass="refract">
-            <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M2 8h12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            <svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="/vendor/lucide-sprite.svg?v=1#plus"></use></svg>
           </button>
 
           <div class="wb-layout-menu" id="wbLayoutMenu" data-glass="frost" hidden>
@@ -138,12 +139,12 @@
         <div class="wb-grid" id="bookGrid" role="listbox" aria-multiselectable="true" aria-label="书籍"></div>
         <div id="shelfSentinel" class="wb-sentinel" aria-hidden="true"></div>
         <div id="emptyState" class="wb-empty hidden">
-          <div class="wb-empty-icon" aria-hidden="true">◫</div>
+          <div class="wb-empty-icon" aria-hidden="true"><svg class="icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="/vendor/lucide-sprite.svg?v=1#book-open"></use></svg></div>
           <p id="emptyTitle">书架还是空的</p>
           <p class="wb-empty-hint" id="emptyText">添加第一本书,开始你的阅读记录之旅。</p>
         </div>
         <div id="shelfError" class="wb-empty wb-error hidden" role="alert">
-          <div class="wb-empty-icon" aria-hidden="true">!</div>
+          <div class="wb-empty-icon" aria-hidden="true"><svg class="icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="/vendor/lucide-sprite.svg?v=1#circle-alert"></use></svg></div>
           <p id="shelfErrorTitle">书架加载失败</p>
           <p class="wb-empty-hint" id="shelfErrorText">请检查网络后重试。</p>
           <button type="button" class="btn btn-ghost btn-sm" id="shelfRetry">重试</button>
@@ -157,15 +158,15 @@
 
     <div class="wb-chrome">
       <button type="button" class="wb-circle wb-toggle" id="wbSidebarToggle" aria-label="隐藏资料库" aria-expanded="true" title="资料库" data-glass="refract">
-        <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><rect x="1.5" y="2.5" width="15" height="13" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M7 3v12" stroke="currentColor" stroke-width="1.2"/></svg>
+        <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="/vendor/lucide-sprite.svg?v=1#panel-left"></use></svg>
       </button>
       <button type="button" class="wb-search" id="shelfSearchBtn" aria-label="搜索" data-glass="refract">
-        <svg width="14" height="14" viewBox="0 0 18 18" aria-hidden="true"><circle cx="7.8" cy="7.8" r="5.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M12.2 12.2 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="/vendor/lucide-sprite.svg?v=1#search"></use></svg>
         <span id="wbSearchLabel">搜索</span>
         <kbd>⌘K</kbd>
       </button>
       <button type="button" class="wb-circle wb-toggle" id="wbInspectorToggle" aria-label="显示详情" aria-pressed="false" title="详情" data-glass="refract">
-        <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><rect x="1.5" y="2.5" width="15" height="13" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M11 3v12" stroke="currentColor" stroke-width="1.2"/></svg>
+        <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="/vendor/lucide-sprite.svg?v=1#panel-right"></use></svg>
       </button>
     </div>
 
@@ -182,7 +183,7 @@
       <div class="modal-box settings-box">
         <div class="modal-head">
           <h2 id="bulkTitle">批量编辑</h2>
-          <button type="button" class="icon-btn" data-close aria-label="关闭">✕</button>
+          <button type="button" class="icon-btn" data-close aria-label="关闭"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="/vendor/lucide-sprite.svg?v=1#x"></use></svg></button>
         </div>
         <div class="form-grid">
           <div class="field">
@@ -236,25 +237,26 @@
   </main>
 
   <button type="button" class="wb-search-close" id="wbSearchClose" aria-label="关闭搜索" data-glass="refract" hidden>
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="/vendor/lucide-sprite.svg?v=1#x"></use></svg>
   </button>
 
-  <script defer src="/js/chrome.js?v=39"></script>
+  <script defer src="/js/icon.js?v=1"></script>
+  <script defer src="/js/chrome.js?v=40"></script>
   <script defer src="/js/base.js?v=1"></script>
   <script defer src="/js/api.js?v=2"></script>
   <script defer src="/js/cover.js?v=1"></script>
-  <script defer src="/js/select.js?v=3"></script>
+  <script defer src="/js/select.js?v=4"></script>
   <script defer src="/js/modal.js?v=2"></script>
-  <script defer src="/js/overlay.js?v=2"></script>
-  <script defer src="/js/common.js?v=44"></script>
+  <script defer src="/js/overlay.js?v=3"></script>
+  <script defer src="/js/common.js?v=45"></script>
   <script defer src="/js/liquid-glass.js?v=1"></script>
-  <script defer src="/js/book-details.js?v=6"></script>
-  <script defer src="/js/scanner.js?v=2"></script>
+  <script defer src="/js/book-details.js?v=7"></script>
+  <script defer src="/js/scanner.js?v=3"></script>
   <script defer src="/js/shelf/store.js?v=38"></script>
-  <script defer src="/js/shelf/sidebar.js?v=41"></script>
-  <script defer src="/js/shelf/grid.js?v=36"></script>
-  <script defer src="/js/shelf/inspector.js?v=41"></script>
+  <script defer src="/js/shelf/sidebar.js?v=42"></script>
+  <script defer src="/js/shelf/grid.js?v=37"></script>
+  <script defer src="/js/shelf/inspector.js?v=42"></script>
   <script defer src="/js/shelf/actions.js?v=35"></script>
-  <script defer src="/js/shelf/main.js?v=43"></script>
+  <script defer src="/js/shelf/main.js?v=44"></script>
 </body>
 </html>

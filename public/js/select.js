@@ -49,7 +49,7 @@ function initCustomSelect(select) {
     menu.innerHTML = [...select.options].map((o) =>
       `<button type="button" class="sel-option" role="option" data-value="${esc(o.value)}" aria-selected="false">`
       + `<span class="sel-option-text">${esc(o.textContent)}</span>`
-      + '<span class="sel-check" aria-hidden="true">✓</span></button>').join('');
+      + `<span class="sel-check" aria-hidden="true">${icon('check', 12, 3)}</span></button>`).join('');
   };
 
   const markSelected = () => {

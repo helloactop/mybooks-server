@@ -3,7 +3,7 @@
  *
  * 只负责:管理员令牌读取、请求头、fetch 统一错误处理、分页总数头。
  * 页面专属逻辑留在 page-*.js;UI 组件留在 common.js。
- * 加载顺序:chrome.js → api.js → common.js → page-*.js
+ * 加载顺序:icon.js → chrome.js → api.js → common.js → page-*.js
  * ============================================================ */
 
 /* 网页使用 HttpOnly 设备会话;只兼容读取已有的本地管理员令牌。

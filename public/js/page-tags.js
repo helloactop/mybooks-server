@@ -41,9 +41,9 @@ function renderList(kind, items) {
       <a class="cat-name" href="${esc(shelfHref(kind, it.name))}" title="在书架中筛选「${esc(it.name)}」">${esc(it.name)}</a>
       <span class="cat-n">${it.count}</span>
       <div class="cat-ops">
-        <button type="button" class="cat-op" data-act="rename" aria-label="重命名「${esc(it.name)}」" title="重命名">✎</button>
-        <button type="button" class="cat-op" data-act="merge" aria-label="合并「${esc(it.name)}」" title="合并到…">⇄</button>
-        <button type="button" class="cat-op" data-act="delete" aria-label="删除「${esc(it.name)}」" title="删除">✕</button>
+        <button type="button" class="cat-op" data-act="rename" aria-label="重命名「${esc(it.name)}」" title="重命名">${icon('pencil', 16, 2)}</button>
+        <button type="button" class="cat-op" data-act="merge" aria-label="合并「${esc(it.name)}」" title="合并到…">${icon('arrow-left-right', 16, 2)}</button>
+        <button type="button" class="cat-op" data-act="delete" aria-label="删除「${esc(it.name)}」" title="删除">${icon('x', 16, 2)}</button>
       </div>
     </div>`).join('');
 }
@@ -282,8 +282,8 @@ function renderFields() {
         <span class="field-type">${esc(DATATYPE_LABEL[c.datatype] || c.datatype)}${c.is_multiple ? ' · 多值' : ''}</span>
         <span class="cat-n" title="已填写的书籍数">${c.usage}</span>
         <div class="cat-ops">
-          <button type="button" class="cat-op" data-fact="edit" aria-label="编辑「${esc(c.name)}」" title="编辑">✎</button>
-          <button type="button" class="cat-op" data-fact="delete" aria-label="删除「${esc(c.name)}」" title="删除(可恢复)">✕</button>
+          <button type="button" class="cat-op" data-fact="edit" aria-label="编辑「${esc(c.name)}」" title="编辑">${icon('pencil', 16, 2)}</button>
+          <button type="button" class="cat-op" data-fact="delete" aria-label="删除「${esc(c.name)}」" title="删除(可恢复)">${icon('x', 16, 2)}</button>
         </div>
       </div>`).join('');
   }
@@ -303,8 +303,8 @@ function renderFields() {
         <span class="field-type">${esc(DATATYPE_LABEL[c.datatype] || c.datatype)}</span>
         <span class="cat-n" title="仍保留的取值数">${c.usage}</span>
         <div class="cat-ops">
-          <button type="button" class="cat-op" data-fact="restore" title="恢复该字段">↺</button>
-          <button type="button" class="cat-op danger" data-fact="purge" title="彻底删除(连同取值,不可恢复)">🗑</button>
+          <button type="button" class="cat-op" data-fact="restore" title="恢复该字段">${icon('rotate-ccw', 16, 2)}</button>
+          <button type="button" class="cat-op danger" data-fact="purge" title="彻底删除(连同取值,不可恢复)">${icon('trash-2', 16, 2)}</button>
         </div>
       </div>`).join('');
   }
@@ -561,8 +561,8 @@ function renderTrash() {
         </span>
         <span class="trash-meta">${deleted ? `删除于 ${esc(deleted)} · ` : ''}${left}</span>
         <div class="cat-ops">
-          <button type="button" class="cat-op" data-tact="restore" aria-label="恢复《${esc(b.title)}》" title="恢复">↺</button>
-          <button type="button" class="cat-op danger" data-tact="purge" aria-label="彻底删除《${esc(b.title)}》" title="彻底删除(不可恢复)">🗑</button>
+          <button type="button" class="cat-op" data-tact="restore" aria-label="恢复《${esc(b.title)}》" title="恢复">${icon('rotate-ccw', 16, 2)}</button>
+          <button type="button" class="cat-op danger" data-tact="purge" aria-label="彻底删除《${esc(b.title)}》" title="彻底删除(不可恢复)">${icon('trash-2', 16, 2)}</button>
         </div>
       </div>`;
   }).join('');

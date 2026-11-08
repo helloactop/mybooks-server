@@ -7,22 +7,30 @@
     "start": "node server.js",
     "test": "node scripts/test.js",
     "setup": "node scripts/setup-admin.js",
-    "check:public": "node scripts/check-public.mjs"
+    "check:public": "node scripts/check-public.mjs",
+    "icons": "node scripts/build-icons.mjs",
+    "check:icons": "node scripts/build-icons.mjs --check"
   },
   "engines": {
     "node": ">=22.5.0"
   },
   "dependencies": {
+    "7zip-bin": "5.2.0",
     "cheerio": "1.1.2",
     "dompurify": "3.4.14",
     "express": "4.21.2",
     "marked": "18.0.11",
-    "multer": "2.0.2"
+    "multer": "2.0.2",
+    "node-7z": "3.0.0",
+    "yauzl": "3.2.0"
   },
   "license": "GPL-3.0-only",
   "private": true,
   "repository": {
     "type": "git",
     "url": "https://github.com/shyshineinn/my-books.git"
+  },
+  "devDependencies": {
+    "lucide-static": "1.70.0"
   }
 }

@@ -111,7 +111,7 @@
       <div class="modal-box">
         <div class="modal-head">
           <h2>扫描书籍条形码</h2>
-          <button type="button" class="icon-btn" data-scan-close aria-label="关闭">✕</button>
+          <button type="button" class="icon-btn" data-scan-close aria-label="关闭">${icon('x', 16, 2)}</button>
         </div>
         <div class="scan-reader" id="scanReaderWrap"></div>
         <p class="scan-hint">把书背面的条形码(ISBN)对准框内,保持几秒</p>

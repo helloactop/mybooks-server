@@ -9,7 +9,7 @@
  *   渲染(书架/榜单/统计都是接口数据),这个代价与现状一致。
  *
  * 加载约定(defer 保证顺序,均在 DOM 解析完成后执行):
- *   chrome.js → common.js → page-<name>.js
+ *   icon.js → chrome.js → common.js → page-<name>.js
  *   本文件把外壳补进 body:header 插到最前(保持 Tab 顺序),
  *   弹窗/菜单/Toast/页脚追加到最后。页面 HTML 只写自己的 <main>。
  *
@@ -256,16 +256,10 @@ function headerHtml(current) {
       <nav class="view-switch" aria-label="主导航">${navHtml(current)}</nav>
       <div class="topbar-actions">
         <button type="button" id="searchBtn" class="icon-btn" title="搜索" aria-label="搜索">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="10.3" cy="10.3" r="8.4"></circle>
-            <path d="M16.3 16.3 22 22"></path>
-          </svg>
+          ${icon('search', 18, 2.4)}
         </button>
         <button type="button" id="addBtn" class="icon-btn" title="添加书籍" aria-label="添加书籍">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <rect x="1.75" y="1.75" width="20.5" height="20.5" rx="6.35"></rect>
-            <path d="M12 8.1v7.8M8.1 12h7.8"></path>
-          </svg>
+          ${icon('square-plus', 18, 2.4)}
         </button>
       </div>
       <button type="button" id="menuBtn" class="mobile-menu-btn" aria-label="打开菜单" aria-expanded="false" aria-controls="mobileMenu">
@@ -299,23 +293,13 @@ function overlaysHtml() {
     <div class="search-flyout-scroll">
       <div class="search-flyout-inner">
         <form id="searchForm" class="search-field" action="/shelf" method="get">
-          <svg class="search-field-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-            <circle cx="10.3" cy="10.3" r="8.4"></circle>
-            <path d="M16.3 16.3 22 22"></path>
-          </svg>
+          ${icon('search', 24, 1.6, 'search-field-icon')}
           <input id="searchInput" name="q" type="search" placeholder="搜索书名 / 作者" aria-label="搜索书名或作者" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
           <button type="button" id="searchResetBtn" class="search-field-reset" aria-label="清空搜索" hidden>
-            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <circle cx="8" cy="8" r="7" fill="currentColor"></circle>
-              <path d="M5.6 5.6l4.8 4.8M10.4 5.6l-4.8 4.8" fill="none" stroke="#fafafc" stroke-width="1.3" stroke-linecap="round"></path>
-            </svg>
+            ${icon('circle-x', 16, 2)}
           </button>
           <button type="button" id="searchSyntaxBtn" class="search-field-help" aria-label="高级搜索语法" title="高级搜索语法" aria-haspopup="dialog" aria-controls="syntaxModal">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
-              <circle cx="10" cy="10" r="8.4"></circle>
-              <path d="M7.8 7.8c0-1.35 1-2.3 2.25-2.3s2.2.85 2.2 2.05c0 1-.55 1.55-1.35 2.05-.65.4-.9.75-.9 1.45v.25"></path>
-              <circle cx="10" cy="14.15" r="0.9" fill="currentColor" stroke="none"></circle>
-            </svg>
+            ${icon('circle-help', 20, 1.7)}
           </button>
         </form>
         <section class="search-results" aria-labelledby="searchResultsTitle">
@@ -338,7 +322,7 @@ function overlaysHtml() {
     <div class="modal-box">
       <div class="modal-head">
         <h2>高级搜索语法</h2>
-        <button type="button" class="icon-btn" data-close aria-label="关闭">✕</button>
+        <button type="button" class="icon-btn" data-close aria-label="关闭">${icon('x', 16, 2)}</button>
       </div>
       <div class="syntax-body">
         <p>在搜索框把多条条件用空格连起来即「并且」,支持这些字段:</p>
@@ -394,7 +378,7 @@ function overlaysHtml() {
     <div class="modal-box">
       <div class="modal-head">
         <h2 id="modalTitle">添加书籍</h2>
-        <button type="button" class="icon-btn" data-close aria-label="关闭">✕</button>
+        <button type="button" class="icon-btn" data-close aria-label="关闭">${icon('x', 16, 2)}</button>
       </div>
       <form id="bookForm" novalidate>
         <input type="hidden" id="bookId">
@@ -516,7 +500,7 @@ function overlaysHtml() {
                   <label>其它标识符 <span class="label-sub">如 goodreads / doi / amazon</span></label>
                   <div id="idRows" class="id-rows"></div>
                   <datalist id="idTypeSuggestions"></datalist>
-                  <button type="button" id="addIdRowBtn" class="btn btn-ghost add-log-btn">＋ 添加标识符</button>
+                  <button type="button" id="addIdRowBtn" class="btn btn-ghost add-log-btn">${icon('plus', 14, 2.4)} 添加标识符</button>
                 </div>
                 <div class="field field-full" id="customFieldsSection" hidden>
                   <label>自定义字段 <span class="label-sub">在「分类」页管理字段定义</span></label>
@@ -538,7 +522,7 @@ function overlaysHtml() {
                   <label>阅读记录 <span class="label-sub">开始/读完日期与读过次数据此生成</span></label>
                   <div id="readLogs" class="read-logs"></div>
                   <div id="readLogsSummary" class="read-logs-summary"></div>
-                  <button type="button" id="addLogBtn" class="btn btn-ghost add-log-btn">＋ 添加一次阅读</button>
+                  <button type="button" id="addLogBtn" class="btn btn-ghost add-log-btn">${icon('plus', 14, 2.4)} 添加一次阅读</button>
                 </div>
               </div>
             </div>
@@ -567,7 +551,7 @@ function overlaysHtml() {
     <div class="modal-box isbn-batch-box">
       <div class="modal-head">
         <h2>按 ISBN 批量添加</h2>
-        <button type="button" class="icon-btn" data-close aria-label="关闭">✕</button>
+        <button type="button" class="icon-btn" data-close aria-label="关闭">${icon('x', 16, 2)}</button>
       </div>
       <div class="form-grid">
         <div class="field field-full">

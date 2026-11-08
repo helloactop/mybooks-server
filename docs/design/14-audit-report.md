@@ -110,6 +110,8 @@
 | B5 | 分段控件有共享类但仍分叉 | 低 | `.seg` 基础（`style.css:1404-1458`）与表单覆盖（`2461-2468`）；书架 `.wb-layout-seg`/`.wb-view`（`shelf-workbench.css:642-661,815-843`） | 维护两套尺寸/状态 | 保留尺寸差异，统一语义 |
 | B6 | `.tag-chip` 两处定义 | 低 | `style.css:1618-1627` 与 `2270-2293` | 依赖层叠顺序 | 合并为一条基础 + 变体 |
 | B7 | `.seg button` 两处定义 | 低 | `style.css:1418-1437` 与 `2462-2468` | 表单覆盖依赖源序 | 合并/注明覆盖原因 |
+
+> 2026-11-07 更新：B4 的 Unicode/emoji 图标已迁移到 Lucide sprite；图标尺寸、描边、生成与校验规则见 [07-icons.md](07-icons.md)。
 | B8 | 状态标签表重复 | 低 | `base.js:10` `STATUS_LABEL` vs `book-details.js:12` `STATUS` | 新增状态要改两处 | 提取共享常量 |
 | B9 | HTML 转义函数重复 | 低 | `base.js:12-16` `esc`；`chrome.js:205-207` `navEscape`（不含 `'`） | 转义字符集不一致 | 统一使用 `esc` |
 | B10 | Escape 分层逻辑分散 | 中 | `modal.js:43`、`overlay.js:547,652`、`book-details.js:730`、`select.js:135`、`shelf/main.js:535`、`shelf/sidebar.js:669` | 新增浮层容易漏掉层级 | 统一浮层栈 |

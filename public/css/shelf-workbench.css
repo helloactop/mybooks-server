@@ -461,7 +461,7 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
   background: var(--surface-2, #f2f2f5);
   isolation: isolate;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  transition: box-shadow 0.24s ease;
+  transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.24s ease;
 }
 .wb-card-cover::after {
   content: '';
@@ -483,8 +483,11 @@ body[data-page="shelf"] main.wb.sidebar-collapsed .wb-side {
 .wb-card-cover .ph-title { font-size: clamp(13px, 1.5vw, 18px); }
 .wb-card-cover .ph-author { font-size: 10px; }
 @media (hover: hover) {
-  .wb-card:hover { transform: translateY(-2px); }
-  .wb-card:hover .wb-card-cover { box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14); }
+  /* 位移落在内层封面上：卡片命中区域保持不动，避免指针停在底边时 hover 反复开关 */
+  .wb-card:hover .wb-card-cover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+  }
 }
 .wb-card.is-selected { transform: scale(1.014); }
 .wb-card.is-selected .wb-card-cover { box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18); }
@@ -1162,6 +1165,7 @@ body[data-page="shelf"] main.wb.inspector-open .wb-chrome #wbInspectorToggle {
   text-align: center;
 }
 .wb-empty-icon { font-size: 28px; opacity: 0.35; margin-bottom: 6px; }
+.wb-empty-icon .icon { display: block; }
 .wb-empty p { margin: 0; font-size: 13px; }
 .wb-empty .wb-empty-hint { font-size: 12px; color: var(--wb-tertiary); }
 .wb-error .wb-empty-icon { opacity: 0.5; font-weight: 600; }
@@ -1460,7 +1464,9 @@ body[data-page="shelf"].select-mode .toast { bottom: calc(132px + env(safe-area-
   .wb-side,
   .wb-inspector,
   .wb-card,
+  .wb-card-cover,
   .wb-card-overlay { transition: none !important; }
   .wb-card:hover,
-  .wb-card.is-selected { transform: none; }
+  .wb-card.is-selected,
+  .wb-card:hover .wb-card-cover { transform: none; }
 }

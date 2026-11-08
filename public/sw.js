@@ -12,7 +12,7 @@
  * 激活阶段删除旧版本缓存。skipWaiting + clients.claim 让新 SW 立即接管。
  * ============================================================ */
 
-const CACHE_VERSION = 'v190';
+const CACHE_VERSION = 'v192';
 const SHELL_CACHE = `mybooks-shell-${CACHE_VERSION}`;
 const API_CACHE = `mybooks-api-${CACHE_VERSION}`;
 const IMG_CACHE = `mybooks-img-${CACHE_VERSION}`;
@@ -23,32 +23,34 @@ const IMG_LIMIT = 60;
 // 注意:**不缓存 / *.html 与 /notes/*** —— HTML 必须每次向服务器验证,
 // 否则新内容(备案号/新功能)发布后用户要强刷才能看到。
 const SHELL_ASSETS = [
-  '/css/style.css?v=121',
+  '/css/style.css?v=122',
   '/css/login.css?v=5',
-  '/css/shelf-workbench.css?v=48',
+  '/css/shelf-workbench.css?v=49',
   '/css/liquid-glass.css?v=6',
-  '/js/chrome.js?v=39',
+  '/vendor/lucide-sprite.svg?v=1',
+  '/js/icon.js?v=1',
+  '/js/chrome.js?v=40',
   '/js/base.js?v=1',
   '/js/api.js?v=2',
   '/js/login.js?v=5',
   '/js/cover.js?v=1',
-  '/js/select.js?v=3',
+  '/js/select.js?v=4',
   '/js/modal.js?v=2',
-  '/js/overlay.js?v=2',
-  '/js/common.js?v=44',
-  '/js/book-details.js?v=6',
+  '/js/overlay.js?v=3',
+  '/js/common.js?v=45',
+  '/js/book-details.js?v=7',
   '/js/liquid-glass.js?v=1',
-  '/js/scanner.js?v=2',
+  '/js/scanner.js?v=3',
   '/js/page-home.js?v=5',
   '/js/shelf/store.js?v=38',
-  '/js/shelf/sidebar.js?v=41',
-  '/js/shelf/grid.js?v=36',
-  '/js/shelf/inspector.js?v=41',
+  '/js/shelf/sidebar.js?v=42',
+  '/js/shelf/grid.js?v=37',
+  '/js/shelf/inspector.js?v=42',
   '/js/shelf/actions.js?v=35',
-  '/js/shelf/main.js?v=43',
+  '/js/shelf/main.js?v=44',
   '/js/page-rank.js?v=3',
   '/js/page-stats.js?v=4',
-  '/js/page-tags.js?v=8',
+  '/js/page-tags.js?v=9',
   '/js/page-notes.js?v=3',
   '/js/endless-gallery.js?v=19',
   '/vendor/marked.umd.js',
@@ -129,6 +131,8 @@ self.addEventListener('fetch', (event) => {
   // 授权与用户数据不经过离线缓存，退出或切换账号后不能回退到旧数据。
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/uploads/') ||
       url.pathname.startsWith('/books-files/') || /^\/login(?:\.html)?$/.test(url.pathname)) return;
+  // 插件桥接脚本必须随宿主升级立即生效，不能被旧 SW 缓存钉死。
+  if (url.pathname === '/static/toolbox-bridge.js') return;
 
   // Range 请求(断点/分块读取,如 pdf.js 读 PDF、视频拖动)一律不拦截:
   // 交给浏览器直连,避免 206 引发的缓存异常

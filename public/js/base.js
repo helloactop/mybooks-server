@@ -1,7 +1,7 @@
 /* ============================================================
  * 基础 DOM / 格式化原语(全站公共)
  * 不依赖 api.js 或 common.js,供所有页面脚本直接使用。
- * 加载顺序:chrome.js → base.js → api.js → cover.js → common.js → page-*.js
+ * 加载顺序:icon.js → chrome.js → base.js → api.js → cover.js → common.js → page-*.js
  * ============================================================ */
 
 const $ = (sel) => document.querySelector(sel);

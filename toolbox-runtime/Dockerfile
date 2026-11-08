@@ -9,7 +9,9 @@ RUN groupadd -g 1000 toolbox \
     && chown 1000:1000 /toolbox
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# 默认官方 PyPI；网络受限时可 --build-arg PIP_INDEX_URL=...
+ARG PIP_INDEX_URL=https://pypi.org/simple
+RUN pip install --no-cache-dir --index-url "$PIP_INDEX_URL" -r requirements.txt
 
 COPY --chown=1000:1000 webserver ./webserver
 COPY --chown=1000:1000 runtime.py ./

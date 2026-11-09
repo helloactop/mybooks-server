@@ -6,8 +6,9 @@
 ## 现状
 
 Phase 1 完成：内核（Registry / Context / Lifecycle / EventBus / Kernel）+ 只读 Legacy Adapter + `GET /api/plugins`。
-未开始：`metadata.search` Provider、权限、运行时隔离、UI、SDK。
-旧 Toolbox 路由/Bridge/安装器/Worker/迁移**零改动**；`server.js` 仅新增只读路由挂载。
+Phase 2 完成：`metadata.search@1` 契约、豆瓣/OpenLibrary 双 Provider、服务编排；旧 `/api/metadata/search` 的 `results` 形状、缓存与错误码保持不变。
+未开始：Runtime Manager、权限/身份隔离、`source.*` / `book.*` 能力、UI、SDK。
+旧 Toolbox 路由/Bridge/安装器/Worker/迁移**零改动**。
 
 ## 已完成
 
@@ -20,8 +21,11 @@ Phase 1 完成：内核（Registry / Context / Lifecycle / EventBus / Kernel）+
 | Kernel | [kernel.js](../../src/core/plugins/kernel.js) | 组合 Registry/EventBus、define/start/stop/remove/dispose | 13.1、架构 5.1 | `b39d1507` |
 | Legacy Adapter | [legacy-toolbox.js](../../src/core/plugins/adapters/legacy-toolbox.js) | 只读 `toolbox_tools` → 统一描述符；状态映射；脱敏 | 5.2、13.1 | `b459632a` |
 | Plugins API | [routes.plugins.js](../../src/http/routes.plugins.js) | `GET /api/plugins`，会话后挂载，只读 | 9.1、13.1 | `b459632a` |
+| Metadata 契约 | [metadata-search.js](../../src/core/plugins/capabilities/metadata-search.js) | 输入/输出校验、上限、稳定错误码、候选规范化 | 4.1–4.3 | `26fd251d` |
+| Providers | [douban.js](../../src/core/plugins/providers/douban.js) · [openlibrary.js](../../src/core/plugins/providers/openlibrary.js) | 双来源统一候选，可显式切换 | 4.2、17.3 | `26fd251d` |
+| Metadata 服务 | [services/metadata.js](../../src/core/plugins/services/metadata.js) + [plugin-services.js](../../src/http/plugin-services.js) | 注册/优先级选择/超时/错误映射；旧路由复用 | 3.6、4.1、4.4 | `26fd251d` |
 
-测试：`test/plugin-*.test.js` + `test/plugins-http.test.js`，共 57 个。
+测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`，共 77 个。
 
 ## 验收对照（规范 13.2）
 
@@ -29,29 +33,31 @@ Phase 1 完成：内核（Registry / Context / Lifecycle / EventBus / Kernel）+
 - ◐ 3：事件/服务可释放，`ctx.ui` 未实现
 - ✅ 10：本文
 
+Phase 2 门禁（规范 13 章 / 架构 17.3）：契约、内置 Provider、旧 API 兼容 ✅；真实豆瓣/OpenLibrary 联网未验收（测试用 fixture）。
+
 ## 测试基线
 
 ```bash
-npm test                                  # 666/666
+npm test                                  # 686/686
 npm run check:public                      # 通过
 cd toolbox-runtime
 "C:/Users/11731/.venvs/mybooks-toolbox/Scripts/python.exe" -m unittest discover -s tests -v
                                           # 9/9（本机 Python 3.15；镜像 3.12 未跑）
 ```
 
-## 下一步：Phase 2 元数据 Provider
+## 下一步：Phase 3 运行时与权限
 
-1. 定义 `metadata.search@1`：JSON Schema、错误码、超时、来源字段（规范 4.1–4.3）。
-2. 把现有 [douban.js](../../src/core/douban.js) + [metadata-sources.js](../../src/http/metadata-sources.js) 适配为内置 Provider；旧 `/api/metadata/search` 保持可用。
-3. `server.js` 最小内核初始化并注册内置 Provider；新增第二个 Provider 验证可平替。
-4. 契约测试：输入/输出、错误码、版本、Provider 选择顺序。
+1. Runtime Manager：统一 `prepare/start/invoke/health/cancel/stop`，先接 Legacy Python Worker。
+2. 插件身份与权限：内部接口按实例身份校验，不再信任自报 `tool_id`（规范 6.2）。
+3. 隔离：独立进程/容器、网络出口与资源限制；共享 Worker 仅保留给已审查插件（规范 6.4）。
+4. 测试：越权拒绝、插件失联撤能力、超时/取消、并发与资源上限。
 
-对应规范 4.3、13.1；架构 5.2–5.3、17.3。
+对应规范 3.6、6.1–6.6；架构 7、13、17.4。
 
 ## 硬约束
 
 - 不改 `/api/toolbox/*`、`/get/tool/*`、Bridge、安装器、Python Worker、已有迁移。
-- Legacy 只读；调用继续走原 `proxyTool`。
+- 旧 `/api/metadata/search` 的 `results` 形状、缓存与错误码保持；Provider 只返回候选，不写库。
 - `server.js` 只允许加初始化/路由挂载，不改既有注册顺序。
 - 新代码 CommonJS，不新增依赖。
 - 不把未运行/未验证写成“已通过”。
@@ -64,10 +70,10 @@ kernel.define({ instanceId, providerId, activate, deactivate });
 await kernel.start(instanceId);
 
 // activate(ctx) 内：
-ctx.register({ capability, version, providerId, invoke });
+ctx.register({ capability: 'metadata.search', version: '1', providerId, invoke });
 ctx.on('book.imported', handler);
 
-// 只读旧插件视图
-const legacy = new LegacyToolboxAdapter({ db });
-legacy.list(); // GET /api/plugins
+// 元数据服务（旧路由已接入）
+const { service } = require('./src/http/plugin-services');
+await service.search({ query: '三体' }, { providerId: 'openlibrary' });
 ```

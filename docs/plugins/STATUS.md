@@ -1,6 +1,6 @@
 # 插件平台进度（AI 接手）
 
-> 2026-11-09 · 分支 `codex/plugin-registry`（基于 `main`）
+> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`）
 > 文档：[架构](mybooks-plugin-architecture.md) · [规范](mybooks-plugin-development-standards.md)
 
 ## 现状
@@ -9,8 +9,9 @@ Phase 1 完成：内核（Registry / Context / Lifecycle / EventBus / Kernel）+
 Phase 2 完成：`metadata.search@1` 契约、豆瓣/OpenLibrary 双 Provider、服务编排；旧 `/api/metadata/search` 的 `results` 形状、缓存与错误码保持不变。
 Phase 3a 完成：权限模型 + 运行时身份绑定（Context/Kernel 已接入，默认拒绝）。
 Phase 3b 部分完成：Runtime Manager + Legacy 运行时只读状态 + `GET /api/plugins/runtime`。
-未完成：内部 RPC 身份接入、隔离进程、`source.*` / `book.*` 能力、UI、SDK。
-旧 Toolbox 路由/Bridge/安装器/Worker/迁移**零改动**。
+Phase 3c 部分完成：内部接口按工具令牌校验归属（旧 Worker 不带令牌仍兼容）。
+未完成：书库接口的权限裁剪、隔离进程/容器、`source.*` / `book.*` 能力、UI、SDK。
+旧 Toolbox 路由/Bridge/安装包/迁移保持兼容；仅新增可选身份令牌。
 
 ## 已完成
 
@@ -25,13 +26,14 @@ Phase 3b 部分完成：Runtime Manager + Legacy 运行时只读状态 + `GET /a
 | Identity | [identity.js](../../src/core/plugins/identity.js) | 不透明令牌 → 实例身份；不信任自报 ID | 6.2 | `7994523e` |
 | Runtime Manager | [runtime-manager.js](../../src/core/plugins/runtime-manager.js) | 适配器注册/健康/超时；未实现操作显式 unsupported | 6.1、架构 7.1 | `e610ef75` |
 | Runtime 状态 API | [legacy-runtime.js](../../src/core/plugins/adapters/legacy-runtime.js) + [routes.plugins.js](../../src/http/routes.plugins.js) | `GET /api/plugins/runtime` 只读健康状态 | 6.1、11.3 | `e610ef75` |
+| Internal Identity | [identities.js](../../src/core/toolbox/identities.js) + [identity.py](../../toolbox-runtime/webserver/toolbox/identity.py) | 每工具令牌；import/export/tasks 校验归属；旧 Worker 兼容 | 6.2 | `2aeb2467` |
 | Legacy Adapter | [legacy-toolbox.js](../../src/core/plugins/adapters/legacy-toolbox.js) | 只读 `toolbox_tools` → 统一描述符；状态映射；脱敏 | 5.2、13.1 | `b459632a` |
 | Plugins API | [routes.plugins.js](../../src/http/routes.plugins.js) | `GET /api/plugins`，会话后挂载，只读 | 9.1、13.1 | `b459632a` |
 | Metadata 契约 | [metadata-search.js](../../src/core/plugins/capabilities/metadata-search.js) | 输入/输出校验、上限、稳定错误码、候选规范化 | 4.1–4.3 | `26fd251d` |
 | Providers | [douban.js](../../src/core/plugins/providers/douban.js) · [openlibrary.js](../../src/core/plugins/providers/openlibrary.js) | 双来源统一候选，可显式切换 | 4.2、17.3 | `26fd251d` |
 | Metadata 服务 | [services/metadata.js](../../src/core/plugins/services/metadata.js) + [plugin-services.js](../../src/http/plugin-services.js) | 注册/优先级选择/超时/错误映射；旧路由复用 | 3.6、4.1、4.4 | `26fd251d` |
 
-测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`，共 104 个。
+测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`，共 107 个。
 
 ## 目标文件结构（架构 第十五章）
 
@@ -78,6 +80,7 @@ plugin-sdk/ ○                                                        Phase 5
 说明：
 - `capabilities/` + `providers/` 是本次实现的分层（契约与实现分离）；架构文档原树只列 `services/`，三者均在 `src/core/plugins/`。
 - `core/toolbox/`、`db/toolbox.js`、`http/routes.toolbox*.js` 是兼容边界：不迁移、不改协议。
+- `core/toolbox/identities.js` + Python `toolbox/identity.py` 是内部身份令牌，服务兼容层，不迁入 `plugins/`。
 - 规划文件按 Phase 增量创建，不得用空壳/TODO 占位。
 
 ## 验收对照（规范 13.2）
@@ -89,33 +92,35 @@ plugin-sdk/ ○                                                        Phase 5
 Phase 2 门禁（规范 13 章 / 架构 17.3）：契约、内置 Provider、旧 API 兼容 ✅；真实豆瓣/OpenLibrary 联网未验收（测试用 fixture）。
 
 Phase 3a：权限与身份绑定内核 ✅。
-Phase 3b：Runtime Manager 与只读状态 ✅（仅 health；Legacy 的 invoke/cancel 显式 unsupported）。内部 RPC 仍用共享 `internal-secret`，隔离未做。
+Phase 3b：Runtime Manager 与只读状态 ✅（仅 health；Legacy 的 invoke/cancel 显式 unsupported）。
+Phase 3c：内部 import/export/tasks 按工具令牌校验归属 ✅；无令牌旧 Worker 仍兼容。书库接口尚未按权限裁剪，隔离未做。
 
 ## 测试基线
 
 ```bash
-npm test                                  # 713/713
+npm test                                  # 716/716
 npm run check:public                      # 通过
 cd toolbox-runtime
 "C:/Users/11731/.venvs/mybooks-toolbox/Scripts/python.exe" -m unittest discover -s tests -v
-                                          # 9/9（本机 Python 3.15；镜像 3.12 未跑）
+                                          # 10/10（本机 Python 3.15；镜像 3.12 未跑）
 ```
 
-## 下一步：Phase 3c 内部身份与隔离
+## 下一步：Phase 3d 权限裁剪与隔离
 
-1. 内部接口身份：用 `IdentityRegistry` 令牌取代“信任请求体 `tool_id`”，先定协议版本/兼容策略（规范 6.2）。
-2. Runtime Manager 的 invoke/cancel/start/stop：等能力映射与隔离运行时确定后再接，禁止用 Legacy 假实现。
-3. 隔离：独立进程/容器、网络出口与资源限制；共享 Worker 仅保留给已审查插件（规范 6.4）。
-4. 测试：越权拒绝、插件失联撤能力、超时/取消、并发与资源上限。
+1. 内部书库接口接入 `GrantStore`：`books.read` / `files.read` 等按 scope 拒绝（当前只校验身份归属，未做权限裁剪）。
+2. 独立进程/容器隔离：网络出口、资源限制；共享 Worker 仅限已审查插件（规范 6.4），隔离完成前不开放第三方代码。
+3. Runtime Manager 的 invoke/cancel/start/stop 接隔离运行时，禁止用 Legacy 假实现。
+4. 测试：越权拒绝、插件失联撤能力、超时/取消、资源上限。
 
 对应规范 3.6、6.1–6.6；架构 7、13、17.4。
 
 ## 硬约束
 
-- 不改 `/api/toolbox/*`、`/get/tool/*`、Bridge、安装器、Python Worker、已有迁移。
+- 不改 `/api/toolbox/*`、`/get/tool/*`、Bridge、安装包与已有迁移；Python Worker 仅新增可选身份头。
 - 旧 `/api/metadata/search` 的 `results` 形状、缓存与错误码保持；Provider 只返回候选，不写库。
 - `server.js` 只允许加初始化/路由挂载，不改既有注册顺序。
-- 内部身份切换前保持 `internal-secret` 兼容；不做不兼容的 RPC 协议变更。
+- 内部接口保持 `internal-secret` + 可选令牌双路径；无身份头旧 Worker 必须继续可用。
+- 共享 Python 进程仍不是强隔离；身份令牌只做归属校验，不得宣称已实现跨插件隔离。
 - 新代码 CommonJS，不新增依赖。
 - 不把未运行/未验证写成“已通过”。
 

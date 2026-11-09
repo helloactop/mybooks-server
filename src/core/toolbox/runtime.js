@@ -16,6 +16,7 @@ const path = require('node:path');
 const { TOOLBOX_DIR } = require('../paths');
 const { ToolboxError, ensureSecretFile, timingSafeEqualString } = require('./security');
 const { ensureIdentityTokens } = require('./identities');
+const { legacyCompatEnabled, pluginAuthOnlyEnabled } = require('./access-policy');
 
 const RUNTIME_URL = (process.env.MYBOOKS_TOOLBOX_RUNTIME_URL || 'http://127.0.0.1:8765').replace(/\/+$/, '');
 
@@ -50,8 +51,31 @@ function statePath() {
   return path.join(TOOLBOX_DIR, 'state', 'installed.json');
 }
 
+function runtimeModePath() {
+  return path.join(TOOLBOX_DIR, 'state', 'runtime-mode.json');
+}
+
+// 把 Node 侧的隔离模式写到共享卷，供 Python supervisor 校验两端
+// MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY 是否一致（缺失/损坏时 Python 跳过校验）。
+function writeRuntimeMode() {
+  ensureToolboxDirs();
+  const payload = {
+    version: 1,
+    generated_at: new Date().toISOString(),
+    plugin_auth_only: pluginAuthOnlyEnabled(),
+    legacy_compat: legacyCompatEnabled(),
+  };
+  const target = runtimeModePath();
+  const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmp, JSON.stringify(payload, null, 2) + '\n', { mode: 0o644 });
+  fs.renameSync(tmp, target);
+  try { fs.chmodSync(target, 0o644); } catch { /* Windows */ }
+  return payload;
+}
+
 function writeRuntimeState(tools) {
   ensureToolboxDirs();
+  writeRuntimeMode();
   const payload = {
     version: 1,
     generated_at: new Date().toISOString(),
@@ -171,6 +195,8 @@ module.exports = {
   internalSecret,
   checkInternalSecret,
   statePath,
+  runtimeModePath,
+  writeRuntimeMode,
   writeRuntimeState,
   callRuntime,
   reloadRuntime,

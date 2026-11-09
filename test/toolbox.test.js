@@ -261,6 +261,11 @@ test('安装：原子落盘、状态文件、启停、回滚记录与卸载', as
   assert.ok(fs.existsSync(path.join(TOOLBOX_DIR, 'plugins', 'fixture', 'frontend', 'index.html')));
   const state = JSON.parse(fs.readFileSync(path.join(TOOLBOX_DIR, 'state', 'installed.json'), 'utf8'));
   assert.equal(state.tools.find((tool) => tool.tool_id === 'fixture').enabled, true);
+  // Node 写入的运行时模式供 Python supervisor 校验两端 PLUGIN_AUTH_ONLY 一致。
+  const runtimeMode = JSON.parse(fs.readFileSync(path.join(TOOLBOX_DIR, 'state', 'runtime-mode.json'), 'utf8'));
+  assert.equal(runtimeMode.version, 1);
+  assert.equal(typeof runtimeMode.plugin_auth_only, 'boolean');
+  assert.equal(typeof runtimeMode.legacy_compat, 'boolean');
 
   installer.setEnabled('fixture', false, dbHandle);
   assert.equal(toolboxRepo.getTool(dbHandle, 'fixture').enabled, false);

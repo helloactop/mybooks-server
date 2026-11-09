@@ -71,7 +71,12 @@ class PluginHost(object):
             logging.error("[plugin_host] state file invalid: %s", err)
             return []
         tools = document.get("tools") if isinstance(document, dict) else None
-        return tools if isinstance(tools, list) else []
+        if not isinstance(tools, list):
+            return []
+        only = os.environ.get("TOOLBOX_ONLY_TOOL", "").strip()
+        if only:
+            tools = [item for item in tools if isinstance(item, dict) and str(item.get("tool_id")) == only]
+        return tools
 
     def _load(self, item, generation):
         tool_id = str(item.get("tool_id") or "")

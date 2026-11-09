@@ -28,6 +28,10 @@ services:
       MYBOOKS_AUDIO_DIR: "/toolbox/data/audio"
       TOOLBOX_RUNTIME_HOST: "0.0.0.0"
       TOOLBOX_RUNTIME_PORT: "8765"
+      # 容器内每插件子进程（故障/资源隔离，非恶意代码沙箱）；默认关闭保持旧行为。
+      TOOLBOX_ISOLATE_PLUGINS: "${TOOLBOX_ISOLATE_PLUGINS:-0}"
+      TOOLBOX_MAX_CHILDREN: "${TOOLBOX_MAX_CHILDREN:-2}"
+      TOOLBOX_CHILD_MEMORY_MB: "${TOOLBOX_CHILD_MEMORY_MB:-384}"
     volumes:
       - toolbox-data:/toolbox
     read_only: true

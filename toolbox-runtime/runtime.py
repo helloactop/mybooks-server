@@ -20,6 +20,8 @@ import tornado.ioloop
 import tornado.web
 
 from webserver.handlers.base import BaseHandler, runtime_secret
+from webserver.services import AsyncService
+from webserver.services.background_service import BackgroundService
 from webserver.toolbox import config
 from webserver.toolbox.plugin_host import host
 
@@ -50,6 +52,33 @@ class ReloadHandler(tornado.web.RequestHandler):
             return json_response(self, 403, {"ok": False, "error": "forbidden"})
         reports = host.reload()
         return json_response(self, 200, {"ok": True, "plugins": reports, "loaded": host.summary()})
+
+
+class BusyHandler(tornado.web.RequestHandler):
+    """供 supervisor 判断子进程是否能安全淘汰。"""
+
+    def get(self):
+        expected = runtime_secret()
+        provided = self.request.headers.get("X-Mybooks-Runtime-Secret", "")
+        if not expected or not hmac.compare_digest(str(provided), str(expected)):
+            return json_response(self, 403, {"ok": False, "error": "forbidden"})
+        background = 0
+        try:
+            background = sum(1 for task in BackgroundService()._tasks.values()
+                             if task.status == "running")
+        except Exception:
+            LOGGER.exception("[busy] background snapshot failed")
+        pending = 0
+        try:
+            for _thread, jobs in getattr(AsyncService, "_running", {}).values():
+                pending += int(getattr(jobs, "unfinished_tasks", 0))
+        except Exception:
+            LOGGER.exception("[busy] async snapshot failed")
+        json_response(self, 200, {
+            "busy": background > 0 or pending > 0,
+            "background_running": background,
+            "async_pending": pending,
+        })
 
 
 class ToolDispatchHandler(BaseHandler):
@@ -128,11 +157,86 @@ class ToolDispatchHandler(BaseHandler):
         await self._dispatch()
 
 
+class SupervisorHealthHandler(tornado.web.RequestHandler):
+    def initialize(self, supervisor):
+        self._supervisor = supervisor
+
+    def get(self):
+        children = self._supervisor.summary()
+        json_response(self, 200, {
+            "status": "ok",
+            "isolated": True,
+            "plugins": [child["tool_id"] for child in children if child.get("online")],
+            "children": children,
+            "deferred": self._supervisor.deferred(),
+        })
+
+
+class SupervisorReloadHandler(tornado.web.RequestHandler):
+    def initialize(self, supervisor):
+        self._supervisor = supervisor
+
+    async def post(self):
+        expected = runtime_secret()
+        provided = self.request.headers.get("X-Mybooks-Runtime-Secret", "")
+        if not expected or not hmac.compare_digest(str(provided), str(expected)):
+            return json_response(self, 403, {"ok": False, "error": "forbidden"})
+        loop = tornado.ioloop.IOLoop.current()
+        reports = await loop.run_in_executor(None, self._supervisor.reload)
+        json_response(self, 200, {
+            "ok": True,
+            "plugins": reports,
+            "loaded": self._supervisor.summary(),
+        })
+
+
+class SupervisorToolHandler(tornado.web.RequestHandler):
+    def initialize(self, supervisor):
+        self._supervisor = supervisor
+
+    async def get(self, *_args):
+        await self._dispatch()
+
+    async def post(self, *_args):
+        await self._dispatch()
+
+    async def put(self, *_args):
+        await self._dispatch()
+
+    async def patch(self, *_args):
+        await self._dispatch()
+
+    async def delete(self, *_args):
+        await self._dispatch()
+
+    async def _dispatch(self):
+        from webserver.supervisor import CapacityError, ChildNotFound, ReloadingError
+
+        tool_id = self.path_args[0]
+        try:
+            response = await self._supervisor.proxy(tool_id, self.request)
+        except ChildNotFound as err:
+            return json_response(self, 404, {"err": "tool.disabled", "msg": str(err)})
+        except (CapacityError, ReloadingError) as err:
+            return json_response(self, 503, {"err": err.code, "msg": str(err)})
+        except Exception:
+            LOGGER.exception("[supervisor] proxy %s failed", tool_id)
+            return json_response(self, 502, {"err": "runtime.unavailable", "msg": "插件进程不可用"})
+
+        self.set_status(response.code)
+        for header in ("content-type", "content-disposition", "cache-control", "etag", "last-modified"):
+            value = response.headers.get(header)
+            if value:
+                self.set_header(header, value)
+        self.finish(response.body or b"")
+
+
 def make_app():
     return tornado.web.Application(
         [
             (r"/healthz", HealthHandler),
             (r"/internal/reload", ReloadHandler),
+            (r"/internal/busy", BusyHandler),
             (r"/tool/([a-z0-9_]+)/(.*)", ToolDispatchHandler),
         ],
         compress_response=True,
@@ -141,17 +245,43 @@ def make_app():
     )
 
 
+def make_supervisor_app(supervisor):
+    return tornado.web.Application(
+        [
+            (r"/healthz", SupervisorHealthHandler, {"supervisor": supervisor}),
+            (r"/internal/reload", SupervisorReloadHandler, {"supervisor": supervisor}),
+            (r"/tool/([a-z0-9_]+)/(.*)", SupervisorToolHandler, {"supervisor": supervisor}),
+        ],
+        compress_response=True,
+        max_body_size=config.MAX_BODY_BYTES,
+        autoreload=False,
+    )
+
+
 def main():
-    host.reload()
     port = config.RUNTIME_PORT
     address = os.environ.get("TOOLBOX_RUNTIME_HOST", "127.0.0.1")
-    app = make_app()
+    supervisor = None
+    if os.environ.get("TOOLBOX_ISOLATE_PLUGINS", "0") == "1":
+        # 容器内每插件子进程：supervisor 只代理，不在本进程加载插件代码。
+        from webserver.supervisor import PluginSupervisor
+
+        supervisor = PluginSupervisor()
+        supervisor.reload()
+        app = make_supervisor_app(supervisor)
+        LOGGER.info("Toolbox supervisor listening on %s:%d, children=%s", address, port,
+                    ", ".join(child["tool_id"] for child in supervisor.summary()) or "none")
+    else:
+        host.reload()
+        app = make_app()
+        LOGGER.info("Toolbox runtime listening on %s:%d, plugins=%s", address, port,
+                    ", ".join(item["tool_id"] for item in host.summary()) or "none")
     app.listen(port, address=address)
-    LOGGER.info("Toolbox runtime listening on %s:%d, plugins=%s", address, port,
-                ", ".join(item["tool_id"] for item in host.summary()) or "none")
 
     def stop(*_args):
         LOGGER.info("Toolbox runtime shutting down")
+        if supervisor is not None:
+            supervisor.shutdown()
         tornado.ioloop.IOLoop.current().stop()
 
     signal.signal(signal.SIGTERM, stop)

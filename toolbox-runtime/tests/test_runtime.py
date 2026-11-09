@@ -296,6 +296,164 @@ class NodeClientTests(unittest.TestCase):
         self.assertEqual(raised.exception.status, 403)
 
 
+_CHILD_SCRIPT = (
+    "import json, os\n"
+    "from http.server import BaseHTTPRequestHandler, HTTPServer\n"
+    "class H(BaseHTTPRequestHandler):\n"
+    "    def do_GET(self):\n"
+    "        if self.path.startswith('/internal/busy'):\n"
+    "            payload = {'busy': False}\n"
+    "        elif self.path.startswith('/healthz'):\n"
+    "            payload = {'status': 'ok'}\n"
+    "        else:\n"
+    "            payload = {'path': self.path}\n"
+    "        body = json.dumps(payload).encode('utf-8')\n"
+    "        self.send_response(200)\n"
+    "        self.send_header('Content-Type', 'application/json')\n"
+    "        self.send_header('Content-Length', str(len(body)))\n"
+    "        self.end_headers()\n"
+    "        self.wfile.write(body)\n"
+    "    def log_message(self, *args):\n"
+    "        return\n"
+    "HTTPServer(('127.0.0.1', int(os.environ['TOOLBOX_RUNTIME_PORT'])), H).serve_forever()\n"
+)
+
+
+class _SupervisorFixture(object):
+    """共享的 supervisor 测试夹具：独立 state 文件 + 假子进程命令。"""
+
+    def _setup_supervisor(self, name, tools):
+        from webserver import supervisor as module
+
+        self._module = module
+        self.root = Path(_TMP) / name
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.old_state = config.STATE_FILE
+        config.STATE_FILE = str(self.root / "installed.json")
+        Path(config.STATE_FILE).write_text(
+            json.dumps({"version": 1, "tools": tools}), encoding="utf-8")
+        from unittest import mock
+        self._env = mock.patch.dict(os.environ, {
+            "TOOLBOX_MAX_CHILDREN": "1",
+            "TOOLBOX_CHILD_IDLE_SECONDS": "0",
+        })
+        self._env.start()
+        self.supervisor = module.PluginSupervisor(child_command=[sys.executable, "-c", _CHILD_SCRIPT])
+        return self.supervisor
+
+    def _teardown_supervisor(self):
+        try:
+            self.supervisor.shutdown()
+        finally:
+            self._env.stop()
+            config.STATE_FILE = self.old_state
+            shutil.rmtree(self.root, ignore_errors=True)
+
+
+class SupervisorTests(_SupervisorFixture, unittest.TestCase):
+    TOOLS = [
+        {"tool_id": "alpha", "revision": "1.0", "enabled": True},
+        {"tool_id": "beta", "revision": "1.0", "enabled": True},
+        {"tool_id": "off", "revision": "1.0", "enabled": False},
+    ]
+
+    def setUp(self):
+        self._setup_supervisor("supervisor", list(self.TOOLS))
+
+    def tearDown(self):
+        self._teardown_supervisor()
+
+    def test_reload_respects_capacity_and_marks_deferred(self):
+        reports = self.supervisor.reload()
+        self.assertEqual([item["tool_id"] for item in reports], ["alpha", "beta"])
+        self.assertTrue(reports[0]["loaded"])
+        self.assertTrue(reports[1]["deferred"])
+        self.assertEqual(self.supervisor.deferred(), ["beta"])
+        children = self.supervisor.summary()
+        self.assertEqual([child["tool_id"] for child in children], ["alpha"])
+        self.assertTrue(children[0]["online"])
+
+    def test_proxy_lazily_starts_and_evicts_idle_child(self):
+        import asyncio
+        import tornado.httputil
+
+        self.supervisor.reload()  # 先占用唯一名额
+        request = types.SimpleNamespace(
+            method="GET", uri="/tool/beta/ping", headers=tornado.httputil.HTTPHeaders(), body=None)
+        response = asyncio.run(self.supervisor.proxy("beta", request))
+        self.assertEqual(response.code, 200)
+        self.assertEqual(json.loads(response.body.decode("utf-8"))["path"], "/tool/beta/ping")
+        self.assertEqual([child["tool_id"] for child in self.supervisor.summary()], ["beta"])
+
+    def test_unknown_and_disabled_tools_are_rejected(self):
+        import asyncio
+
+        for tool_id in ("off", "ghost"):
+            with self.assertRaises(self._module.ChildNotFound):
+                asyncio.run(self.supervisor.ensure_child(tool_id))
+
+
+class BusyHandlerTests(AsyncHTTPTestCase):
+    def get_app(self):
+        import runtime
+        return runtime.make_app()
+
+    def _busy(self):
+        headers = {"X-Mybooks-Runtime-Secret": "unit-test-secret"}
+        response = self.fetch("/internal/busy", headers=headers)
+        self.assertEqual(response.code, 200)
+        return json.loads(response.body)
+
+    def test_busy_requires_runtime_secret(self):
+        response = self.fetch("/internal/busy")
+        self.assertEqual(response.code, 403)
+
+    def test_busy_reflects_background_tasks(self):
+        from webserver.services.background_service import BackgroundService
+
+        self.assertFalse(self._busy()["busy"])
+        service = BackgroundService()
+        task = service.add_task("other", "busy-test")
+        self.assertTrue(self._busy()["busy"])
+        service.complete_task(task.id)
+        self.assertFalse(self._busy()["busy"])
+
+
+class SupervisorAppTests(_SupervisorFixture, AsyncHTTPTestCase):
+    def setUp(self):
+        self._setup_supervisor("supervisor-app", [
+            {"tool_id": "alpha", "revision": "1.0", "enabled": True},
+        ])
+        super(SupervisorAppTests, self).setUp()
+
+    def get_app(self):
+        import runtime
+        return runtime.make_supervisor_app(self.supervisor)
+
+    def tearDown(self):
+        super(SupervisorAppTests, self).tearDown()
+        self._teardown_supervisor()
+
+    def test_health_reload_and_proxy(self):
+        payload = json.loads(self.fetch("/healthz").body)
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(payload["isolated"])
+        self.assertEqual(payload["children"], [])
+
+        response = self.fetch("/internal/reload", method="POST", body="",
+                              headers={"X-Mybooks-Runtime-Secret": "unit-test-secret"})
+        self.assertEqual(response.code, 200)
+        self.assertTrue(json.loads(response.body)["ok"])
+
+        response = self.fetch("/tool/alpha/ping")
+        self.assertEqual(response.code, 200)
+        self.assertEqual(json.loads(response.body)["path"], "/tool/alpha/ping")
+
+        response = self.fetch("/tool/ghost/ping")
+        self.assertEqual(response.code, 404)
+        self.assertEqual(json.loads(response.body)["err"], "tool.disabled")
+
+
 class _PingHandler(BaseHandler):
     @js
     @is_admin

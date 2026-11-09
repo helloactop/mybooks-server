@@ -19,6 +19,18 @@ const REVIEWED = [
       '单 worker 串行下载；插件运行在共享 Python 进程内',
     ],
   },
+  {
+    tool_id: 'md_to_epub',
+    revision: '1.1.0',
+    sha256: '9b5dde1dc3c523605d36eb80a3b1a7dd4be3133ecb056f9a858dd538b5907483',
+    reviewed_at: '2026-11-09',
+    notes: '人工审查 1.1.0 包：无 subprocess/socket/eval/网络请求，仅本地 Markdown → EPUB 转换与入库',
+    limitations: [
+      '上传上限 100MB；只接受 Markdown 与图片资源',
+      '转换结果写入插件私有工作目录，入库沿用 Mybooks 格式/大小白名单',
+      '依赖 markdown-it-py / mdit-py-plugins / lxml，缺失时退化为内置解析',
+    ],
+  },
 ];
 
 // 兼容性审查矩阵（不是安全审查）：用于 UI 说明已实现哪些上游能力、

@@ -8,7 +8,8 @@
 Phase 1 完成：内核（Registry / Context / Lifecycle / EventBus / Kernel）+ 只读 Legacy Adapter + `GET /api/plugins`。
 Phase 2 完成：`metadata.search@1` 契约、豆瓣/OpenLibrary 双 Provider、服务编排；旧 `/api/metadata/search` 的 `results` 形状、缓存与错误码保持不变。
 Phase 3a 完成：权限模型 + 运行时身份绑定（Context/Kernel 已接入，默认拒绝）。
-未完成：Runtime Manager、内部 RPC 身份接入、隔离进程、`source.*` / `book.*` 能力、UI、SDK。
+Phase 3b 部分完成：Runtime Manager + Legacy 运行时只读状态 + `GET /api/plugins/runtime`。
+未完成：内部 RPC 身份接入、隔离进程、`source.*` / `book.*` 能力、UI、SDK。
 旧 Toolbox 路由/Bridge/安装器/Worker/迁移**零改动**。
 
 ## 已完成
@@ -22,13 +23,15 @@ Phase 3a 完成：权限模型 + 运行时身份绑定（Context/Kernel 已接�
 | Kernel | [kernel.js](../../src/core/plugins/kernel.js) | 组合 Registry/EventBus/GrantStore、define/start/stop/remove/dispose | 13.1、架构 5.1 | `b39d1507` |
 | Permissions | [permissions.js](../../src/core/plugins/permissions.js) | 权限目录、scope、默认拒绝、授予/撤销 | 6.3、6.7 | `7994523e` |
 | Identity | [identity.js](../../src/core/plugins/identity.js) | 不透明令牌 → 实例身份；不信任自报 ID | 6.2 | `7994523e` |
+| Runtime Manager | [runtime-manager.js](../../src/core/plugins/runtime-manager.js) | 适配器注册/健康/超时；未实现操作显式 unsupported | 6.1、架构 7.1 | `e610ef75` |
+| Runtime 状态 API | [legacy-runtime.js](../../src/core/plugins/adapters/legacy-runtime.js) + [routes.plugins.js](../../src/http/routes.plugins.js) | `GET /api/plugins/runtime` 只读健康状态 | 6.1、11.3 | `e610ef75` |
 | Legacy Adapter | [legacy-toolbox.js](../../src/core/plugins/adapters/legacy-toolbox.js) | 只读 `toolbox_tools` → 统一描述符；状态映射；脱敏 | 5.2、13.1 | `b459632a` |
 | Plugins API | [routes.plugins.js](../../src/http/routes.plugins.js) | `GET /api/plugins`，会话后挂载，只读 | 9.1、13.1 | `b459632a` |
 | Metadata 契约 | [metadata-search.js](../../src/core/plugins/capabilities/metadata-search.js) | 输入/输出校验、上限、稳定错误码、候选规范化 | 4.1–4.3 | `26fd251d` |
 | Providers | [douban.js](../../src/core/plugins/providers/douban.js) · [openlibrary.js](../../src/core/plugins/providers/openlibrary.js) | 双来源统一候选，可显式切换 | 4.2、17.3 | `26fd251d` |
 | Metadata 服务 | [services/metadata.js](../../src/core/plugins/services/metadata.js) + [plugin-services.js](../../src/http/plugin-services.js) | 注册/优先级选择/超时/错误映射；旧路由复用 | 3.6、4.1、4.4 | `26fd251d` |
 
-测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`，共 93 个。
+测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`，共 104 个。
 
 ## 目标文件结构（架构 第十五章）
 
@@ -46,10 +49,10 @@ src/
 │   │   │   ├── metadata.js ✅
 │   │   │   └── sources.js ○  books.js ○  reader.js ○  device.js ○   Phase 3+
 │   │   ├── adapters/
-│   │   │   ├── legacy-toolbox.js ✅
+│   │   │   ├── legacy-toolbox.js ✅  legacy-runtime.js ✅（只读健康）
 │   │   │   └── python.js ○  javascript.js ○  http.js ○  calibre.js ○  legado.js ○  Phase 3/6
 │   │   ├── permissions.js ✅  identity.js ✅（本次新增）
-│   │   ├── runtime-manager.js ○  capability-router.js ○             Phase 3b
+│   │   ├── runtime-manager.js ✅  capability-router.js ○             Phase 3b
 │   │   ├── jobs.js ○  artifacts.js ○                                Phase 3+
 │   │   ├── manifest.js ○  dependencies.js ○  manager.js ○           Phase 5
 │   │   └── ui-registry.js ○                                         Phase 4
@@ -85,22 +88,23 @@ plugin-sdk/ ○                                                        Phase 5
 
 Phase 2 门禁（规范 13 章 / 架构 17.3）：契约、内置 Provider、旧 API 兼容 ✅；真实豆瓣/OpenLibrary 联网未验收（测试用 fixture）。
 
-Phase 3a：权限与身份绑定内核 ✅；内部 RPC 仍用共享 `internal-secret`，尚未按令牌校验，隔离未做。
+Phase 3a：权限与身份绑定内核 ✅。
+Phase 3b：Runtime Manager 与只读状态 ✅（仅 health；Legacy 的 invoke/cancel 显式 unsupported）。内部 RPC 仍用共享 `internal-secret`，隔离未做。
 
 ## 测试基线
 
 ```bash
-npm test                                  # 702/702
+npm test                                  # 713/713
 npm run check:public                      # 通过
 cd toolbox-runtime
 "C:/Users/11731/.venvs/mybooks-toolbox/Scripts/python.exe" -m unittest discover -s tests -v
                                           # 9/9（本机 Python 3.15；镜像 3.12 未跑）
 ```
 
-## 下一步：Phase 3b 运行时与内部身份接入
+## 下一步：Phase 3c 内部身份与隔离
 
-1. Runtime Manager：统一 `prepare/start/invoke/health/cancel/stop`，先接 Legacy Python Worker；先提供只读运行时状态。
-2. 内部接口身份：用 `IdentityRegistry` 令牌取代“信任请求体 `tool_id`”，需协议版本/兼容策略（规范 6.2）。
+1. 内部接口身份：用 `IdentityRegistry` 令牌取代“信任请求体 `tool_id`”，先定协议版本/兼容策略（规范 6.2）。
+2. Runtime Manager 的 invoke/cancel/start/stop：等能力映射与隔离运行时确定后再接，禁止用 Legacy 假实现。
 3. 隔离：独立进程/容器、网络出口与资源限制；共享 Worker 仅保留给已审查插件（规范 6.4）。
 4. 测试：越权拒绝、插件失联撤能力、超时/取消、并发与资源上限。
 
@@ -131,7 +135,8 @@ kernel.grants.grant('inst.alpha', 'metadata.read', 'book:*');
 const identities = new IdentityRegistry();
 identities.bind({ token, instanceId: 'inst.alpha', runtimeId: 'legacy-toolbox' });
 
-// 元数据服务（旧路由已接入）
-const { service } = require('./src/http/plugin-services');
-await service.search({ query: '三体' }, { providerId: 'openlibrary' });
+// 元数据与运行时服务（旧路由已接入）
+const { metadata, runtimes } = require('./src/http/plugin-services');
+await metadata.service.search({ query: '三体' }, { providerId: 'openlibrary' });
+await runtimes.healthAll();               // GET /api/plugins/runtime
 ```

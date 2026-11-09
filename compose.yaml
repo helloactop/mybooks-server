@@ -10,6 +10,8 @@ services:
       MYBOOKS_TOOLBOX_RUNTIME_URL: "http://toolbox-runtime:8765"
       MYBOOKS_TOOLBOX_ALLOW_UNREVIEWED: "${MYBOOKS_TOOLBOX_ALLOW_UNREVIEWED:-false}"
       MYBOOKS_TOOLBOX_ALLOW_PRIVATE_STORE: "${MYBOOKS_TOOLBOX_ALLOW_PRIVATE_STORE:-false}"
+      # 启用 TOOLBOX_ISOLATE_PLUGINS=1 时建议设为 false：子进程必须带每插件身份令牌。
+      MYBOOKS_TOOLBOX_LEGACY_COMPAT: "${MYBOOKS_TOOLBOX_LEGACY_COMPAT:-true}"
       # 仅供自动化/临时验收；正常部署请用 npm run setup 创建设备会话。
       ADMIN_TOKEN: "${ADMIN_TOKEN:-}"
     volumes:

@@ -259,6 +259,25 @@ class NodeClientTests(unittest.TestCase):
         self.assertIsNone(_header(headers, "x-mybooks-plugin-id"))
         self.assertIsNone(_header(headers, "x-mybooks-plugin-token"))
 
+    def test_identity_env_token_is_scoped_to_plugin(self):
+        """supervisor 注入的 MYBOOKS_PLUGIN_TOKEN 只对本子进程 tool_id 生效。"""
+        from unittest import mock
+        from webserver.toolbox import identity
+
+        token = "c" * 48
+        with mock.patch.dict(os.environ, {
+            "MYBOOKS_PLUGIN_ID": "other_tool", "MYBOOKS_PLUGIN_TOKEN": token,
+        }):
+            identity.reset_cache()
+            self.assertEqual(identity._env_token("fixture"), "")
+            self.assertEqual(identity._env_token("other_tool"), token)
+
+        with mock.patch.dict(os.environ, {
+            "MYBOOKS_PLUGIN_ID": "fixture", "MYBOOKS_PLUGIN_TOKEN": token,
+        }):
+            identity.reset_cache()
+            self.assertEqual(identity.token_for("fixture"), token)
+
     def test_identity_structure_invalid_fails_loud(self):
         """JSON 可解析但结构错误（tokens 为 null / 版本错误 / 非法令牌）必须显式失败。"""
         from webserver.toolbox import identity
@@ -305,6 +324,16 @@ _CHILD_SCRIPT = (
     "            payload = {'busy': False}\n"
     "        elif self.path.startswith('/healthz'):\n"
     "            payload = {'status': 'ok'}\n"
+    "        elif self.path.startswith('/echo'):\n"
+    "            payload = {\n"
+    "                'path': self.path,\n"
+    "                'header_secret': self.headers.get('X-Mybooks-Runtime-Secret', ''),\n"
+    "                'env_secret': os.environ.get('MYBOOKS_TOOLBOX_RUNTIME_SECRET', ''),\n"
+    "                'internal_env': os.environ.get('MYBOOKS_TOOLBOX_INTERNAL_SECRET', ''),\n"
+    "                'plugin_id': os.environ.get('MYBOOKS_PLUGIN_ID', ''),\n"
+    "                'has_plugin_token': bool(os.environ.get('MYBOOKS_PLUGIN_TOKEN')),\n"
+    "                'plugin_token': os.environ.get('MYBOOKS_PLUGIN_TOKEN', ''),\n"
+    "            }\n"
     "        else:\n"
     "            payload = {'path': self.path}\n"
     "        body = json.dumps(payload).encode('utf-8')\n"
@@ -430,6 +459,46 @@ class SupervisorTests(_SupervisorFixture, unittest.TestCase):
             child = asyncio.run(self.supervisor.ensure_child("beta"))
         self.assertTrue(child.alive())
         self.assertNotIn("alpha", self.supervisor._children)
+
+    def test_child_secret_and_token_are_isolated(self):
+        import asyncio
+        import tornado.httputil
+        from unittest import mock
+
+        token = "a" * 48
+        identities = Path(config.STATE_DIR) / "identities.json"
+        identities.parent.mkdir(parents=True, exist_ok=True)
+        identities.write_text(json.dumps(
+            {"version": 1, "tokens": {"alpha": token, "beta": "b" * 48}}), encoding="utf-8")
+        try:
+            with mock.patch.dict(os.environ, {
+                "MYBOOKS_TOOLBOX_INTERNAL_SECRET": "host-internal",
+                "MYBOOKS_TOOLBOX_RUNTIME_SECRET": "host-runtime",
+            }):
+                self.supervisor.reload()
+                child = self.supervisor._children["alpha"]
+                request = types.SimpleNamespace(
+                    method="GET", uri="/echo",
+                    headers=tornado.httputil.HTTPHeaders(
+                        {"X-Mybooks-Runtime-Secret": "host-runtime"}),
+                    body=None,
+                )
+                response = asyncio.run(self.supervisor.proxy("alpha", request))
+            payload = json.loads(response.body.decode("utf-8"))
+            self.assertNotEqual(child.secret, "host-runtime")
+            self.assertEqual(payload["header_secret"], child.secret)
+            self.assertEqual(payload["env_secret"], child.secret)
+            self.assertEqual(payload["internal_env"], "")
+            self.assertEqual(payload["plugin_id"], "alpha")
+            self.assertEqual(payload["plugin_token"], token)
+        finally:
+            identities.unlink(missing_ok=True)
+
+    def test_children_get_distinct_secrets(self):
+        self.supervisor.max_children = 2
+        self.supervisor.reload()
+        children = [self.supervisor._children["alpha"], self.supervisor._children["beta"]]
+        self.assertNotEqual(children[0].secret, children[1].secret)
 
     def test_concurrent_ensure_starts_only_one_child(self):
         import asyncio

@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import socket
 import subprocess
 import sys
@@ -55,11 +56,14 @@ def _free_port():
 
 
 class ChildProcess(object):
-    def __init__(self, tool_id, revision, port, process):
+    def __init__(self, tool_id, revision, port, process, secret):
         self.tool_id = tool_id
         self.revision = revision
         self.port = port
         self.process = process
+        # 每个子进程独立的 runtime-secret：插件进程无法拿它调用 supervisor 的
+        # /internal/reload|start|stop（这些接口只认宿主密钥）。
+        self.secret = secret
         self.started_at = time.time()
         self.last_used = time.time()
         self.inflight = 0
@@ -179,14 +183,23 @@ class PluginSupervisor(object):
 
     def _spawn_sync(self, tool_id, item):
         port = _free_port()
+        secret = secrets.token_hex(24)
+        token = self._plugin_token(tool_id)
         env = os.environ.copy()
+        # 子进程不需要宿主 internal-secret；NodeClient 会从共享卷读取，但不会再从环境
+        # 变量里直接拿到（同一 UID 下文件仍可读，见 isolation-design.md）。
+        env.pop("MYBOOKS_TOOLBOX_INTERNAL_SECRET", None)
         env.update({
             "TOOLBOX_ONLY_TOOL": tool_id,
             "TOOLBOX_RUNTIME_PORT": str(port),
             "TOOLBOX_RUNTIME_HOST": "127.0.0.1",
             "TOOLBOX_ISOLATE_PLUGINS": "0",
+            "MYBOOKS_TOOLBOX_RUNTIME_SECRET": secret,
+            "MYBOOKS_PLUGIN_ID": tool_id,
             "PYTHONUNBUFFERED": "1",
         })
+        if token:
+            env["MYBOOKS_PLUGIN_TOKEN"] = token
         command = list(self._child_command)
         if os.name == "posix" and self.memory_mb > 0:
             # 用 shell 设置 rlimit，避免在有多线程的 supervisor 里用 preexec_fn。
@@ -209,7 +222,7 @@ class PluginSupervisor(object):
         threading.Thread(target=self._pump, args=(process.stdout, tool_id, "stdout"), daemon=True).start()
         threading.Thread(target=self._pump, args=(process.stderr, tool_id, "stderr"), daemon=True).start()
 
-        child = ChildProcess(tool_id, str(item.get("revision") or ""), port, process)
+        child = ChildProcess(tool_id, str(item.get("revision") or ""), port, process, secret)
         deadline = time.time() + self.start_timeout
         while time.time() < deadline:
             if process.poll() is not None:
@@ -222,6 +235,24 @@ class PluginSupervisor(object):
                 time.sleep(0.1)
         self._terminate(process)
         raise SupervisorError("插件进程启动超时")
+
+    def _plugin_token(self, tool_id):
+        """从 state/identities.json 取该插件自己的令牌；不存在或结构异常时返回空。"""
+        path = os.path.join(config.STATE_DIR, "identities.json")
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                document = json.load(handle)
+        except (OSError, ValueError):
+            return ""
+        if not isinstance(document, dict) or document.get("version") != 1:
+            return ""
+        tokens = document.get("tokens")
+        if not isinstance(tokens, dict):
+            return ""
+        token = tokens.get(tool_id)
+        if not isinstance(token, str) or not re.match(r"^[a-f0-9]{48}$", token):
+            return ""
+        return token
 
     def _pump(self, stream, tool_id, channel):
         try:
@@ -326,7 +357,7 @@ class PluginSupervisor(object):
         try:
             response = await client.fetch(tornado.httpclient.HTTPRequest(
                 "http://127.0.0.1:%d/internal/busy" % child.port,
-                headers={"X-Mybooks-Runtime-Secret": runtime_secret()},
+                headers={"X-Mybooks-Runtime-Secret": child.secret},
                 request_timeout=2,
             ), raise_error=False)
             if response.code != 200:
@@ -350,6 +381,8 @@ class PluginSupervisor(object):
                     key: value for key, value in request.headers.items()
                     if key.lower() not in ("host", "content-length", "connection")
                 }
+                # 主机只把“该子进程自己的”密钥转发进去；Node 发来的宿主密钥不会进入插件。
+                headers["X-Mybooks-Runtime-Secret"] = child.secret
                 body = request.body if request.method not in ("GET", "HEAD") else None
                 client = tornado.httpclient.AsyncHTTPClient()
                 response = await client.fetch(tornado.httpclient.HTTPRequest(

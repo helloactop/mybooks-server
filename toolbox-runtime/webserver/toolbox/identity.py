@@ -101,7 +101,19 @@ def _clear_cache():
         _cache["present"] = False
 
 
+def _env_token(tool_id):
+    """supervisor 按子进程注入的令牌：只接受与本进程 tool_id 匹配的值。"""
+    plugin_id = os.environ.get("MYBOOKS_PLUGIN_ID", "").strip()
+    token = os.environ.get("MYBOOKS_PLUGIN_TOKEN", "").strip()
+    if plugin_id == str(tool_id or "") and TOKEN_RE.match(token):
+        return token
+    return ""
+
+
 def token_for(tool_id):
+    env_token = _env_token(tool_id)
+    if env_token:
+        return env_token
     tokens, present = _load()
     token = tokens.get(str(tool_id or ""), "")
     if token:

@@ -14,7 +14,7 @@ const { ToolboxError, timingSafeEqualString } = require('../core/toolbox/securit
 const { internalSecret } = require('../core/toolbox/runtime');
 const { verifyIdentity } = require('../core/toolbox/identities');
 const { pluginGrantsFor, policyState } = require('../core/toolbox/plugin-grants');
-const { resolveAccess, requireAccess } = require('../core/toolbox/access-policy');
+const { resolveAccess, requireAccess, pluginAuthOnlyEnabled } = require('../core/toolbox/access-policy');
 const { importToolFile, getBookMetadata } = require('../core/toolbox/import');
 const library = require('../core/toolbox/library');
 
@@ -31,30 +31,47 @@ function readRequestIdentity(req) {
 }
 
 function requireInternal(req, res, next) {
-  const provided = req.get('x-toolbox-internal-secret') || '';
-  if (!timingSafeEqualString(provided, internalSecret())) {
-    return res.status(403).json({ error: '禁止访问', code: 'INTERNAL_FORBIDDEN' });
-  }
   try {
     // 策略整体损坏且无快照时，连无身份的 Legacy 路径也必须拒绝（fail-closed 前置）。
     const state = policyState();
     if (state === 'broken') {
       throw new ToolboxError('POLICY_BROKEN', '权限策略损坏，内部敏感操作已拒绝', 403);
     }
-    req.pluginIdentity = readRequestIdentity(req);
-    const policy = req.pluginIdentity ? pluginGrantsFor(req.pluginIdentity.toolId) : null;
+
+    // 身份头一旦出现就必须有效：错误令牌不会退回共享密钥或匿名 Legacy。
+    const identity = readRequestIdentity(req);
+    if (!identity) {
+      if (pluginAuthOnlyEnabled()) {
+        throw new ToolboxError('PLUGIN_IDENTITY_REQUIRED', '隔离模式必须携带有效的插件身份令牌', 403);
+      }
+      const provided = req.get('x-toolbox-internal-secret') || '';
+      if (!timingSafeEqualString(provided, internalSecret())) {
+        throw new ToolboxError('INTERNAL_FORBIDDEN', '禁止访问', 403);
+      }
+    }
+    // 有效身份可省略共享密钥；但身份只解决“是谁”，权限与资源范围仍由下面判定。
+    req.pluginIdentity = identity;
+    const policy = identity ? pluginGrantsFor(identity.toolId) : null;
     // 身份请求统一检查安装/启用状态：停用的插件不能通过内部接口继续读改书库。
     // 未安装的插件（未来新 Runtime）交给 grants 判定，不在这里拦。
-    const tool = req.pluginIdentity ? toolboxRepo.getTool(db, req.pluginIdentity.toolId) : null;
+    const tool = identity ? toolboxRepo.getTool(db, identity.toolId) : null;
     if (tool && !tool.enabled) {
       throw new ToolboxError('TOOL_DISABLED', '插件未启用', 403);
     }
     req.pluginAccess = resolveAccess({
-      identity: req.pluginIdentity,
+      identity,
       policy,
       toolInstalled: !!tool,
       policyState: state,
     });
+    // 隔离部署不允许“已安装但未配置 grants”的插件沿用 legacy-verified 宽松路径。
+    if (identity && pluginAuthOnlyEnabled() && !req.pluginAccess.strict) {
+      throw new ToolboxError(
+        'PLUGIN_GRANTS_REQUIRED',
+        '隔离模式下插件必须在 grants.json 中显式配置授权',
+        403,
+      );
+    }
   } catch (err) {
     return fail(res, err);
   }

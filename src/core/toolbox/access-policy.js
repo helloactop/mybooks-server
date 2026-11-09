@@ -22,6 +22,7 @@ const { allowUnreviewed } = require('./allowlist');
 const { GrantStore } = require('../plugins/permissions');
 
 const ENV_LEGACY_COMPAT = 'MYBOOKS_TOOLBOX_LEGACY_COMPAT';
+const ENV_PLUGIN_AUTH_ONLY = 'MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY';
 const DENY_ALL = new GrantStore();
 
 function legacyCompatEnabled() {
@@ -30,14 +31,27 @@ function legacyCompatEnabled() {
   return raw === 'true' || raw === '1';
 }
 
+// 隔离部署开关：内部接口只认每插件令牌，不再接受共享 internal-secret。
+// 与 Python supervisor 使用同一个变量名，默认关闭以保留旧 Worker 兼容。
+function pluginAuthOnlyEnabled() {
+  const raw = process.env[ENV_PLUGIN_AUTH_ONLY];
+  return raw === 'true' || raw === '1';
+}
+
 function modeNotice() {
+  const parts = [];
   if (!legacyCompatEnabled()) {
-    return 'Legacy 兼容模式已关闭：内部敏感调用必须携带有效插件身份令牌';
+    parts.push('Legacy 兼容模式已关闭：内部敏感调用必须携带有效插件身份令牌');
+  } else {
+    const extra = allowUnreviewed()
+      ? '；且 MYBOOKS_TOOLBOX_ALLOW_UNREVIEWED=true：未审查插件与宿主同信任域，绝不能用于不可信插件'
+      : '';
+    parts.push(`Legacy 兼容模式已启用：未带插件身份的内部调用仍可用共享密钥访问（不是强隔离）${extra}`);
   }
-  const extra = allowUnreviewed()
-    ? '；且 MYBOOKS_TOOLBOX_ALLOW_UNREVIEWED=true：未审查插件与宿主同信任域，绝不能用于不可信插件'
-    : '';
-  return `Legacy 兼容模式已启用：未带插件身份的内部调用仍可用共享密钥访问（不是强隔离）${extra}`;
+  if (pluginAuthOnlyEnabled()) {
+    parts.push('内部接口已切换为每插件令牌认证（MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY）：共享 internal-secret 与未配置授权的插件一律拒绝');
+  }
+  return parts.join('｜');
 }
 
 function resolveAccess({ identity, policy, toolInstalled, policyState } = {}) {
@@ -80,7 +94,9 @@ function requireAccess(access, toolId, permission, resource) {
 
 module.exports = {
   ENV_LEGACY_COMPAT,
+  ENV_PLUGIN_AUTH_ONLY,
   legacyCompatEnabled,
+  pluginAuthOnlyEnabled,
   modeNotice,
   resolveAccess,
   requireAccess,

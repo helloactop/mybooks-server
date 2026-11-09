@@ -24,9 +24,10 @@ function createDoubanProvider({ search, lookupIsbn } = {}) {
     version: VERSION,
     priority: 100,
     metadata: { displayName: '豆瓣' },
-    invoke: async (input) => {
+    invoke: async (input, context = {}) => {
+      const options = { signal: context.signal };
       if (input.isbn) {
-        const result = await lookupIsbn(input.isbn);
+        const result = await lookupIsbn(input.isbn, options);
         if (!result || result.status === 'not_found') return { candidates: [] };
         if (result.status === 'blocked') throw blockedError();
         if (result.status === 'found' && result.book) {
@@ -35,7 +36,7 @@ function createDoubanProvider({ search, lookupIsbn } = {}) {
         return { candidates: [] };
       }
 
-      const books = await search(input.query);
+      const books = await search(input.query, options);
       return { candidates: books.slice(0, input.limit).map((book) => candidateFromBook(book, 'douban')) };
     },
   };

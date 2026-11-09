@@ -45,6 +45,15 @@ const UA_LIST = [
 const randomUA = () => UA_LIST[Math.floor(Math.random() * UA_LIST.length)];
 const randomDelay = () => new Promise((r) => setTimeout(r, Math.floor(Math.random() * 100)));
 
+// 调用方取消信号 + 本层超时合并：任一触发都能真正中断 fetch。
+function requestSignal(options, ms) {
+  const outer = options && options.signal;
+  if (!outer) return AbortSignal.timeout(ms);
+  return typeof AbortSignal.any === 'function'
+    ? AbortSignal.any([outer, AbortSignal.timeout(ms)])
+    : outer;
+}
+
 function loadCookie() {
   if (process.env.DOUBAN_COOKIE) return String(process.env.DOUBAN_COOKIE).trim();
   try {
@@ -53,7 +62,7 @@ function loadCookie() {
   return '';
 }
 
-async function doubanFetch(url) {
+async function doubanFetch(url, options = {}) {
   await randomDelay();
   const headers = {
     'User-Agent': randomUA(),
@@ -62,7 +71,7 @@ async function doubanFetch(url) {
   };
   const cookie = loadCookie();
   if (cookie) headers['Cookie'] = cookie;
-  return fetch(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), redirect: 'follow' });
+  return fetch(url, { headers, signal: requestSignal(options, FETCH_TIMEOUT_MS), redirect: 'follow' });
 }
 
 // 检测豆瓣反爬页(与插件同款)
@@ -75,8 +84,8 @@ const upstreamError = (status) => Object.assign(new Error(`豆瓣搜索失败(HT
 
 /* ---------- 豆瓣:书名 / 任意词搜索(两步:候选页 + 并发详情) ---------- */
 // 返回 mapToBook 形状的数组;上游异常抛错(见文件头约定)
-async function searchDouban(q) {
-  const sResp = await doubanFetch(DOUBAN_SEARCH_URL + encodeURIComponent(q));
+async function searchDouban(q, options = {}) {
+  const sResp = await doubanFetch(DOUBAN_SEARCH_URL + encodeURIComponent(q), options);
   if (!sResp.ok) throw upstreamError(sResp.status);
   const sHtml = await sResp.text();
   if (isProhibited(sHtml)) throw blockedError();
@@ -88,7 +97,7 @@ async function searchDouban(q) {
   const details = await Promise.all(
     candidates.slice(0, 5).map(async (c) => {
       try {
-        const bResp = await doubanFetch(DOUBAN_BOOK_URL + c.doubanId + '/');
+        const bResp = await doubanFetch(DOUBAN_BOOK_URL + c.doubanId + '/', options);
         if (!bResp.ok) return null;
         const html = await bResp.text();
         if (isProhibited(html)) return null;
@@ -104,8 +113,8 @@ async function searchDouban(q) {
 // book.douban.com/isbn/<isbn>/ 会 302 到对应详情页,一步拿到 subject id。
 // 找不到时豆瓣跳到搜索/错误页 —— 此时回退到搜索流程,取 ISBN 精确匹配的候选
 // (不匹配的候选宁可判 not_found,也不自动建档 —— 元数据张冠李戴比缺数据更糟)
-async function lookupIsbnDouban(isbn) {
-  const resp = await doubanFetch(DOUBAN_ISBN_URL + encodeURIComponent(isbn) + '/');
+async function lookupIsbnDouban(isbn, options = {}) {
+  const resp = await doubanFetch(DOUBAN_ISBN_URL + encodeURIComponent(isbn) + '/', options);
   if (!resp.ok) return { status: 'not_found' };
   const html = await resp.text();
   if (isProhibited(html)) return { status: 'blocked' };
@@ -116,7 +125,7 @@ async function lookupIsbnDouban(isbn) {
     if (meta) return { status: 'found', book: mapToBook(meta), source: 'douban' };
   }
 
-  const results = await searchDouban(isbn);
+  const results = await searchDouban(isbn, options);
   const exact = results.find((r) => isbnKey(r.isbn) === isbnKey(isbn));
   if (exact) return { status: 'found', book: exact, source: 'douban' };
   // 详情页没给出 ISBN 的候选(老条目偶见):仅当唯一候选时接受
@@ -128,10 +137,10 @@ async function lookupIsbnDouban(isbn) {
 
 /* ---------- Open Library(免费,无需 key;豆瓣未命中时的兜底) ---------- */
 
-async function openlibraryJson(url) {
+async function openlibraryJson(url, options = {}) {
   const resp = await fetch(url, {
     headers: { 'User-Agent': randomUA(), Accept: 'application/json' },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    signal: requestSignal(options, FETCH_TIMEOUT_MS),
     redirect: 'follow',
   });
   if (resp.status === 404) return null;
@@ -139,8 +148,8 @@ async function openlibraryJson(url) {
   return resp.json();
 }
 
-async function lookupIsbnOpenLibrary(isbn) {
-  const edition = await openlibraryJson(`${OPENLIBRARY_URL}/isbn/${encodeURIComponent(isbn)}.json`);
+async function lookupIsbnOpenLibrary(isbn, options = {}) {
+  const edition = await openlibraryJson(`${OPENLIBRARY_URL}/isbn/${encodeURIComponent(isbn)}.json`, options);
   if (!edition) return { status: 'not_found' };
 
   // 作者名要逐个再取(author 的 name 不在 edition 里);
@@ -148,7 +157,7 @@ async function lookupIsbnOpenLibrary(isbn) {
   const authorNames = [];
   for (const key of authorKeysFromEdition(edition)) {
     try {
-      const a = await openlibraryJson(OPENLIBRARY_URL + key + '.json');
+      const a = await openlibraryJson(OPENLIBRARY_URL + key + '.json', options);
       if (a && a.name) authorNames.push(String(a.name));
     } catch { /* 忽略单个作者失败 */ }
   }
@@ -157,7 +166,7 @@ async function lookupIsbnOpenLibrary(isbn) {
   let work = null;
   const wkey = edition.works && edition.works[0] && edition.works[0].key;
   if (wkey) {
-    try { work = await openlibraryJson(OPENLIBRARY_URL + wkey + '.json'); } catch { work = null; }
+    try { work = await openlibraryJson(OPENLIBRARY_URL + wkey + '.json', options); } catch { work = null; }
   }
 
   const book = mapOpenLibraryBook({ isbn, edition, authorNames, work });
@@ -167,11 +176,12 @@ async function lookupIsbnOpenLibrary(isbn) {
 
 /* ---------- Open Library:关键词搜索（metadata.search 的第二 Provider） ---------- */
 // search.json 的 docs[] 只带摘要级字段；详情（作者/简介）留给 future 需要时再取。
-async function searchOpenLibrary(q, limit = 10) {
+async function searchOpenLibrary(q, limit = 10, options = {}) {
   const capped = Math.max(1, Math.min(Number(limit) || 10, 20));
   const fields = 'key,title,author_name,first_publish_year,publisher,isbn,cover_i';
   const data = await openlibraryJson(
     `${OPENLIBRARY_SEARCH_URL}?q=${encodeURIComponent(q)}&limit=${capped}&fields=${fields}`,
+    options,
   );
   const docs = data && Array.isArray(data.docs) ? data.docs : [];
   return docs.map(mapOpenLibrarySearchDoc).filter((book) => book.title);

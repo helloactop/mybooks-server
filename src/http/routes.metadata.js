@@ -12,6 +12,7 @@ const express = require('express');
 const { loadCookie } = require('./metadata-sources');
 const { metadata } = require('./plugin-services');
 const { LruCache } = require('./lru');
+const { checkIsbn, normalizeIsbn } = require('../core/isbn');
 
 const router = express.Router();
 
@@ -44,14 +45,33 @@ function toLegacyResult(candidate) {
   return result;
 }
 
+// 判断输入是否“看起来像 ISBN”：只有纯数字（允许分隔符/结尾 X）才进入 ISBN 分支，
+// 再用项目原有 checkIsbn 做校验位校验；非法 ISBN 明确拒绝，不当普通书名继续搜。
+function looksLikeIsbn(raw) {
+  const compact = String(raw || '').replace(/[- ]/g, '');
+  return /^[0-9]{9,13}[xX]?$/.test(compact);
+}
+
 // 搜索处理函数:单独抽出(不写成 router.get 的内联回调),
 // 便于测试直接以假 req/res + 桩 fetch 驱动,验证缓存 TTL 行为。
 async function handleMetadataSearch(req, res) {
   const q = String(req.query.q || '').trim();
   if (!q) return res.status(400).json({ error: '缺少搜索词(书名或 ISBN)', code: 'VALIDATION' });
 
-  const isIsbn = /^\d{9,13}[xX]?$/.test(q.replace(/[- ]/g, ''));
-  const searchKey = isIsbn ? `isbn:${q}` : q;
+  let searchInput;
+  let searchKey;
+  if (looksLikeIsbn(q)) {
+    const isbn = checkIsbn(q);
+    if (!isbn) {
+      return res.status(400).json({ error: 'ISBN 校验失败,请检查号码', code: 'VALIDATION' });
+    }
+    const normalized = normalizeIsbn(isbn);
+    searchInput = { isbn: normalized };
+    searchKey = `isbn:${normalized}`;
+  } else {
+    searchInput = { query: q };
+    searchKey = q;
+  }
 
   const hit = searchCache.get(searchKey);
   if (hit) {
@@ -64,13 +84,21 @@ async function handleMetadataSearch(req, res) {
     searchCache.delete(searchKey); // 过期条目主动清掉,别占着容量位
   }
 
+  // 客户端断开时把取消信号传到 CapabilityRouter → Provider → fetch。
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const onClose = () => { if (controller) controller.abort(); };
+  if (controller && typeof req.on === 'function') req.on('close', onClose);
+
   try {
-    const { candidates } = await metadata.service.search({ query: q });
+    const { candidates } = await metadata.service.search(searchInput, controller ? { signal: controller.signal } : {});
+    if (controller && controller.signal.aborted) return; // 客户端已离开，不再写响应/缓存
     const results = candidates.map(toLegacyResult);
-    searchCache.set(searchKey, { t: Date.now(), results });
+    // 空结果不写缓存：避免“暂时没命中”被固定成 10 分钟的假空结果。
+    if (results.length) searchCache.set(searchKey, { t: Date.now(), results });
     res.set('X-Cache', 'miss');
     res.json({ results, cookieless: !loadCookie() });
   } catch (err) {
+    if (err.code === 'CAPABILITY_ABORTED') return; // 调用方取消，无需错误响应
     if (err.code === 'VALIDATION' || err.code === 'INVALID_INPUT') {
       return res.status(400).json({ error: err.message, code: 'VALIDATION' });
     }
@@ -88,6 +116,8 @@ async function handleMetadataSearch(req, res) {
     }
     console.error('[metadata] search failed:', err.message);
     res.status(500).json({ error: '豆瓣查询失败', code: 'INTERNAL' });
+  } finally {
+    if (controller && typeof req.removeListener === 'function') req.removeListener('close', onClose);
   }
 }
 

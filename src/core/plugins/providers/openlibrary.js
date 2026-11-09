@@ -19,14 +19,15 @@ function createOpenLibraryProvider({ search, lookupIsbn } = {}) {
     version: VERSION,
     priority: 50,
     metadata: { displayName: 'Open Library' },
-    invoke: async (input) => {
+    invoke: async (input, context = {}) => {
+      const options = { signal: context.signal };
       if (input.isbn) {
-        const result = await lookupIsbn(input.isbn);
+        const result = await lookupIsbn(input.isbn, options);
         if (!result || result.status !== 'found' || !result.book) return { candidates: [] };
         return { candidates: [candidateFromBook(result.book, 'openlibrary')] };
       }
 
-      const books = await search(input.query, input.limit);
+      const books = await search(input.query, input.limit, options);
       return { candidates: books.slice(0, input.limit).map((book) => candidateFromBook(book, 'openlibrary')) };
     },
   };

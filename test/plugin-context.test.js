@@ -141,7 +141,7 @@ test('permissions 绑定实例身份，默认拒绝', () => {
   assert.equal(ctx.permissions.can('metadata.read', 'shelf:1'), false);
   assert.equal(ctx.permissions.require('metadata.read', 'book:1'), true);
   assert.throws(
-    () => ctx.permissions.require('books.write'),
+    () => ctx.permissions.require('books.write', 'book:1'),
     (err) => err.code === 'PERMISSION_DENIED' && err.status === 403,
   );
 
@@ -174,4 +174,39 @@ test('logger 带实例前缀，且不把日志异常抛给插件', () => {
   assert.doesNotThrow(() => ctx.logger.debug('fallback missing'));
   assert.doesNotThrow(() => ctx.logger.warn('still works'));
   assert.equal(Object.isFrozen(ctx.logger), true);
+});
+
+test('Context 不暴露 Registry / EventBus / GrantStore 等宿主可变对象', () => {
+  const registry = new ServiceRegistry();
+  const events = fakeEvents();
+  const grants = new GrantStore();
+  const ctx = new PluginContext({ instanceId: 'inst.alpha', registry, events, grants });
+
+  assert.deepEqual(Reflect.ownKeys(ctx).sort(), ['logger', 'permissions', 'plugin']);
+  assert.equal(Object.isFrozen(ctx), true);
+  for (const name of ['_registry', '_events', '_grants', '_disposers', 'registry', 'events', 'grants']) {
+    assert.equal(name in ctx, false, `Context 不应暴露 ${name}`);
+  }
+  // 公开权限 API 只有查询/校验，没有 grant/revoke。
+  assert.deepEqual(Object.keys(ctx.permissions).sort(), ['can', 'require']);
+  assert.equal(typeof ctx.permissions.grant, 'undefined');
+  assert.equal(typeof ctx.permissions.revoke, 'undefined');
+});
+
+test('Context 不能通过公开 API 修改授权表，也不能冒用其他实例', () => {
+  const registry = new ServiceRegistry();
+  const grants = new GrantStore();
+  const ctx = new PluginContext({ instanceId: 'inst.alpha', registry, grants });
+
+  grants.grant('inst.alpha', 'metadata.read', 'book:1');
+  assert.equal(ctx.permissions.can('metadata.read', 'book:1'), true);
+  assert.throws(
+    () => ctx.register(provider({ instanceId: 'inst.beta' })),
+    (err) => err.code === 'CONTEXT_IDENTITY_MISMATCH' && err.status === 403,
+  );
+
+  // 即使插件自己构造一个 GrantStore，也不能影响宿主的授权表。
+  const forged = new GrantStore();
+  forged.grant('inst.alpha', 'books.delete', '*');
+  assert.equal(grants.has('inst.alpha', 'books.delete', 'book:1'), false);
 });

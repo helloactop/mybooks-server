@@ -1,6 +1,6 @@
 # 插件平台进度（AI 接手）
 
-> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，HEAD `96e077e7`）
+> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，HEAD `cdd410e6`）
 > 文档：[架构](mybooks-plugin-architecture.md) · [规范](mybooks-plugin-development-standards.md)
 
 ## 现状
@@ -14,6 +14,7 @@ Phase 3d 部分完成：内部书库/导入/导出/任务按 `state/grants.json`
 Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出校验），元数据服务已迁移。
 2026-11-09 审查修复完成：CI 图标校验、Legacy/Strict 访问模式、grants fail-closed、Context 私有封装、宿主组合根、ISBN 检索、Provider 兜底、AbortSignal 取消传播。
 2026-11-09 第二轮修复：损坏策略前置阻断无身份 Legacy 路径、停用插件统一拒绝、错误类型授权不再 fail-open、Python 身份文件仅对 FileNotFoundError 降级。
+2026-11-09 第三轮修复：Python 身份文件严格校验 `version`/`tokens` 结构，文件存在但缺令牌不再降级；Legacy 共享密钥路径与 Docker 共享卷的隔离缺口写为 Phase 3f 强制验收项。
 未完成：隔离进程/容器、Runtime Manager 的真实 invoke/cancel、`source.*` / `book.*` 能力、UI、SDK。
 旧 Toolbox 路由/Bridge/安装包/迁移保持兼容；仅新增可选身份令牌与策略文件。
 
@@ -30,7 +31,7 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 | Identity | [identity.js](../../src/core/plugins/identity.js) | 不透明令牌 → 实例身份；不信任自报 ID | 6.2 | `7994523e` |
 | Runtime Manager | [runtime-manager.js](../../src/core/plugins/runtime-manager.js) | 适配器注册/健康/超时；未实现操作显式 unsupported | 6.1、架构 7.1 | `e610ef75` |
 | Runtime 状态 API | [legacy-runtime.js](../../src/core/plugins/adapters/legacy-runtime.js) + [routes.plugins.js](../../src/http/routes.plugins.js) | `GET /api/plugins/runtime` 只读健康状态 | 6.1、11.3 | `e610ef75` |
-| Internal Identity | [identities.js](../../src/core/toolbox/identities.js) + [identity.py](../../toolbox-runtime/webserver/toolbox/identity.py) | 每工具令牌；import/export/tasks 校验归属；旧 Worker 兼容 | 6.2 | `2aeb2467` |
+| Internal Identity | [identities.js](../../src/core/toolbox/identities.js) + [identity.py](../../toolbox-runtime/webserver/toolbox/identity.py) | 每工具令牌；import/export/tasks 校验归属；旧 Worker 兼容；Python 严格校验文件结构与缺令牌 | 6.2 | `2aeb2467` |
 | Scoped Grants | [plugin-grants.js](../../src/core/toolbox/plugin-grants.js) + [routes.toolbox.internal.js](../../src/http/routes.toolbox.internal.js) | `grants.json` 配置即严格；books/files/metadata/jobs 按 scope 校验 | 6.3、13.3 | `10ec6016` |
 | Legacy Adapter | [legacy-toolbox.js](../../src/core/plugins/adapters/legacy-toolbox.js) | 只读 `toolbox_tools` → 统一描述符；状态映射；脱敏 | 5.2、13.1 | `b459632a` |
 | Plugins API | [routes.plugins.js](../../src/http/routes.plugins.js) | `GET /api/plugins`，会话后挂载，只读 | 9.1、13.1 | `b459632a` |
@@ -119,7 +120,7 @@ Phase 3e：Capability Router 统一权限/Provider/超时/输出校验 ✅；元
 
 | 调用方 | 判定 | 权限行为 |
 | --- | --- | --- |
-| 旧 Worker，无身份头，`MYBOOKS_TOOLBOX_LEGACY_COMPAT` 默认 true | `legacy-compat` | 保留旧行为；启动日志明确提示“不是强隔离” |
+| 旧 Worker，无身份头，`MYBOOKS_TOOLBOX_LEGACY_COMPAT` 默认 true | `legacy-compat` | 保留旧行为；**不受单插件 `grants.json` 约束**；启动日志明确提示“不是强隔离” |
 | 身份令牌有效 + 工具已在 `grants.json` 配置 | `strict` | 按权限 + 资源 scope 校验，缺失 403 |
 | 身份令牌有效 + 已安装旧插件但无策略 | `legacy-verified` | 兼容旧插件，但归属已校验 |
 | 身份令牌有效 + 未知/未安装的新运行时 | `strict` | 默认拒绝 |
@@ -130,6 +131,13 @@ Phase 3e：Capability Router 统一权限/Provider/超时/输出校验 ✅；元
 `state/grants.last-good.json` 可信快照）/ `broken`（无任何可信策略，全部拒绝）。
 删除 `grants.json` 但保留快照时不会回到宽松模式；恢复 Legacy 兼容需同时移除快照。
 `broken` 在读取身份之前判定，因此关闭 `MYBOOKS_TOOLBOX_LEGACY_COMPAT` 与否都无法绕过。
+
+**已知边界（Phase 3f 强制验收项）**：`grants.json` 正常时，无身份头的 Legacy 请求仍进入
+`legacy-compat`，不受单插件授权约束。该路径要求持有 `internal-secret`，不是匿名外部入口；
+但旧 Python Worker 内的插件代码与共享密钥处于同一信任域，因此：
+- 仅允许**已审查的可信旧插件**使用该路径；
+- **不可信插件不得运行在共享 Worker 中，也不得走 `legacy-compat`**；
+- 新 Runtime 必须使用独立凭据（每进程/每容器）并默认拒绝，不能靠继续叠加权限判断掩盖共享执行环境问题。
 
 授权值必须是数组：合法 JSON 里写成字符串/`null` 等错误类型时，该插件仍进入严格模式
 （`configured=true`、空授权 → 全部 403），不会退回宽松兼容。
@@ -160,6 +168,12 @@ Phase 3e：Capability Router 统一权限/Provider/超时/输出校验 ✅；元
   旧协议，`PermissionError` 等一律显式失败。需让两个容器使用同一 UID/GID，
   或改用受控凭据交付，不允许 `chmod 777`。
 - 严格部署可设 `MYBOOKS_TOOLBOX_LEGACY_COMPAT=false`：无身份头的内部请求一律 403。
+- Python 侧身份文件校验：只有确认文件不存在才按旧协议处理；文件存在但不可读、JSON 结构错误
+  （`version` 非 1、`tokens` 非对象、条目非法）或**缺少该工具令牌**，一律抛
+  `PLUGIN_IDENTITY_UNAVAILABLE`，不再发出无身份请求。
+- `compose.yaml` 的 `read_only: true` 只保护容器根文件系统，**不会**把 `/toolbox` 命名卷变成只读；
+  Node 与 Python Worker 同为 UID/GID 1000，旧 Worker 内的插件代码仍可读写该卷中的身份/策略文件。
+  因此当前部署**不能**视为跨插件隔离；隔离需分离宿主凭据与插件数据目录，并改用独立进程/容器 + 受限 RPC。
 
 ## 测试基线
 
@@ -169,7 +183,7 @@ npm run check:public                      # 通过
 npm run check:icons                       # 通过（lucide-static 1.70.0，23 个图标）
 cd toolbox-runtime
 "C:/Users/11731/.venvs/mybooks-toolbox/Scripts/python.exe" -m unittest discover -s tests -v
-                                          # 12/12（本机 Python 3.15；镜像 3.12 未跑）
+                                          # 14/14（本机 Python 3.15；镜像 3.12 未跑）
 ```
 
 `npm ci --ignore-scripts` 未在本机重复执行（依赖与 lockfile 未变）；CI 会执行。
@@ -179,7 +193,9 @@ cd toolbox-runtime
 1. 选隔离模型并写 ADR：容器内每插件子进程 vs 每插件容器；明确资源、网络、文件边界。
 2. Runtime Manager 的 invoke/cancel/start/stop 接隔离运行时；共享 Worker 仅限已审查插件（规范 6.4）。
 3. 隔离后把身份令牌升级为进程级凭据（当前共享进程内仍可被恶意插件绕过）。
-4. 测试：越权拒绝、插件失联撤能力、超时/取消、资源上限。
+4. **强制验收**：不可信插件不得使用 `legacy-compat` 无身份路径；宿主凭据与插件数据目录分离；
+   Docker 共享卷不再对插件进程可写；越权、缺令牌、身份文件损坏均显式 403 且无降级路径。
+5. 测试：越权拒绝、插件失联撤能力、超时/取消、资源上限。
 
 对应规范 3.6、6.1–6.6；架构 7、13、17.4。
 

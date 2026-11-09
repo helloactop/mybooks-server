@@ -18,14 +18,19 @@ function provider(overrides = {}) {
 
 function fakeEvents() {
   const listeners = new Map();
+  const options = new Map();
   return {
-    on(event, handler) {
+    on(event, handler, opts) {
       if (!listeners.has(event)) listeners.set(event, new Set());
       listeners.get(event).add(handler);
+      options.set(event, opts);
       return () => listeners.get(event).delete(handler);
     },
     count(event) {
       return listeners.has(event) ? listeners.get(event).size : 0;
+    },
+    lastOptions(event) {
+      return options.get(event);
     },
   };
 }
@@ -64,6 +69,7 @@ test('on 把监听器登记到 Event Bus，dispose 时注销', () => {
   ctx.on('book.imported', () => {});
   ctx.on('book.imported', () => {});
   assert.equal(events.count('book.imported'), 2);
+  assert.deepEqual(events.lastOptions('book.imported'), { instanceId: 'inst.alpha' });
 
   ctx.dispose();
   assert.equal(events.count('book.imported'), 0);

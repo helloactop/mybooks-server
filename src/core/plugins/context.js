@@ -94,7 +94,7 @@ class PluginContext {
     if (typeof handler !== 'function') {
       throw new ContextError('CONTEXT_INVALID_INPUT', '事件处理器必须是函数');
     }
-    const dispose = this._events.on(event, handler);
+    const dispose = this._events.on(event, handler, { instanceId: this.plugin.instanceId });
     return this.track(dispose);
   }
 

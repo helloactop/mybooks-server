@@ -39,7 +39,7 @@ function makeLogger(instanceId, sink) {
 }
 
 class PluginContext {
-  constructor({ instanceId, providerId, pluginId, registry, events, logger } = {}) {
+  constructor({ instanceId, providerId, pluginId, registry, events, grants, logger } = {}) {
     if (typeof instanceId !== 'string' || !PLUGIN_ID_RE.test(instanceId)) {
       throw new ContextError('CONTEXT_INVALID_INPUT', 'instanceId 不合法');
     }
@@ -58,8 +58,20 @@ class PluginContext {
     this.logger = makeLogger(instanceId, logger);
     this._registry = registry || null;
     this._events = events || null;
+    this._grants = grants || null;
     this._disposers = [];
     this._disposed = false;
+    this.permissions = Object.freeze({
+      can: (permission, resource) => {
+        if (!this._grants || this._disposed) return false;
+        return this._grants.has(this.plugin.instanceId, permission, resource);
+      },
+      require: (permission, resource) => {
+        this.assertActive();
+        if (!this._grants) throw new ContextError('CONTEXT_UNAVAILABLE', '上下文未绑定 Permission Store');
+        return this._grants.require(this.plugin.instanceId, permission, resource);
+      },
+    });
   }
 
   get disposed() {

@@ -2,6 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { ServiceRegistry } = require('../src/core/plugins/registry');
+const { GrantStore } = require('../src/core/plugins/permissions');
 const { PluginContext } = require('../src/core/plugins/context');
 
 function provider(overrides = {}) {
@@ -129,6 +130,36 @@ test('on 校验事件名与处理器', () => {
   assert.throws(() => ctx.on('', () => {}), (err) => err.code === 'CONTEXT_INVALID_INPUT');
   assert.throws(() => ctx.on('book.imported', null), (err) => err.code === 'CONTEXT_INVALID_INPUT');
   assert.throws(() => ctx.on('x'.repeat(129), () => {}), (err) => err.code === 'CONTEXT_INVALID_INPUT');
+});
+
+test('permissions 绑定实例身份，默认拒绝', () => {
+  const grants = new GrantStore();
+  grants.grant('inst.alpha', 'metadata.read', 'book:*');
+  const ctx = new PluginContext({ instanceId: 'inst.alpha', grants });
+
+  assert.equal(ctx.permissions.can('metadata.read', 'book:1'), true);
+  assert.equal(ctx.permissions.can('metadata.read', 'shelf:1'), false);
+  assert.equal(ctx.permissions.require('metadata.read', 'book:1'), true);
+  assert.throws(
+    () => ctx.permissions.require('books.write'),
+    (err) => err.code === 'PERMISSION_DENIED' && err.status === 403,
+  );
+
+  ctx.dispose();
+  assert.equal(ctx.permissions.can('metadata.read', 'book:1'), false);
+  assert.throws(
+    () => ctx.permissions.require('metadata.read', 'book:1'),
+    (err) => err.code === 'CONTEXT_DISPOSED',
+  );
+});
+
+test('未绑定权限存储时 require 报 CONTEXT_UNAVAILABLE', () => {
+  const ctx = new PluginContext({ instanceId: 'inst.alpha' });
+  assert.equal(ctx.permissions.can('metadata.read'), false);
+  assert.throws(
+    () => ctx.permissions.require('metadata.read'),
+    (err) => err.code === 'CONTEXT_UNAVAILABLE',
+  );
 });
 
 test('logger 带实例前缀，且不把日志异常抛给插件', () => {

@@ -50,6 +50,7 @@ class PluginLifecycle {
     deactivate,
     registry,
     events,
+    grants,
     logger,
   } = {}) {
     if (typeof instanceId !== 'string' || !PLUGIN_ID_RE.test(instanceId)) {
@@ -75,6 +76,7 @@ class PluginLifecycle {
     this._deactivate = deactivate || null;
     this._registry = registry || null;
     this._events = events || null;
+    this._grants = grants || null;
     this._logger = logger || console;
     this._state = 'installed';
     this._lastError = '';
@@ -161,6 +163,7 @@ class PluginLifecycle {
         pluginId: this._pluginId,
         registry: this._registry,
         events: this._events,
+        grants: this._grants,
         logger: this._logger,
       });
       this._context = ctx;

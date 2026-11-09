@@ -7,6 +7,7 @@
 
 const { ServiceRegistry } = require('./registry');
 const { EventBus } = require('./events');
+const { GrantStore } = require('./permissions');
 const { PluginLifecycle } = require('./lifecycle');
 
 class KernelError extends Error {
@@ -19,10 +20,11 @@ class KernelError extends Error {
 }
 
 class PluginKernel {
-  constructor({ registry, events, logger } = {}) {
+  constructor({ registry, events, grants, logger } = {}) {
     this.logger = logger || console;
     this.registry = registry || new ServiceRegistry();
     this.events = events || new EventBus({ logger: this.logger });
+    this.grants = grants || new GrantStore();
     this._plugins = new Map();
     this._order = [];
     this._disposed = false;
@@ -34,6 +36,7 @@ class PluginKernel {
       ...spec,
       registry: this.registry,
       events: this.events,
+      grants: this.grants,
       logger: this.logger,
     });
     if (this._plugins.has(lifecycle.instanceId)) {
@@ -97,6 +100,7 @@ class PluginKernel {
     this._plugins.clear();
     this._order = [];
     this.events.disposeAll();
+    this.grants.dispose();
     return errors;
   }
 

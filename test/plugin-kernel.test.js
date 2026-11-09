@@ -180,3 +180,25 @@ test('define 透传 Lifecycle 配置校验', () => {
     (err) => err.code === 'LIFECYCLE_INVALID_CONFIG',
   );
 });
+
+test('Kernel 的 GrantStore 传入 Context，未授权时启动失败', async () => {
+  const kernel = kernelWith();
+  kernel.define({
+    instanceId: 'inst.alpha',
+    providerId: 'douban',
+    activate: async (ctx) => {
+      ctx.permissions.require('metadata.read');
+      ctx.register(provider());
+    },
+  });
+
+  await assert.rejects(
+    () => kernel.start('inst.alpha'),
+    (err) => err.code === 'PERMISSION_DENIED' && err.status === 403,
+  );
+  assert.equal(kernel.get('inst.alpha').state, 'error');
+
+  kernel.grants.grant('inst.alpha', 'metadata.read');
+  await kernel.start('inst.alpha');
+  assert.equal(kernel.get('inst.alpha').state, 'active');
+});

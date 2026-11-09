@@ -12,7 +12,8 @@ Phase 3b 部分完成：Runtime Manager + Legacy 运行时只读状态 + `GET /a
 Phase 3c 部分完成：内部接口按工具令牌校验归属（旧 Worker 不带令牌仍兼容）。
 Phase 3d 部分完成：内部书库/导入/导出/任务按 `state/grants.json` 裁剪；未配置的工具保持兼容。
 Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出校验），元数据服务已迁移。
-未完成：隔离进程/容器、Runtime Manager 的 invoke/cancel、`source.*` / `book.*` 能力、UI、SDK。
+审查修复轮次完成：Legacy/Strict 访问模式、grants fail-closed、Context 私有封装、宿主组合根、ISBN 检索、Provider 兜底、AbortSignal 取消传播。
+未完成：隔离进程/容器、Runtime Manager 的真实 invoke/cancel、`source.*` / `book.*` 能力、UI、SDK。
 旧 Toolbox 路由/Bridge/安装包/迁移保持兼容；仅新增可选身份令牌与策略文件。
 
 ## 已完成
@@ -35,9 +36,17 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 | Metadata 契约 | [metadata-search.js](../../src/core/plugins/capabilities/metadata-search.js) | 输入/输出校验、上限、稳定错误码、候选规范化 | 4.1–4.3 | `26fd251d` |
 | Providers | [douban.js](../../src/core/plugins/providers/douban.js) · [openlibrary.js](../../src/core/plugins/providers/openlibrary.js) | 双来源统一候选，可显式切换 | 4.2、17.3 | `26fd251d` |
 | Metadata 服务 | [services/metadata.js](../../src/core/plugins/services/metadata.js) + [plugin-services.js](../../src/http/plugin-services.js) | 注册/优先级选择/超时/错误映射；旧路由复用 | 3.6、4.1、4.4 | `26fd251d` |
-| Capability Router | [capability-router.js](../../src/core/plugins/capability-router.js) | 权限门禁 → Provider 选择 → 超时 → 输入/输出校验 | 3.6、4.1、13.3 | `9b70229b` |
+| Capability Router | [capability-router.js](../../src/core/plugins/capability-router.js) | 权限门禁 → Provider 选择 → 超时/取消 → 输入/输出校验 | 3.6、4.1、13.3 | `9b70229b` |
+| Access Policy | [access-policy.js](../../src/core/toolbox/access-policy.js) | 区分 Legacy 兼容 / Strict 插件；未知新插件默认拒绝 | 4.2、6.2、6.4 | 本次 |
+| Grants Fail-Closed | [plugin-grants.js](../../src/core/toolbox/plugin-grants.js) | `absent/ok/last-good/broken` 四态；损坏不扩权、重启仍安全 | 5.2、5.3 | 本次 |
+| Scope Enforcement | [permissions.js](../../src/core/plugins/permissions.js) | `can()` 展示 vs `require()` 授权；资源型权限必须带 resource | 5.3 | 本次 |
+| Context Encapsulation | [context.js](../../src/core/plugins/context.js) | WeakMap 私有状态；不暴露 Registry/EventBus/GrantStore | 6.2、6.3 | 本次 |
+| Host Composition | [plugin-services.js](../../src/http/plugin-services.js) | 单一 Kernel/Registry/RuntimeManager；内置 Provider 统一注册 | 7.1–7.4 | 本次 |
+| Metadata Fallback | [services/metadata.js](../../src/core/plugins/services/metadata.js) | Provider 优先级 + 可配置兜底；显式来源不兜底 | 8.3、8.4 | 本次 |
+| Cancellation | [capability-router.js](../../src/core/plugins/capability-router.js) | AbortSignal 传达到 Provider/fetch；超时与取消语义分离 | 9.2–9.4 | 本次 |
 
-测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`，共 121 个。
+测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`、
+`test/toolbox-access-policy.test.js`、`test/toolbox-grants.test.js`。整套 `npm test` 760/760。
 
 ## 目标文件结构（架构 第十五章）
 
@@ -101,15 +110,60 @@ Phase 3c：内部 import/export/tasks 按工具令牌校验归属 ✅；无令�
 Phase 3d：书库/元数据/文件/任务接口按 `grants.json` 裁剪 ✅；未配置工具保持兼容。
 Phase 3e：Capability Router 统一权限/Provider/超时/输出校验 ✅；元数据服务已迁移。隔离未做。
 
+## 内部接口信任模型（本次新增）
+
+两种执行模式在 `src/core/toolbox/access-policy.js` 中显式判定：
+
+| 调用方 | 判定 | 权限行为 |
+| --- | --- | --- |
+| 旧 Worker，无身份头，`MYBOOKS_TOOLBOX_LEGACY_COMPAT` 默认 true | `legacy-compat` | 保留旧行为；启动日志明确提示“不是强隔离” |
+| 身份令牌有效 + 工具已在 `grants.json` 配置 | `strict` | 按权限 + 资源 scope 校验，缺失 403 |
+| 身份令牌有效 + 已安装旧插件但无策略 | `legacy-verified` | 兼容旧插件，但归属已校验 |
+| 身份令牌有效 + 未知/未安装的新运行时 | `strict` | 默认拒绝 |
+| `grants.json` 损坏且无快照 | `strict` | 全局 fail-closed |
+
+`grants.json` 状态：`absent`（无策略文件）/ `ok` / `last-good`（文件损坏但沿用
+`state/grants.last-good.json` 可信快照）/ `broken`（无任何可信策略，全部拒绝）。
+删除 `grants.json` 但保留快照时不会回到宽松模式；恢复 Legacy 兼容需同时移除快照。
+
+权限判定拆分为：`has()` 只用于展示性查询（可省略 resource）；`require()` 用于敏感操作，
+`books.read/write/delete`、`files.read/write`、`metadata.write` 必须显式给出
+`book:<id>` / `library:all` / `artifact:*` 等资源，省略即 403。
+
+`PluginContext` 使用 WeakMap 保存 Registry/EventBus/GrantStore，实例被冻结，
+公开面只有 `plugin / logger / permissions / register / on / track / dispose`。
+
+## 元数据与取消
+
+- `/api/metadata/search` 先用 `checkIsbn` 校验：合法 ISBN（含 ISBN-10/分隔符）传 `{ isbn }`，
+  非法 ISBN 返回 400 `VALIDATION`，普通书名才传 `{ query }`。
+- Provider 兜底模式：`MYBOOKS_METADATA_FALLBACK=off|no-results|recoverable`，默认 `no-results`；
+  显式 `providerId` 永不兜底；`BLOCKED` 不兜底，旧错误码保持。
+- 空结果不进入 10 分钟缓存；缓存 key 对 ISBN 使用归一化后的 ISBN-13。
+- `CapabilityRouter.invoke({ signal })` 把 AbortSignal 传到 Provider 与 `fetch`；
+  超时为 `UPSTREAM_TIMEOUT`（504），调用方取消为 `CAPABILITY_ABORTED`（499）。
+
+## Docker / 非 Docker 身份文件权限
+
+- 主镜像 `USER node`（uid/gid 1000），`toolbox-runtime` 镜像显式 `USER 1000:1000`，
+  同一 `toolbox-data` 卷下 `state/identities.json`（0600）双方可读写。
+- 宿主 UID 不同（NAS bind mount）时，Python 读取身份文件失败会抛
+  `PLUGIN_IDENTITY_UNAVAILABLE`，拒绝静默降级；需让两个容器使用同一 UID/GID，
+  或改用受控凭据交付，不允许 `chmod 777`。
+- 严格部署可设 `MYBOOKS_TOOLBOX_LEGACY_COMPAT=false`：无身份头的内部请求一律 403。
+
 ## 测试基线
 
 ```bash
-npm test                                  # 730/730
+npm test                                  # 760/760（2026-11-09）
 npm run check:public                      # 通过
+npm run check:icons                       # 通过（lucide-static 1.70.0，23 个图标）
 cd toolbox-runtime
 "C:/Users/11731/.venvs/mybooks-toolbox/Scripts/python.exe" -m unittest discover -s tests -v
-                                          # 10/10（本机 Python 3.15；镜像 3.12 未跑）
+                                          # 11/11（本机 Python 3.15；镜像 3.12 未跑）
 ```
+
+`npm ci --ignore-scripts` 未在本机重复执行（依赖与 lockfile 未变）；CI 会执行。
 
 ## 下一步：Phase 3f 隔离运行时（需先定部署模型）
 
@@ -125,8 +179,11 @@ cd toolbox-runtime
 - 不改 `/api/toolbox/*`、`/get/tool/*`、Bridge、安装包与已有迁移；Python Worker 仅新增可选身份头。
 - 旧 `/api/metadata/search` 的 `results` 形状、缓存与错误码保持；Provider 只返回候选，不写库。
 - `server.js` 只允许加初始化/路由挂载，不改既有注册顺序。
-- 内部接口保持 `internal-secret` + 可选令牌双路径；无身份头旧 Worker 必须继续可用。
+- 内部接口保持 `internal-secret` + 可选令牌双路径；无身份头旧 Worker 必须继续可用，
+  但仅在 `MYBOOKS_TOOLBOX_LEGACY_COMPAT`（默认 true）显式开启时。
 - 权限策略：`state/grants.json`；某工具一旦配置数组即严格模式，未配置保持旧行为。格式 `["books.read:library:*", "files.read:book:*", "jobs.create"]`。
+- 策略损坏/不可读时用 `state/grants.last-good.json` 快照；无快照则全局拒绝，禁止扩权。
+- 未知/未安装的新运行时没有策略时默认拒绝；不得为它提供无身份兼容回退。
 - 共享 Python 进程仍不是强隔离；身份令牌与 grants 只做归属/授权校验，不得宣称已实现跨插件隔离。
 - 新代码 CommonJS，不新增依赖。
 - 不把未运行/未验证写成“已通过”。
@@ -147,12 +204,16 @@ kernel.grants.grant('inst.alpha', 'metadata.read', 'book:*');
 const identities = new IdentityRegistry();
 identities.bind({ token, instanceId: 'inst.alpha', runtimeId: 'legacy-toolbox' });
 
-// 通用能力调用（传 principal 时先校验权限）
+// 通用能力调用（传 principal 时先校验权限；signal 会传到 Provider）
 const router = new CapabilityRouter({ registry, grants });
-await router.invoke({ capability, version, input, contract, principal });
+const controller = new AbortController();
+await router.invoke({ capability, version, input, contract, principal, signal: controller.signal });
 
 // 元数据与运行时服务（旧路由已接入）
-const { metadata, runtimes } = require('./src/http/plugin-services');
+const { metadata, runtimes, kernel, start } = require('./src/http/plugin-services');
+await start();                             // 激活内置 Provider（幂等）
 await metadata.service.search({ query: '三体' }, { providerId: 'openlibrary' });
+await metadata.service.search({ isbn: '9787020002207' }); // 默认按优先级 + 兜底
 await runtimes.healthAll();               // GET /api/plugins/runtime
+await kernel.stop('builtin.douban');      // 停用后能力立即不可调用
 ```

@@ -1,6 +1,7 @@
 # 插件平台进度（AI 接手）
 
-> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，HEAD `7f825df6`）
+> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，代码 HEAD `7f825df6`）
+> 最近提交：`cdd410e6` 身份文件校验 · `013300f0` 第三轮文档 · `7f825df6` 隔离子进程 · `fefba089` 隔离文档
 > 文档：[架构](mybooks-plugin-architecture.md) · [规范](mybooks-plugin-development-standards.md)
 
 ## 现状

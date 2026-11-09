@@ -1,6 +1,6 @@
 # 插件平台进度（AI 接手）
 
-> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，代码 HEAD `238aad33`）
+> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，Phase 3g 提交见 `git log --oneline -5`）
 > 最近提交：Phase 3g 分阶段提交（`git log --oneline` 查看）· `238aad33` 子进程凭据隔离 · `a45c920d` 任务取消 + 崩溃管道回收 · `d9052f0e` Phase 3f 收尾
 > 文档：[架构](mybooks-plugin-architecture.md) · [规范](mybooks-plugin-development-standards.md) · [隔离设计](isolation-design.md)
 

@@ -2,6 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { ServiceRegistry } = require('../src/core/plugins/registry');
+const { GrantStore } = require('../src/core/plugins/permissions');
 const { MetadataSearchService } = require('../src/core/plugins/services/metadata');
 const {
   CAPABILITY,
@@ -173,4 +174,21 @@ test('Provider 输出结构不合法时拒绝', async () => {
       (err) => err.code === 'PROVIDER_INVALID_OUTPUT',
     );
   }
+});
+
+test('传入 principal 时按 metadata.read 授权', async () => {
+  const grants = new GrantStore();
+  const { service } = makeService([
+    { providerId: 'one', invoke: async () => ({ candidates: [candidate()] }) },
+  ], { grants });
+
+  await assert.rejects(
+    () => service.search({ query: 'x' }, { principal: 'inst.plugin' }),
+    (err) => err.code === 'PERMISSION_DENIED' && err.status === 403,
+  );
+
+  grants.grant('inst.plugin', 'metadata.read');
+  const out = await service.search({ query: 'x' }, { principal: 'inst.plugin' });
+  assert.equal(out.candidates.length, 1);
+  assert.equal(out.providerId, 'one');
 });

@@ -186,3 +186,68 @@ test('principal 缺少 instanceId 时拒绝', async () => {
     (err) => err.code === 'CAPABILITY_INVALID_PRINCIPAL' && err.status === 400,
   );
 });
+
+test('AbortSignal：已取消的调用不会触发 Provider', async () => {
+  let invoked = 0;
+  const { router } = makeRouter([
+    { providerId: 'one', invoke: async () => { invoked += 1; return {}; } },
+  ]);
+  const controller = new AbortController();
+  controller.abort();
+
+  await assert.rejects(
+    () => router.invoke({
+      capability: 'metadata.search', version: '1', input: {}, contract: contract(),
+      signal: controller.signal,
+    }),
+    (err) => err.code === 'CAPABILITY_ABORTED' && err.status === 499,
+  );
+  assert.equal(invoked, 0, '取消后不能再调用 Provider');
+});
+
+test('AbortSignal 传达到 Provider，并能中断在途调用', async () => {
+  const signals = [];
+  const { router } = makeRouter([
+    {
+      providerId: 'slow',
+      invoke: (input, context) => {
+        signals.push(context.signal);
+        return new Promise((resolve, reject) => {
+          context.signal.addEventListener('abort', () => {
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+          }, { once: true });
+        });
+      },
+    },
+  ]);
+
+  const controller = new AbortController();
+  const pending = router.invoke({
+    capability: 'metadata.search', version: '1', input: {}, contract: contract(),
+    signal: controller.signal,
+  });
+  setTimeout(() => controller.abort(), 10);
+
+  await assert.rejects(
+    () => pending,
+    (err) => err.code === 'CAPABILITY_ABORTED' && err.status === 499,
+  );
+  assert.equal(signals.length, 1, 'Provider 必须收到信号');
+  assert.equal(signals[0].aborted, true);
+});
+
+test('非法 signal 与非法 timeoutMs 显式拒绝', async () => {
+  const { router } = makeRouter([{ providerId: 'one' }]);
+  await assert.rejects(
+    () => router.invoke({
+      capability: 'metadata.search', version: '1', input: {}, contract: contract(), signal: {},
+    }),
+    (err) => err.code === 'CAPABILITY_INVALID_SIGNAL' && err.status === 400,
+  );
+  await assert.rejects(
+    () => router.invoke({
+      capability: 'metadata.search', version: '1', input: {}, contract: contract(), timeoutMs: -1,
+    }),
+    (err) => err.code === 'CAPABILITY_INVALID_TIMEOUT' && err.status === 400,
+  );
+});

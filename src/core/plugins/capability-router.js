@@ -20,14 +20,54 @@ class CapabilityError extends Error {
   }
 }
 
-function withTimeout(promise, ms, message) {
-  if (!ms) return promise;
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new CapabilityError('UPSTREAM_TIMEOUT', message, 504)), ms);
+function abortedError(message) {
+  return new CapabilityError('CAPABILITY_ABORTED', message || '调用已取消', 499);
+}
+
+/**
+ * 用 AbortController 统一“超时”和“外部取消”：
+ *   · 超时 → abort(reason=UPSTREAM_TIMEOUT)；
+ *   · 调用方 signal → abort(reason=CAPABILITY_ABORTED)。
+ * Provider 收到同一个 signal 就能真正停止底层请求；不支持的旧 Provider
+ * 仍会被这里的竞速包装返回，但语义上只承诺“不再等待”，不承诺已停止。
+ */
+async function runWithSignal(invokeFn, { timeoutMs, signal, timeoutMessage }) {
+  if (signal && signal.aborted) throw abortedError('调用方已取消');
+
+  const controller = new AbortController();
+  let timer = null;
+  const onOuterAbort = () => controller.abort(abortedError('调用方已取消'));
+
+  if (signal) {
+    signal.addEventListener('abort', onOuterAbort, { once: true });
+  }
+  if (timeoutMs) {
+    timer = setTimeout(() => controller.abort(
+      new CapabilityError('UPSTREAM_TIMEOUT', timeoutMessage || '调用超时', 504),
+    ), timeoutMs);
     if (typeof timer.unref === 'function') timer.unref();
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
+
+  try {
+    const promise = Promise.resolve().then(() => invokeFn(controller.signal));
+    // Provider 不支持 signal 时，仍由 abort 事件让等待方立即返回。
+    const abortPromise = new Promise((_, reject) => {
+      const onAbort = () => reject(controller.signal.reason || abortedError());
+      if (controller.signal.aborted) onAbort();
+      else controller.signal.addEventListener('abort', onAbort, { once: true });
+    });
+    // 竞速落败的 provider promise 仍要挂错误处理，避免 unhandled rejection。
+    promise.catch(() => {});
+    return await Promise.race([promise, abortPromise]);
+  } catch (err) {
+    if (controller.signal.aborted && err && err.name === 'AbortError') {
+      throw controller.signal.reason || err;
+    }
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', onOuterAbort);
+  }
 }
 
 function mapProviderError(err) {
@@ -68,9 +108,17 @@ class CapabilityRouter {
     contract,
     providerId,
     principal,
+    signal,
+    timeoutMs,
   }) {
     if (!contract || typeof contract.normalizeInput !== 'function' || typeof contract.normalizeOutput !== 'function') {
       throw new CapabilityError('CAPABILITY_INVALID_CONTRACT', '能力契约缺少输入/输出校验', 500);
+    }
+    if (signal !== undefined && signal !== null && typeof signal.aborted !== 'boolean') {
+      throw new CapabilityError('CAPABILITY_INVALID_SIGNAL', 'signal 必须是 AbortSignal', 400);
+    }
+    if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs < 0)) {
+      throw new CapabilityError('CAPABILITY_INVALID_TIMEOUT', 'timeoutMs 不能为负数', 400);
     }
 
     const normalized = contract.normalizeInput(input);
@@ -98,10 +146,17 @@ class CapabilityRouter {
     const chosen = descriptors[0];
     try {
       const { invoke } = this._registry.resolve(capability, version, chosen.providerId);
-      const result = await withTimeout(
-        invoke(normalized, { providerId: chosen.providerId, principal: principalId(principal) || null }),
-        this._timeoutMs,
-        `${capability}@${version} 调用超时`,
+      const result = await runWithSignal(
+        (callSignal) => invoke(normalized, {
+          providerId: chosen.providerId,
+          principal: principalId(principal) || null,
+          signal: callSignal,
+        }),
+        {
+          timeoutMs: timeoutMs === undefined ? this._timeoutMs : timeoutMs,
+          signal,
+          timeoutMessage: `${capability}@${version} 调用超时`,
+        },
       );
       return {
         output: contract.normalizeOutput(result, { providerId: chosen.providerId, input: normalized }),

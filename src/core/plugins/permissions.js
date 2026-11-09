@@ -174,4 +174,13 @@ class GrantStore {
   }
 }
 
-module.exports = { PERMISSIONS, SCOPE_ALL, PermissionError, GrantStore };
+module.exports = {
+  PERMISSIONS,
+  PERMISSION_SET,
+  RESOURCE_SCOPED,
+  SCOPE_ALL,
+  assertPermission,
+  assertScope,
+  PermissionError,
+  GrantStore,
+};

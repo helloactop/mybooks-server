@@ -14,7 +14,10 @@ const { db: defaultDb } = require('../../db/index');
 const toolboxRepo = require('../../db/toolbox');
 const { TOOLBOX_DIR } = require('../paths');
 const { ToolboxError, assertInside, sha256File } = require('./security');
-const { parseManifest, assessCompatibility } = require('./manifest');
+const { assessCompatibility } = require('./manifest');
+const {
+  normalizeManifest, assessDependencies,
+} = require('./manifest-v1');
 const { getReview, shaMatches, allowUnreviewed } = require('./allowlist');
 const { extractArchive } = require('./zip');
 const store = require('./store');
@@ -36,7 +39,18 @@ function relativeInstallPath(toolId) {
   return path.posix.join('plugins', toolId);
 }
 
-function ensurePluginManifest(pluginDirPath, expectedToolId = '') {
+function ensurePackageFile(pluginDirPath, relativePath, message) {
+  const target = assertInside(
+    pluginDirPath,
+    path.join(pluginDirPath, ...relativePath.split('/')),
+    'MANIFEST_INVALID',
+  );
+  if (!fs.existsSync(target) || !fs.statSync(target).isFile()) {
+    throw new ToolboxError('MANIFEST_INVALID', message);
+  }
+}
+
+function ensurePluginManifest(pluginDirPath, expectedToolId = '', { enforceMode = true } = {}) {
   const manifestPath = path.join(pluginDirPath, 'manifest.json');
   let raw;
   try {
@@ -44,7 +58,8 @@ function ensurePluginManifest(pluginDirPath, expectedToolId = '') {
   } catch (err) {
     throw new ToolboxError('MANIFEST_INVALID', `插件包缺少可读的 manifest.json：${err.message}`);
   }
-  const manifest = parseManifest(raw);
+  // 安装路径按 MYBOOKS_PLUGIN_MANIFEST_V1 判定：off 时不接受 v1，也不会静默降级。
+  const { manifest } = normalizeManifest(raw, { enforceMode });
   if (expectedToolId && manifest.tool_id !== expectedToolId) {
     throw new ToolboxError('MANIFEST_MISMATCH', `manifest.tool_id(${manifest.tool_id}) 与目标(${expectedToolId}) 不一致`);
   }
@@ -53,19 +68,45 @@ function ensurePluginManifest(pluginDirPath, expectedToolId = '') {
     throw new ToolboxError('MANIFEST_INVALID', 'entry_backend 指向的后端模块不存在');
   }
   if (manifest.entry_frontend) {
-    const frontend = assertInside(path.join(pluginDirPath, 'frontend'),
-      path.join(pluginDirPath, 'frontend', ...manifest.entry_frontend.split('/')), 'MANIFEST_INVALID');
-    if (!fs.existsSync(frontend) || !fs.statSync(frontend).isFile()) {
-      throw new ToolboxError('MANIFEST_INVALID', 'entry_frontend 指向的前端入口不存在');
-    }
+    ensurePackageFile(
+      pluginDirPath,
+      `frontend/${manifest.entry_frontend}`,
+      'entry_frontend 指向的前端入口不存在',
+    );
+  }
+  // v1 可能声明多个页面入口，逐一确认存在；缺失即拒绝安装。
+  const pages = (manifest.ui && manifest.ui.pages) || [];
+  for (const page of pages) {
+    if (!page.entry) continue;
+    ensurePackageFile(pluginDirPath, page.entry, `ui.pages[${page.id}] 指向前端入口不存在`);
   }
   return manifest;
 }
 
-function compatibilityOf(manifest, archiveSha) {
+// required 依赖缺失即拒绝安装；optional 只提示。不自动安装依赖。
+function assertDependencies(manifest, installedIds) {
+  const result = assessDependencies(manifest, installedIds);
+  if (result.reasons.length) {
+    throw new ToolboxError(result.reasons[0].code, result.reasons[0].message, 409);
+  }
+  return result.warnings;
+}
+
+function compatibilityOf(manifest, archiveSha, { installedIds = null } = {}) {
   const review = getReview(manifest.tool_id, manifest.revision);
   const reviewed = !!review && shaMatches(review, archiveSha);
-  return assessCompatibility(manifest, { reviewed, runtime: 'python', allowUnreviewed: allowUnreviewed() });
+  const runtime = (manifest.runtime && manifest.runtime.type) || 'python';
+  const assessed = assessCompatibility(manifest, {
+    reviewed, runtime, allowUnreviewed: allowUnreviewed(),
+  });
+  const deps = assessDependencies(manifest, installedIds);
+  if (deps.reasons.length) {
+    assessed.supported = false;
+    assessed.reasons.push(...deps.reasons);
+  }
+  assessed.warnings.push(...deps.warnings);
+  for (const item of manifest.warnings || []) assessed.warnings.push(item);
+  return assessed;
 }
 
 function cleanupStaging() {
@@ -96,6 +137,11 @@ async function prepareStaging(archivePath, expectedToolId = '') {
 
 function installPrepared({ staging, manifest, archiveSha, source = 'store', handleDb = defaultDb }) {
   const toolId = manifest.tool_id;
+  const installedIds = toolboxRepo.listTools(handleDb)
+    .map((tool) => tool.tool_id)
+    .filter((id) => id !== toolId);
+  // 依赖门禁在改动文件系统之前执行，失败时安装位保持原状。
+  assertDependencies(manifest, installedIds);
   const existing = toolboxRepo.getTool(handleDb, toolId);
   const target = pluginDir(toolId);
   if (fs.existsSync(target)) {
@@ -122,7 +168,7 @@ function installPrepared({ staging, manifest, archiveSha, source = 'store', hand
     throw new ToolboxError('INSTALL_FAILED', `安装目录写入失败：${err.message}`, 500);
   }
 
-  const compatibility = compatibilityOf(manifest, archiveSha);
+  const compatibility = compatibilityOf(manifest, archiveSha, { installedIds });
   const now = new Date().toISOString();
   try {
     let record;
@@ -287,7 +333,7 @@ function rollback(toolId, handleDb = defaultDb) {
     throw new ToolboxError('ROLLBACK_FAILED', `回滚失败：${err.message}`, 500);
   }
   try {
-    const manifest = ensurePluginManifest(target, toolId);
+    const manifest = ensurePluginManifest(target, toolId, { enforceMode: false });
     // 回滚后，“当前版本”成为下一次可回滚的旧版本（在 .rollback-* 目录里）
     const record = toolboxRepo.updateTool(handleDb, toolId, {
       name: manifest.name,

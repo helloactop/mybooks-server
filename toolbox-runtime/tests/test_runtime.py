@@ -45,6 +45,16 @@ class StorageTests(unittest.TestCase):
         self.assertIn("aes-256-gcm", raw)
         self.assertEqual(storage.get_config(tool_id)["accounts"][0]["key"], "super-secret-value")
 
+    def test_work_dir_is_traversable_but_tool_root_is_not_listable(self):
+        import stat
+
+        if os.name != "posix":
+            self.skipTest("POSIX 权限语义")
+        tool_id = "storage_perms"
+        path = storage.get_work_dir(tool_id, "token-1")
+        self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o755)
+        self.assertEqual(stat.S_IMODE(os.stat(os.path.join(config.DATA_ROOT, tool_id)).st_mode), 0o711)
+
 
 class BackgroundServiceTests(unittest.TestCase):
     def test_mirror_supports_get_task_and_completion(self):
@@ -315,6 +325,91 @@ class NodeClientTests(unittest.TestCase):
         self.assertEqual(raised.exception.status, 403)
 
 
+class NodeClientAuthOnlyTests(unittest.TestCase):
+    """隔离模式：NodeClient 只用每插件令牌，绝不读取共享 internal-secret。"""
+
+    @classmethod
+    def setUpClass(cls):
+        from http.server import HTTPServer
+        _FakeNodeHandler.headers_seen.clear()
+        cls.server = HTTPServer(("127.0.0.1", 19097), _FakeNodeHandler)
+        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+        cls.base_url = "http://127.0.0.1:19097"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+
+    def setUp(self):
+        from unittest import mock
+        from webserver.toolbox import identity
+        from webserver.toolbox.node_client import NodeClient
+
+        _FakeNodeHandler.headers_seen.clear()
+        patcher = mock.patch.object(config, "NODE_URL", self.base_url)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        NodeClient._secret = None
+        identity.reset_cache()
+        token = "d" * 48
+        path = Path(config.STATE_DIR) / "identities.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"version": 1, "tokens": {"fixture": token}}), encoding="utf-8")
+        self.token = token
+        secret_path = Path(config.STATE_DIR) / "internal-secret"
+        if not secret_path.exists():
+            secret_path.write_text("f" * 48, encoding="utf-8")
+
+    def test_auth_only_uses_plugin_token_without_shared_secret(self):
+        from unittest import mock
+        from webserver.toolbox.node_client import NodeClient
+
+        secret_path = Path(config.STATE_DIR) / "internal-secret"
+        backup = secret_path.read_text(encoding="utf-8") if secret_path.exists() else None
+        secret_path.unlink(missing_ok=True)
+        try:
+            with mock.patch.dict(os.environ, {"MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY": "1"}):
+                NodeClient.for_tool("fixture").book_ids()
+        finally:
+            if backup is not None:
+                secret_path.write_text(backup, encoding="utf-8")
+
+        headers = _FakeNodeHandler.headers_seen[-1]
+        self.assertEqual(_header(headers, "x-mybooks-plugin-id"), "fixture")
+        self.assertEqual(_header(headers, "x-mybooks-plugin-token"), self.token)
+        self.assertIsNone(_header(headers, "x-toolbox-internal-secret"))
+
+    def test_auth_only_missing_token_fails_without_request(self):
+        from unittest import mock
+        from webserver.toolbox import identity
+        from webserver.toolbox.node_client import NodeClient, NodeError
+
+        (Path(config.STATE_DIR) / "identities.json").unlink(missing_ok=True)
+        identity.reset_cache()
+        with mock.patch.dict(os.environ, {
+            "MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY": "1",
+            "MYBOOKS_PLUGIN_ID": "", "MYBOOKS_PLUGIN_TOKEN": "",
+        }):
+            NodeClient._secret = None
+            with self.assertRaises(NodeError) as raised:
+                NodeClient.for_tool("fixture").book_ids()
+        self.assertEqual(raised.exception.code, "PLUGIN_IDENTITY_MISSING")
+        self.assertEqual(raised.exception.status, 403)
+        self.assertEqual(len(_FakeNodeHandler.headers_seen), 0, "缺令牌不应发出请求")
+
+    def test_legacy_mode_still_sends_shared_secret(self):
+        from unittest import mock
+        from webserver.toolbox.node_client import NodeClient
+
+        with mock.patch.dict(os.environ, {"MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY": "0"}):
+            NodeClient.for_tool("fixture").book_ids()
+        headers = _FakeNodeHandler.headers_seen[-1]
+        self.assertIsNotNone(_header(headers, "x-toolbox-internal-secret"))
+        self.assertEqual(_header(headers, "x-mybooks-plugin-token"), self.token)
+
+
 _CHILD_SCRIPT = (
     "import json, os\n"
     "from http.server import BaseHTTPRequestHandler, HTTPServer\n"
@@ -333,6 +428,8 @@ _CHILD_SCRIPT = (
     "                'plugin_id': os.environ.get('MYBOOKS_PLUGIN_ID', ''),\n"
     "                'has_plugin_token': bool(os.environ.get('MYBOOKS_PLUGIN_TOKEN')),\n"
     "                'plugin_token': os.environ.get('MYBOOKS_PLUGIN_TOKEN', ''),\n"
+    "                'auth_only': os.environ.get('MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY', ''),\n"
+    "                'data_dir': os.environ.get('MYBOOKS_TOOL_DATA_DIR', ''),\n"
     "            }\n"
     "        else:\n"
     "            payload = {'path': self.path}\n"
@@ -359,6 +456,8 @@ class _SupervisorFixture(object):
         self.root.mkdir(parents=True, exist_ok=True)
         self.old_state = config.STATE_FILE
         config.STATE_FILE = str(self.root / "installed.json")
+        self.old_data_root = config.DATA_ROOT
+        config.DATA_ROOT = str(self.root / "data")
         Path(config.STATE_FILE).write_text(
             json.dumps({"version": 1, "tools": tools}), encoding="utf-8")
         from unittest import mock
@@ -376,6 +475,7 @@ class _SupervisorFixture(object):
         finally:
             self._env.stop()
             config.STATE_FILE = self.old_state
+            config.DATA_ROOT = self.old_data_root
             shutil.rmtree(self.root, ignore_errors=True)
 
 
@@ -391,6 +491,150 @@ class SupervisorTests(_SupervisorFixture, unittest.TestCase):
 
     def tearDown(self):
         self._teardown_supervisor()
+
+    def test_child_uid_disabled_by_default_and_stable_when_enabled(self):
+        from unittest import mock
+
+        self.assertEqual(self.supervisor._child_uid("alpha"), 0)
+
+        self.supervisor.child_uid_base = 2000
+        with mock.patch.object(self._module.os, "geteuid", return_value=0, create=True), \
+                mock.patch.object(self._module.os, "name", "posix"):
+            first = self.supervisor._child_uid("alpha")
+            self.assertGreaterEqual(first, 2000)
+            self.assertLess(first, 2200)
+            self.assertEqual(first, self.supervisor._child_uid("alpha"), "同一插件 UID 必须稳定")
+
+    def test_private_data_dir_is_owner_only(self):
+        import stat
+
+        path = self.supervisor._prepare_tool_data("alpha", 0)
+        self.assertTrue(Path(path).is_dir())
+        if os.name == "posix":
+            # 0711：宿主 Node 可以穿透读取产物，但无法列举插件私有目录。
+            mode = stat.S_IMODE(os.stat(path).st_mode)
+            self.assertEqual(mode, 0o711)
+
+    def test_inject_data_key_bootstraps_missing_file_for_private_uid(self):
+        """独立 UID 下子进程无法写 state/：supervisor 必须先生成并复用配置密钥。"""
+        import base64
+        import stat
+        from unittest import mock
+
+        state_dir = self.root / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        # 源数据目录布局与真实部署一致：state 目录对子进程只读。
+        self.supervisor.child_uid_base = 2000
+        with mock.patch.object(config, "STATE_DIR", str(state_dir)):
+            if os.name == "posix":
+                os.chmod(state_dir, 0o755)
+            env = {}
+            self.supervisor._inject_data_key(env)
+            value = env.get("MYBOOKS_TOOLBOX_DATA_KEY", "")
+            self.assertEqual(len(base64.b64decode(value)), 32)
+            key_file = state_dir / "config.key"
+            self.assertTrue(key_file.is_file())
+            if os.name == "posix":
+                self.assertEqual(stat.S_IMODE(os.stat(key_file).st_mode), 0o600)
+            # 第二个子进程必须复用同一密钥，否则配置互相解不开。
+            again = {}
+            self.supervisor._inject_data_key(again)
+            self.assertEqual(again.get("MYBOOKS_TOOLBOX_DATA_KEY"), value)
+
+    def test_private_uid_mode_does_not_inject_key_when_disabled(self):
+        from unittest import mock
+
+        state_dir = self.root / "state-off"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        with mock.patch.object(config, "STATE_DIR", str(state_dir)):
+            env = {}
+            self.supervisor._inject_data_key(env)
+            self.assertNotIn("MYBOOKS_TOOLBOX_DATA_KEY", env)
+            self.assertFalse((state_dir / "config.key").exists())
+
+    def test_terminate_closes_pipes_after_child_exits(self):
+        class Stream:
+            closed = False
+
+            def close(self):
+                self.closed = True
+
+        class Process:
+            pid = 4242
+            stdout = Stream()
+            stderr = Stream()
+            state = None
+
+            def poll(self):
+                return self.state
+
+            def terminate(self):
+                self.state = 0
+
+            def kill(self):
+                self.state = -9
+
+            def wait(self, timeout=None):
+                return self.state
+
+        process = Process()
+        self.supervisor._terminate(process)
+        self.assertTrue(process.stdout.closed)
+        self.assertTrue(process.stderr.closed)
+
+    def test_terminate_never_closes_pipes_of_a_live_untouchable_child(self):
+        """没有 CAP_KILL 时终止失败也不能 close 管道，否则会卡死 supervisor。"""
+        events = []
+
+        class Stream:
+            def close(self):
+                events.append("close")
+
+        class Process:
+            pid = 4243
+            stdout = Stream()
+            stderr = Stream()
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                raise PermissionError("operation not permitted")
+
+            def kill(self):
+                raise PermissionError("operation not permitted")
+
+            def wait(self, timeout=None):
+                raise AssertionError("wait 不应在发信号失败后调用")
+
+        self.supervisor._terminate(Process())
+        self.assertEqual(events, [])
+
+    def test_spawn_injects_plugin_auth_only_and_private_data_dir(self):
+        import asyncio
+        import tornado.httputil
+        from unittest import mock
+
+        token = "e" * 48
+        identities = Path(config.STATE_DIR) / "identities.json"
+        identities.parent.mkdir(parents=True, exist_ok=True)
+        identities.write_text(json.dumps({"version": 1, "tokens": {"alpha": token}}), encoding="utf-8")
+        try:
+            with mock.patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY", None)
+                self.supervisor.reload()
+                request = types.SimpleNamespace(
+                    method="GET", uri="/echo",
+                    headers=tornado.httputil.HTTPHeaders(), body=None)
+                response = asyncio.run(self.supervisor.proxy("alpha", request))
+            payload = json.loads(response.body.decode("utf-8"))
+            self.assertEqual(payload["auth_only"], "1", "隔离模式默认只认插件令牌")
+            self.assertEqual(payload["plugin_id"], "alpha")
+            self.assertEqual(payload["plugin_token"], token)
+            self.assertTrue(payload["data_dir"].endswith(os.path.join("data", "alpha")))
+            self.assertTrue(Path(payload["data_dir"]).is_dir())
+        finally:
+            identities.unlink(missing_ok=True)
 
     def test_reload_respects_capacity_and_marks_deferred(self):
         reports = self.supervisor.reload()

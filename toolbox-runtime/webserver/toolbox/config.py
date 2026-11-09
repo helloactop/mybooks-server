@@ -11,3 +11,8 @@ NODE_URL = os.environ.get("MYBOOKS_NODE_INTERNAL_URL", "http://127.0.0.1:3000").
 RUNTIME_PORT = int(os.environ.get("TOOLBOX_RUNTIME_PORT", "8765"))
 # md_to_epub 等工具会 multipart 上传 Markdown + 图片；100MB 与 Node 侧网关上限一致。
 MAX_BODY_BYTES = int(os.environ.get("TOOLBOX_MAX_BODY_BYTES", str(100 * 1024 * 1024)))
+
+
+def plugin_auth_only():
+    """隔离部署：Node 内部接口只接受每插件令牌，禁止读取共享 internal-secret。"""
+    return os.environ.get("MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY", "").strip().lower() in ("1", "true")

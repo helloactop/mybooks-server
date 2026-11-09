@@ -53,18 +53,41 @@ class NodeClient(object):
             cls._secret = value
             return value
 
+    def _identity_headers(self):
+        """按部署模式生成认证头。
+
+        隔离模式（MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY）只用本插件令牌，绝不读取
+        宿主共享 internal-secret；令牌缺失即失败，不允许退回共享密钥。
+        """
+        if not self.tool_id:
+            raise NodeError("PLUGIN_IDENTITY_MISSING", "插件身份缺失，无法调用内部接口", 403)
+        try:
+            token = identity.token_for(self.tool_id)
+        except identity.IdentityUnavailable as err:
+            # 身份文件损坏/不可读时显式失败：不能让请求悄悄退回共享密钥模式。
+            raise NodeError("PLUGIN_IDENTITY_UNAVAILABLE", str(err), 403) from err
+        if not token:
+            raise NodeError("PLUGIN_IDENTITY_MISSING", "插件身份令牌缺失", 403)
+        return {
+            "X-Mybooks-Plugin-Id": self.tool_id,
+            "X-Mybooks-Plugin-Token": token,
+        }
+
     def _request(self, method, path, payload=None, timeout=20):
         url = config.NODE_URL + path
-        headers = {"X-Toolbox-Internal-Secret": self.secret()}
-        if self.tool_id:
-            try:
-                token = identity.token_for(self.tool_id)
-            except identity.IdentityUnavailable as err:
-                # 身份文件损坏/不可读时显式失败：不能让请求悄悄退回共享密钥模式。
-                raise NodeError("PLUGIN_IDENTITY_UNAVAILABLE", str(err), 403) from err
-            if token:
-                headers["X-Mybooks-Plugin-Id"] = self.tool_id
-                headers["X-Mybooks-Plugin-Token"] = token
+        if config.plugin_auth_only():
+            headers = self._identity_headers()
+        else:
+            headers = {"X-Toolbox-Internal-Secret": self.secret()}
+            if self.tool_id:
+                try:
+                    token = identity.token_for(self.tool_id)
+                except identity.IdentityUnavailable as err:
+                    # 身份文件损坏/不可读时显式失败：不能让请求悄悄退回共享密钥模式。
+                    raise NodeError("PLUGIN_IDENTITY_UNAVAILABLE", str(err), 403) from err
+                if token:
+                    headers["X-Mybooks-Plugin-Id"] = self.tool_id
+                    headers["X-Mybooks-Plugin-Token"] = token
         try:
             if payload is None:
                 response = self.session.request(method, url, headers=headers, timeout=timeout)

@@ -11,6 +11,8 @@
 不是恶意代码沙箱。
 """
 import asyncio
+import base64
+import hashlib
 import json
 import logging
 import os
@@ -90,6 +92,8 @@ class PluginSupervisor(object):
         self.idle_seconds = max(0, int(os.environ.get("TOOLBOX_CHILD_IDLE_SECONDS", "600")))
         self.start_timeout = max(1.0, float(os.environ.get("TOOLBOX_CHILD_START_TIMEOUT", "20")))
         self.proxy_timeout = max(1.0, float(os.environ.get("TOOLBOX_PROXY_TIMEOUT", "180")))
+        # 0 = 关闭独立 UID（默认，保持旧部署）；>0 时为每个插件分配稳定 UID（需 root）。
+        self.child_uid_base = max(0, int(os.environ.get("TOOLBOX_CHILD_UID_BASE", "0")))
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self._child_command = child_command or [sys.executable, os.path.join(root, "runtime.py")]
         self._root = root
@@ -132,8 +136,11 @@ class PluginSupervisor(object):
         with self._lock:
             self._generation += 1
             self._reloading = True
-            for tool_id in list(self._children):
-                self._stop_child(tool_id)
+            existing = list(self._children)
+        # 终止子进程可能阻塞（需要回收管道），必须在锁外执行，
+        # 否则 /healthz 与请求代理会被一起卡住。
+        for tool_id in existing:
+            self._stop_child(tool_id)
         reports = []
         started = 0
         try:
@@ -185,9 +192,10 @@ class PluginSupervisor(object):
         port = _free_port()
         secret = secrets.token_hex(24)
         token = self._plugin_token(tool_id)
+        uid = self._child_uid(tool_id)
+        data_dir = self._prepare_tool_data(tool_id, uid)
         env = os.environ.copy()
-        # 子进程不需要宿主 internal-secret；NodeClient 会从共享卷读取，但不会再从环境
-        # 变量里直接拿到（同一 UID 下文件仍可读，见 isolation-design.md）。
+        # 子进程不需要宿主 internal-secret；NodeClient 在隔离模式只用每插件令牌。
         env.pop("MYBOOKS_TOOLBOX_INTERNAL_SECRET", None)
         env.update({
             "TOOLBOX_ONLY_TOOL": tool_id,
@@ -196,10 +204,16 @@ class PluginSupervisor(object):
             "TOOLBOX_ISOLATE_PLUGINS": "0",
             "MYBOOKS_TOOLBOX_RUNTIME_SECRET": secret,
             "MYBOOKS_PLUGIN_ID": tool_id,
+            "MYBOOKS_TOOL_DATA_DIR": data_dir,
+            # 隔离部署默认不允许回退共享密钥；显式设为 0 可回滚（见 isolation-design.md）。
+            "MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY": os.environ.get("MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY", "1"),
             "PYTHONUNBUFFERED": "1",
         })
         if token:
             env["MYBOOKS_PLUGIN_TOKEN"] = token
+        else:
+            env.pop("MYBOOKS_PLUGIN_TOKEN", None)
+        self._inject_data_key(env)
         command = list(self._child_command)
         if os.name == "posix" and self.memory_mb > 0:
             # 用 shell 设置 rlimit，避免在有多线程的 supervisor 里用 preexec_fn。
@@ -218,6 +232,12 @@ class PluginSupervisor(object):
         }
         if os.name == "posix":
             kwargs["start_new_session"] = True
+        if uid:
+            # 独立 UID：子进程在 exec 前降权，无法读取 0600 的 state/ 凭据。
+            def _demote(target=uid):
+                os.setgid(target)
+                os.setuid(target)
+            kwargs["preexec_fn"] = _demote
         process = subprocess.Popen(command, **kwargs)
         threading.Thread(target=self._pump, args=(process.stdout, tool_id, "stdout"), daemon=True).start()
         threading.Thread(target=self._pump, args=(process.stderr, tool_id, "stderr"), daemon=True).start()
@@ -235,6 +255,86 @@ class PluginSupervisor(object):
                 time.sleep(0.1)
         self._terminate(process)
         raise SupervisorError("插件进程启动超时")
+
+    def _child_uid(self, tool_id):
+        """独立 UID 模式（TOOLBOX_CHILD_UID_BASE>0）下为每个插件分配稳定 UID。
+
+        只有 POSIX + root 才能降权；其他情况返回 0（不降权），保持现有行为。
+        """
+        if self.child_uid_base <= 0 or os.name != "posix":
+            return 0
+        if getattr(os, "geteuid", lambda: 1)() != 0:
+            LOGGER.warning("[supervisor] TOOLBOX_CHILD_UID_BASE 需要 root 才能生效，已跳过")
+            return 0
+        index = int(hashlib.sha256(tool_id.encode("utf-8")).hexdigest(), 16) % 200
+        return self.child_uid_base + index
+
+    def _prepare_tool_data(self, tool_id, uid):
+        """创建插件私有数据目录（0711），必要时 chown 给该插件的 UID。"""
+        path = os.path.join(config.DATA_ROOT, tool_id)
+        try:
+            os.makedirs(path, exist_ok=True)
+        except OSError as err:
+            LOGGER.error("[supervisor] cannot create data dir for %s: %s", tool_id, err)
+            return path
+        if os.name == "posix":
+            if uid:
+                try:
+                    for root, dirs, files in os.walk(path):
+                        os.chown(root, uid, uid)
+                        for name in dirs + files:
+                            os.chown(os.path.join(root, name), uid, uid, follow_symlinks=False)
+                except OSError as err:
+                    LOGGER.warning("[supervisor] chown data dir %s failed: %s", path, err)
+            try:
+                # 先 chown 再 chmod：root 没有 CAP_FOWNER，改不了别人名下的模式位。
+                # 0711 只允许穿透：宿主 Node（uid 1000）要读 work/ 产物入库，
+                # 但无法列举目录；config.json 在子进程里仍写成 0600。
+                os.chmod(path, 0o711)
+            except OSError:
+                pass
+        return path
+
+    def _inject_data_key(self, env):
+        """独立 UID 下插件读不到 0600 的配置密钥，由 supervisor 代为注入。
+
+        子进程以独立 UID 运行时无法在 state/ 下创建 config.key，因此缺失时
+        由 supervisor（root）先生成 0600 的密钥文件再注入；已有文件直接复用，
+        避免插件各自生成不同密钥导致配置互相解密失败。
+        """
+        if not self.child_uid_base or "MYBOOKS_TOOLBOX_DATA_KEY" in env:
+            return
+        path = os.path.join(config.STATE_DIR, "config.key")
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                value = handle.read().strip()
+        except FileNotFoundError:
+            value = ""
+        except OSError as err:
+            LOGGER.warning("[supervisor] cannot read %s: %s", path, err)
+            return
+        if not value:
+            value = base64.b64encode(secrets.token_bytes(32)).decode("ascii")
+            try:
+                os.makedirs(config.STATE_DIR, exist_ok=True)
+                tmp = path + ".tmp-%d" % os.getpid()
+                with open(tmp, "w", encoding="utf-8") as handle:
+                    handle.write(value + "\n")
+                os.chmod(tmp, 0o600)
+                os.replace(tmp, path)
+            except OSError as err:
+                LOGGER.warning("[supervisor] cannot create %s: %s", path, err)
+                return
+        # 密钥文件归属运行目录的属主（旧 Worker 以该 UID 运行），保持 0600：
+        # 独立 UID 的子进程读不到，只能靠本方法注入。
+        try:
+            if os.name != "posix":
+                raise OSError("chown 仅在 POSIX 可用")
+            owner = os.stat(config.STATE_DIR)
+            os.chown(path, owner.st_uid, owner.st_gid)
+        except OSError:
+            pass
+        env["MYBOOKS_TOOLBOX_DATA_KEY"] = value
 
     def _plugin_token(self, tool_id):
         """从 state/identities.json 取该插件自己的令牌；不存在或结构异常时返回空。"""
@@ -277,23 +377,31 @@ class PluginSupervisor(object):
     def _terminate(self, process):
         if process is None:
             return
-        try:
-            if process.poll() is None:
-                process.terminate()
-                process.wait(timeout=5)
-        except Exception:
+        if process.poll() is None:
+            for action in (process.terminate, process.kill):
+                try:
+                    action()
+                except Exception as err:
+                    # 独立 UID 模式下 root 需要 CAP_KILL 才能给别的 UID 发信号。
+                    LOGGER.warning("[supervisor] cannot signal pid=%s: %s", process.pid, err)
+                    continue
+                try:
+                    process.wait(timeout=5)
+                    break
+                except Exception:
+                    continue
+        if process.poll() is None:
+            # 子进程仍存活时绝不能关闭管道：采集线程正阻塞在 readline 上，
+            # close() 会永久等待其内部锁，进而拖死整个 supervisor。
+            LOGGER.error("[supervisor] pid=%s still alive, skip pipe close", process.pid)
+            return
+        # 子进程已退出，显式关闭管道，避免长期运行累积文件句柄。
+        for stream in (process.stdout, process.stderr):
             try:
-                process.kill()
+                if stream:
+                    stream.close()
             except Exception:
                 pass
-        finally:
-            # 子进程已退出，显式关闭管道，避免长期运行累积文件句柄。
-            for stream in (process.stdout, process.stderr):
-                try:
-                    if stream:
-                        stream.close()
-                except Exception:
-                    pass
 
     # ---------- dispatch ----------
 
@@ -305,16 +413,20 @@ class PluginSupervisor(object):
                 child = self._children.get(tool_id)
                 if child and child.alive():
                     return child
+                dead = None
                 if child:
                     # 崩溃/被外部杀掉的子进程仍占着 stdout/stderr 管道；
-                    # 先回收（_terminate 对已退出进程只关闭管道）再移除。
-                    self._terminate(child.process)
+                    # 先移除再在锁外回收，避免终止阻塞 healthz。
                     self._children.pop(tool_id, None)
+                    dead = child.process
                 item = self._state_items.get(tool_id)
                 if item is None:
                     raise ChildNotFound("工具未启用或不存在")
                 at_capacity = len(self._children) >= self.max_children
                 generation = self._generation
+
+            if dead is not None:
+                self._terminate(dead)
 
             if at_capacity:
                 evicted = await self._evict_one()

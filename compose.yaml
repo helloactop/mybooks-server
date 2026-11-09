@@ -12,6 +12,8 @@ services:
       MYBOOKS_TOOLBOX_ALLOW_PRIVATE_STORE: "${MYBOOKS_TOOLBOX_ALLOW_PRIVATE_STORE:-false}"
       # 启用 TOOLBOX_ISOLATE_PLUGINS=1 时建议设为 false：子进程必须带每插件身份令牌。
       MYBOOKS_TOOLBOX_LEGACY_COMPAT: "${MYBOOKS_TOOLBOX_LEGACY_COMPAT:-true}"
+      # 隔离部署：内部接口只认每插件令牌（与 toolbox-runtime 同名变量，须同时开启）。
+      MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY: "${MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY:-false}"
       # 仅供自动化/临时验收；正常部署请用 npm run setup 创建设备会话。
       ADMIN_TOKEN: "${ADMIN_TOKEN:-}"
     volumes:
@@ -24,6 +26,9 @@ services:
 
   toolbox-runtime:
     build: ./toolbox-runtime
+    # 独立 UID 模式（TOOLBOX_CHILD_UID_BASE>0）必须允许以 root 启动降权；
+    # 默认仍是镜像内的 1000:1000，设置 TOOLBOX_RUNTIME_USER=0:0 才启用。
+    user: "${TOOLBOX_RUNTIME_USER:-1000:1000}"
     environment:
       MYBOOKS_TOOLBOX_DIR: /toolbox
       MYBOOKS_NODE_INTERNAL_URL: "http://my-books:3000"
@@ -34,6 +39,9 @@ services:
       TOOLBOX_ISOLATE_PLUGINS: "${TOOLBOX_ISOLATE_PLUGINS:-0}"
       TOOLBOX_MAX_CHILDREN: "${TOOLBOX_MAX_CHILDREN:-2}"
       TOOLBOX_CHILD_MEMORY_MB: "${TOOLBOX_CHILD_MEMORY_MB:-384}"
+      # 0 = 关闭（默认）；>0 时每个插件以独立 UID 运行，需容器以 root 启动。
+      TOOLBOX_CHILD_UID_BASE: "${TOOLBOX_CHILD_UID_BASE:-0}"
+      MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY: "${MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY:-false}"
     volumes:
       - toolbox-data:/toolbox
     read_only: true
@@ -43,6 +51,16 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # 独立 UID 模式（TOOLBOX_CHILD_UID_BASE>0）需要 root 通过 setuid/setgid 降权，
+    # 读取 0600 的 state/ 凭据并生成 config.key（DAC_OVERRIDE），把私有数据目录
+    # chown 给对应 UID，并向不同 UID 的子进程发送信号（KILL）。
+    # 只有 TOOLBOX_RUNTIME_USER=0:0 时才实际生效，默认的 1000:1000 用不到这些能力。
+    cap_add:
+      - SETUID
+      - SETGID
+      - CHOWN
+      - DAC_OVERRIDE
+      - KILL
     mem_limit: 1g
     cpus: 2.0
     pids_limit: 256

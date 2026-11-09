@@ -99,6 +99,12 @@ def tool_root(tool_id):
         raise StorageError("tool_id 不合法")
     root = os.path.join(config.DATA_ROOT, tool_id)
     os.makedirs(root, exist_ok=True)
+    # 0711：只允许穿透不允许列举。Node（uid 1000）需要读取 work/ 产物完成入库与下载，
+    # 但 config.json 仍是 0600，其他插件无法列出或读取本插件的私有文件。
+    try:
+        os.chmod(root, 0o711)
+    except OSError:
+        pass
     return root
 
 
@@ -145,6 +151,12 @@ def get_work_dir(tool_id, unique_key=None):
     else:
         path = root
     os.makedirs(path, exist_ok=True)
+    if unique_key:
+        # 产物目录对宿主 Node 可读（0755），私有配置仍在 root 下保持 0600。
+        try:
+            os.chmod(path, 0o755)
+        except OSError:
+            pass
     return path
 
 

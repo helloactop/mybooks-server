@@ -11,6 +11,7 @@ const {
   authorKeysFromEdition,
   editionId,
   mapOpenLibraryBook,
+  mapOpenLibrarySearchDoc,
 } = require('../src/core/openlibrary.js');
 
 const EDITION = {
@@ -61,6 +62,7 @@ test('mapOpenLibraryBook:字段映射 + 简介取 work 描述并清洗标签', (
     work: WORK,
   });
   assert.equal(b.title, 'The Pragmatic Programmer');
+  assert.deepEqual(b.authors, ['Andrew Hunt', 'David Thomas']);
   assert.equal(b.author, 'Andrew Hunt / David Thomas');
   assert.equal(b.publisher, 'Addison-Wesley');
   assert.equal(b.pubYear, '2005');
@@ -70,6 +72,34 @@ test('mapOpenLibraryBook:字段映射 + 简介取 work 描述并清洗标签', (
   assert.ok(b.summary.startsWith('A classic.'));
   assert.ok(!b.summary.includes('<'), '简介不应残留 HTML 标签');
   assert.equal(b.rating, 0);
+});
+
+test('mapOpenLibrarySearchDoc:搜索结果映射,优先 13 位 ISBN', () => {
+  const b = mapOpenLibrarySearchDoc({
+    key: '/works/OL45883W',
+    title: '  The Pragmatic Programmer  ',
+    author_name: ['Andrew Hunt', '  David Thomas  '],
+    first_publish_year: 1999,
+    publisher: ['Addison-Wesley'],
+    isbn: ['020161622X', '9780201616224'],
+    cover_i: 12345,
+  });
+  assert.equal(b.title, 'The Pragmatic Programmer');
+  assert.deepEqual(b.authors, ['Andrew Hunt', 'David Thomas']);
+  assert.equal(b.isbn, '9780201616224');
+  assert.equal(b.pubYear, '1999');
+  assert.equal(b.publisher, 'Addison-Wesley');
+  assert.equal(b.cover, 'https://covers.openlibrary.org/b/id/12345-L.jpg');
+  assert.equal(b.openlibraryId, 'OL45883W');
+  assert.equal(b.openlibraryUrl, 'https://openlibrary.org/works/OL45883W');
+});
+
+test('mapOpenLibrarySearchDoc:缺字段不抛异常', () => {
+  const b = mapOpenLibrarySearchDoc({});
+  assert.equal(b.title, '');
+  assert.deepEqual(b.authors, []);
+  assert.equal(b.isbn, '');
+  assert.equal(b.cover, '');
 });
 
 test('mapOpenLibraryBook:缺字段(无作者/无出版日期/无封面)不抛异常', () => {

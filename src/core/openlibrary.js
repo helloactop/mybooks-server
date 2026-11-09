@@ -87,6 +87,7 @@ function mapOpenLibraryBook({ isbn, edition, authorNames, work }) {
   const id = editionId(ed);
   return {
     title: String(ed.title || ed.full_title || '').trim(),
+    authors: names,
     author: names.join(' / '),
     summary: descriptionFrom(ed, work),
     publisher: (Array.isArray(ed.publishers) && ed.publishers[0]) ? String(ed.publishers[0]).trim() : '',
@@ -100,6 +101,34 @@ function mapOpenLibraryBook({ isbn, edition, authorNames, work }) {
   };
 }
 
+// 搜索结果（/search.json 的 docs[]）→ 与 mapOpenLibraryBook 对齐的字段形状。
+// 搜索结果没有简介与 edition 级封面列表，只有 cover_i / first_publish_year。
+function mapOpenLibrarySearchDoc(doc) {
+  const d = doc || {};
+  const key = String(d.key || '').replace(/\.json$/, '');
+  const id = key.replace(/^\/works\//, '');
+  const names = Array.isArray(d.author_name)
+    ? d.author_name.map((name) => String(name).trim()).filter(Boolean)
+    : [];
+  const isbns = Array.isArray(d.isbn) ? d.isbn.map((value) => String(value).replace(/[^0-9Xx]/g, '')) : [];
+  const isbn = isbns.find((value) => value.length === 13) || isbns.find((value) => value.length === 10) || '';
+  const coverId = Number.isInteger(d.cover_i) && d.cover_i > 0 ? d.cover_i : 0;
+  return {
+    title: String(d.title || '').trim(),
+    authors: names,
+    author: names.join(' / '),
+    summary: '',
+    publisher: Array.isArray(d.publisher) && d.publisher[0] ? String(d.publisher[0]).trim() : '',
+    pubYear: d.first_publish_year ? String(d.first_publish_year) : '',
+    isbn,
+    rating: 0,
+    tags: [],
+    cover: coverId ? `https://covers.openlibrary.org/b/id/${coverId}-L.jpg` : '',
+    openlibraryId: id,
+    openlibraryUrl: id ? 'https://openlibrary.org/works/' + id : '',
+  };
+}
+
 module.exports = {
   parsePubYear,
   coverUrlFromEdition,
@@ -107,4 +136,5 @@ module.exports = {
   editionId,
   descriptionFrom,
   mapOpenLibraryBook,
+  mapOpenLibrarySearchDoc,
 };

@@ -24,7 +24,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { parseSearchPage, parseBookPage, mapToBook } = require('../core/douban');
-const { authorKeysFromEdition, mapOpenLibraryBook } = require('../core/openlibrary');
+const { authorKeysFromEdition, mapOpenLibraryBook, mapOpenLibrarySearchDoc } = require('../core/openlibrary');
 const { isbnKey } = require('../core/isbn');
 
 const { DATA_DIR } = require('../core/paths');
@@ -33,6 +33,7 @@ const DOUBAN_SEARCH_URL = 'https://www.douban.com/search?cat=1001&q=';
 const DOUBAN_BOOK_URL = 'https://book.douban.com/subject/';
 const DOUBAN_ISBN_URL = 'https://book.douban.com/isbn/';
 const OPENLIBRARY_URL = 'https://openlibrary.org';
+const OPENLIBRARY_SEARCH_URL = 'https://openlibrary.org/search.json';
 const DOUBAN_SUBJECT_RE = /book\.douban\.com\/subject\/(\d+)/;
 const FETCH_TIMEOUT_MS = 15000;
 
@@ -164,6 +165,18 @@ async function lookupIsbnOpenLibrary(isbn) {
   return { status: 'found', book, source: 'openlibrary' };
 }
 
+/* ---------- Open Library:关键词搜索（metadata.search 的第二 Provider） ---------- */
+// search.json 的 docs[] 只带摘要级字段；详情（作者/简介）留给 future 需要时再取。
+async function searchOpenLibrary(q, limit = 10) {
+  const capped = Math.max(1, Math.min(Number(limit) || 10, 20));
+  const fields = 'key,title,author_name,first_publish_year,publisher,isbn,cover_i';
+  const data = await openlibraryJson(
+    `${OPENLIBRARY_SEARCH_URL}?q=${encodeURIComponent(q)}&limit=${capped}&fields=${fields}`,
+  );
+  const docs = data && Array.isArray(data.docs) ? data.docs : [];
+  return docs.map(mapOpenLibrarySearchDoc).filter((book) => book.title);
+}
+
 /* ---------- 组合入口:豆瓣优先,Open Library 兜底 ---------- */
 // 批量导入与单本回填都走这里,保证两条链路的取数行为一致
 async function lookupIsbn(isbn) {
@@ -193,5 +206,6 @@ module.exports = {
   searchDouban,
   lookupIsbnDouban,
   lookupIsbnOpenLibrary,
+  searchOpenLibrary,
   lookupIsbn,
 };

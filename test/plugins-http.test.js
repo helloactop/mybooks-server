@@ -154,6 +154,55 @@ test('GET /api/plugins 需要会话、只读且脱敏，旧工具箱接口不变
     });
     assert.equal(created.status, 201);
 
+    fs.writeFileSync(path.join(root, 'toolbox', 'state', 'grants.json'), JSON.stringify({
+      version: 1,
+      tools: { zlibrary: ['books.read:book:1', 'jobs.create'] },
+    }));
+
+    assert.equal(
+      (await fetch(base + '/internal/toolbox/library/ids', { headers: identityHeaders })).status,
+      403,
+      '缺少 library:all scope 必须拒绝列表',
+    );
+    assert.equal(
+      (await fetch(base + '/internal/toolbox/library/books?ids=1', { headers: identityHeaders })).status,
+      200,
+      '授权 book:1 后可读该书',
+    );
+    assert.equal(
+      (await fetch(base + '/internal/toolbox/library/books?ids=2', { headers: identityHeaders })).status,
+      403,
+      '未授权 book:2 必须拒绝',
+    );
+    assert.equal(
+      (await fetch(base + '/internal/toolbox/library/books/1/delete', {
+        method: 'POST',
+        headers: identityHeaders,
+      })).status,
+      403,
+      '缺少 books.delete 必须拒绝',
+    );
+    assert.equal(
+      (await fetch(base + '/internal/toolbox/tasks', {
+        method: 'POST',
+        headers: { ...identityHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tool_id: 'zlibrary' }),
+      })).status,
+      201,
+      'jobs.create 授权后仍可建任务',
+    );
+
+    const mdHeaders = {
+      ...internalHeaders,
+      'X-Mybooks-Plugin-Id': 'md_to_epub',
+      'X-Mybooks-Plugin-Token': tokens.md_to_epub,
+    };
+    assert.equal(
+      (await fetch(base + '/internal/toolbox/library/ids', { headers: mdHeaders })).status,
+      200,
+      '未配置策略的工具保持兼容',
+    );
+
     const legacyList = await fetch(base + '/api/toolbox/list?include_disabled=1', { headers });
     assert.equal(legacyList.status, 200);
     const legacyBody = await legacyList.json();

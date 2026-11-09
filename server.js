@@ -28,6 +28,8 @@ const routesToolbox = require('./src/http/routes.toolbox');
 const routesToolboxInternal = require('./src/http/routes.toolbox.internal');
 const routesToolboxUi = require('./src/http/routes.toolbox.ui');
 const routesPlugins = require('./src/http/routes.plugins');
+const pluginServices = require('./src/http/plugin-services');
+const { modeNotice } = require('./src/core/toolbox/access-policy');
 const { auth, requireSession } = require('./src/http/middleware.auth');
 const routesAuth = require('./src/http/routes.auth');
 const routesSync = require('./src/http/routes.sync');
@@ -233,6 +235,15 @@ try {
   console.error('[toolbox] 启动恢复失败:', err.stack || err);
 }
 
+// 明确打印内部接口的访问模式：Legacy 兼容 ≠ 强隔离，避免运维误判。
+try { console.log('[toolbox]', modeNotice()); } catch { /* 启动提示失败不影响服务 */ }
+
+// 宿主级插件服务：只创建一套 Kernel/Registry/RuntimeManager；
+// 内置 Provider 的激活放在后台完成，失败只记录错误，不阻塞 Web 启动。
+pluginServices.start().catch((err) => {
+  console.error('[plugins] 内置 Provider 启动失败:', err && (err.stack || err));
+});
+
 const server = app.listen(PORT, HOST, () => {
   console.log(`My books 已启动: http://${HOST === '0.0.0.0' || HOST === '127.0.0.1' ? 'localhost' : HOST}:${server.address().port}`);
 });
@@ -246,6 +257,10 @@ function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`[shutdown] 收到 ${signal},停止接受新请求,等待在途请求完成…`);
+  // 释放宿主插件内核注册（幂等，失败不阻断退出）。
+  pluginServices.dispose().catch((err) => {
+    console.error('[plugins] 关闭内核失败:', err && (err.message || err));
+  });
   server.close(() => {
     console.log('[shutdown] 全部连接已结束,进程退出');
     process.exit(0);

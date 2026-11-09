@@ -192,3 +192,85 @@ test('传入 principal 时按 metadata.read 授权', async () => {
   assert.equal(out.candidates.length, 1);
   assert.equal(out.providerId, 'one');
 });
+
+test('默认兜底：首选返回空结果时改用下一个 Provider', async () => {
+  const calls = [];
+  const { service } = makeService([
+    { providerId: 'douban', priority: 100, invoke: async () => { calls.push('douban'); return { candidates: [] }; } },
+    { providerId: 'openlibrary', priority: 50, invoke: async () => { calls.push('openlibrary'); return { candidates: [candidate({ source: 'openlibrary' })] }; } },
+  ]);
+
+  const out = await service.search({ query: 'x' });
+  assert.deepEqual(calls, ['douban', 'openlibrary']);
+  assert.equal(out.providerId, 'openlibrary');
+  assert.equal(out.candidates.length, 1);
+});
+
+test('显式 providerId 不启用兜底，也不调用其他来源', async () => {
+  const calls = [];
+  const { service } = makeService([
+    { providerId: 'douban', priority: 100, invoke: async () => { calls.push('douban'); return { candidates: [] }; } },
+    { providerId: 'openlibrary', priority: 50, invoke: async () => { calls.push('openlibrary'); return { candidates: [candidate()] }; } },
+  ]);
+
+  const out = await service.search({ query: 'x' }, { providerId: 'douban' });
+  assert.deepEqual(calls, ['douban']);
+  assert.equal(out.providerId, 'douban');
+  assert.deepEqual(out.candidates, []);
+});
+
+test('BLOCKED 不触发兜底，保持旧错误语义', async () => {
+  let fallbackCalls = 0;
+  const blocked = Object.assign(new Error('豆瓣拒绝访问'), { code: 'BLOCKED' });
+  const { service } = makeService([
+    { providerId: 'douban', priority: 100, invoke: async () => { throw blocked; } },
+    { providerId: 'openlibrary', priority: 50, invoke: async () => { fallbackCalls += 1; return { candidates: [candidate()] }; } },
+  ], { fallback: 'recoverable' });
+
+  await assert.rejects(
+    () => service.search({ query: 'x' }),
+    (err) => err.code === 'UPSTREAM_BLOCKED' && err.status === 502,
+  );
+  assert.equal(fallbackCalls, 0);
+});
+
+test('recoverable 模式下上游超时/失败继续兜底', async () => {
+  const { service } = makeService([
+    { providerId: 'douban', priority: 100, invoke: async () => { throw Object.assign(new Error('boom'), { code: 'UPSTREAM' }); } },
+    { providerId: 'openlibrary', priority: 50, invoke: async () => ({ candidates: [candidate()] }) },
+  ], { fallback: 'recoverable' });
+
+  const out = await service.search({ query: 'x' });
+  assert.equal(out.providerId, 'openlibrary');
+  assert.equal(out.candidates.length, 1);
+
+  // 默认 no-results 模式下同一个错误应立即抛出（不悄悄换源）。
+  const { service: strictService } = makeService([
+    { providerId: 'douban', priority: 100, invoke: async () => { throw Object.assign(new Error('boom'), { code: 'UPSTREAM' }); } },
+    { providerId: 'openlibrary', priority: 50, invoke: async () => ({ candidates: [candidate()] }) },
+  ], { fallback: 'no-results' });
+  await assert.rejects(
+    () => strictService.search({ query: 'x' }),
+    (err) => err.code === 'UPSTREAM_ERROR' && err.status === 502,
+  );
+});
+
+test('off 模式只调用首选 Provider', async () => {
+  const calls = [];
+  const { service } = makeService([
+    { providerId: 'first', priority: 100, invoke: async () => { calls.push('first'); return { candidates: [] }; } },
+    { providerId: 'second', priority: 50, invoke: async () => { calls.push('second'); return { candidates: [candidate()] }; } },
+  ], { fallback: 'off' });
+
+  const out = await service.search({ query: 'x' });
+  assert.deepEqual(calls, ['first']);
+  assert.equal(out.providerId, 'first');
+  assert.deepEqual(out.candidates, []);
+});
+
+test('非法 fallback 配置在构造时拒绝', () => {
+  assert.throws(
+    () => new MetadataSearchService({ registry: new ServiceRegistry(), fallback: 'always' }),
+    /fallback/,
+  );
+});

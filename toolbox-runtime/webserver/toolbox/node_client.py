@@ -57,7 +57,11 @@ class NodeClient(object):
         url = config.NODE_URL + path
         headers = {"X-Toolbox-Internal-Secret": self.secret()}
         if self.tool_id:
-            token = identity.token_for(self.tool_id)
+            try:
+                token = identity.token_for(self.tool_id)
+            except identity.IdentityUnavailable as err:
+                # 身份文件损坏/不可读时显式失败：不能让请求悄悄退回共享密钥模式。
+                raise NodeError("PLUGIN_IDENTITY_UNAVAILABLE", str(err), 403) from err
             if token:
                 headers["X-Mybooks-Plugin-Id"] = self.tool_id
                 headers["X-Mybooks-Plugin-Token"] = token

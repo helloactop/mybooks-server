@@ -183,6 +183,29 @@ test('GET /api/plugins 需要会话、只读且脱敏，旧工具箱接口不变
       '缺少 books.delete 必须拒绝',
     );
     assert.equal(
+      (await fetch(base + '/internal/toolbox/books/2/metadata', { headers: identityHeaders })).status,
+      403,
+      '读取未授权书籍元数据必须拒绝',
+    );
+    assert.equal(
+      (await fetch(base + '/internal/toolbox/library/books/1/metadata', {
+        method: 'POST',
+        headers: { ...identityHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: '越权改名' }),
+      })).status,
+      403,
+      '缺少 metadata.write 必须拒绝',
+    );
+    assert.equal(
+      (await fetch(base + '/internal/toolbox/library/export', {
+        method: 'POST',
+        headers: { ...identityHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tool_id: 'zlibrary', book_id: 2, format: 'EPUB' }),
+      })).status,
+      403,
+      '导出未授权书籍必须拒绝',
+    );
+    assert.equal(
       (await fetch(base + '/internal/toolbox/tasks', {
         method: 'POST',
         headers: { ...identityHeaders, 'Content-Type': 'application/json' },

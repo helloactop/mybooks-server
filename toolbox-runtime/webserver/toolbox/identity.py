@@ -1,17 +1,31 @@
 # -*- coding: utf-8 -*-
 """读取 Node 下发的插件身份令牌（state/identities.json）。
 
-文件不存在或旧 Node 未生成时返回空串，NodeClient 会自动退回旧协议
-（只带 internal-secret），不阻塞现有插件。
+安全语义：
+  · 文件不存在（旧 Node 未生成）→ 返回空表，NodeClient 走 Legacy 兼容协议；
+  · 文件存在但读取/解析失败 → 抛 IdentityUnavailable，绝不静默退回更宽松协议；
+  · 未知工具没有令牌 → 返回空串（Node 侧按 Legacy/严格策略判定）。
 """
 import json
+import logging
 import os
+import re
 import threading
 
 from . import config
 
 _lock = threading.Lock()
 _cache = {"mtime": None, "tokens": {}}
+_reported = {"error": ""}
+
+TOOL_ID_RE = re.compile(r"^[a-z0-9_]{1,64}$")
+TOKEN_RE = re.compile(r"^[a-f0-9]{48}$")
+
+
+class IdentityUnavailable(RuntimeError):
+    """身份文件存在但无法安全读取：调用方必须显式失败，不能降级授权。"""
+
+    code = "PLUGIN_IDENTITY_UNAVAILABLE"
 
 
 def _path():
@@ -25,7 +39,7 @@ def _sanitize(raw):
     for key, value in raw.items():
         key = str(key or "")
         value = str(value or "")
-        if key and len(value) >= 16:
+        if TOOL_ID_RE.match(key) and TOKEN_RE.match(value):
             tokens[key] = value
     return tokens
 
@@ -35,6 +49,7 @@ def _load():
     try:
         mtime = os.path.getmtime(path)
     except OSError:
+        # 文件不存在：旧协议（Legacy 兼容路径），由 Node 侧决定是否允许。
         return {}
     with _lock:
         if _cache["mtime"] == mtime:
@@ -42,12 +57,18 @@ def _load():
     try:
         with open(path, "r", encoding="utf-8") as handle:
             document = json.load(handle)
-    except (OSError, ValueError):
-        return {}
+    except (OSError, ValueError) as err:
+        if _reported["error"] != str(err):
+            _reported["error"] = str(err)
+            logging.error(
+                "[identity] identities.json 无法读取（权限或格式问题），拒绝降级到无身份协议: %s", err)
+        raise IdentityUnavailable(
+            "插件身份文件不可读，请检查 state/identities.json 的属主与权限") from err
     tokens = _sanitize(document.get("tokens") if isinstance(document, dict) else {})
     with _lock:
         _cache["mtime"] = mtime
         _cache["tokens"] = tokens
+    _reported["error"] = ""
     return tokens
 
 
@@ -59,3 +80,4 @@ def reset_cache():
     with _lock:
         _cache["mtime"] = None
         _cache["tokens"] = {}
+    _reported["error"] = ""

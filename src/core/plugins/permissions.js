@@ -25,6 +25,17 @@ const PERMISSIONS = Object.freeze({
 const PERMISSION_SET = new Set(Object.values(PERMISSIONS));
 const SCOPE_ALL = '*';
 
+// 这类权限的语义绑定具体资源（book:1 / library:all / artifact:x）。
+// 展示性查询 can() 可以省略 resource，但真正执行操作时必须给出资源范围。
+const RESOURCE_SCOPED = new Set([
+  PERMISSIONS.BOOKS_READ,
+  PERMISSIONS.BOOKS_WRITE,
+  PERMISSIONS.BOOKS_DELETE,
+  PERMISSIONS.FILES_READ,
+  PERMISSIONS.FILES_WRITE,
+  PERMISSIONS.METADATA_WRITE,
+]);
+
 class PermissionError extends Error {
   constructor(code, message, status = 400) {
     super(message || code);
@@ -109,6 +120,10 @@ class GrantStore {
     return count;
   }
 
+  /**
+   * 展示性权限查询：resource 省略时回答“是否持有该权限的任意范围”。
+   * 不能用于敏感操作授权，敏感路径请用 require()。
+   */
   has(instanceId, permission, resource) {
     if (typeof instanceId !== 'string' || !PLUGIN_ID_RE.test(instanceId)) return false;
     if (typeof permission !== 'string' || !PERMISSION_SET.has(permission)) return false;
@@ -120,7 +135,21 @@ class GrantStore {
     return false;
   }
 
+  /**
+   * 敏感操作授权：资源绑定的权限必须显式给出 resource，避免省略参数
+   * 退化成“持有任意范围”。scope 为 '*' 时只表示该实例被授予全部资源，
+   * 但仍需调用方声明本次操作作用于哪个资源。
+   */
   require(instanceId, permission, resource) {
+    if (typeof permission === 'string' && RESOURCE_SCOPED.has(permission)) {
+      if (resource === undefined || resource === null || String(resource).trim() === '') {
+        throw new PermissionError(
+          'PERMISSION_RESOURCE_REQUIRED',
+          `权限 ${permission} 需要明确资源范围`,
+          403,
+        );
+      }
+    }
     if (!this.has(instanceId, permission, resource)) {
       throw new PermissionError('PERMISSION_DENIED', `缺少权限：${permission}`, 403);
     }

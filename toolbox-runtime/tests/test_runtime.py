@@ -221,6 +221,20 @@ class NodeClientTests(unittest.TestCase):
         self.assertEqual(self.client.books([1])[0]["title"], "T")
         self.assertEqual(self.client.export_file("fixture", 1, "EPUB")["path"], "C:/tmp/book.epub")
 
+    def test_identity_file_unreadable_fails_loud(self):
+        """身份文件存在但损坏时必须显式失败，不能静默退回共享密钥模式。"""
+        from webserver.toolbox import identity
+        from webserver.toolbox.node_client import NodeClient, NodeError
+
+        path = Path(config.STATE_DIR) / "identities.json"
+        path.write_text("{ not json", encoding="utf-8")
+        identity.reset_cache()
+
+        with self.assertRaises(NodeError) as raised:
+            NodeClient.for_tool("fixture").book_ids()
+        self.assertEqual(raised.exception.code, "PLUGIN_IDENTITY_UNAVAILABLE")
+        self.assertEqual(raised.exception.status, 403)
+
     def test_identity_headers(self):
         from webserver.toolbox import identity
         from webserver.toolbox.node_client import NodeClient

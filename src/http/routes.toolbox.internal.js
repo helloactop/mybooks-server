@@ -14,6 +14,7 @@ const { ToolboxError, timingSafeEqualString } = require('../core/toolbox/securit
 const { internalSecret } = require('../core/toolbox/runtime');
 const { verifyIdentity } = require('../core/toolbox/identities');
 const { pluginGrantsFor } = require('../core/toolbox/plugin-grants');
+const { resolveAccess, requireAccess } = require('../core/toolbox/access-policy');
 const { importToolFile, getBookMetadata } = require('../core/toolbox/import');
 const library = require('../core/toolbox/library');
 
@@ -36,18 +37,23 @@ function requireInternal(req, res, next) {
   }
   try {
     req.pluginIdentity = readRequestIdentity(req);
+    const policy = req.pluginIdentity ? pluginGrantsFor(req.pluginIdentity.toolId) : null;
+    // 只有“带身份但未配置策略”时才需要查安装表判断是否可信旧插件；
+    // 已配置策略/无身份路径都不必多打一次数据库。
+    const toolInstalled = req.pluginIdentity && policy && !policy.configured
+      ? !!toolboxRepo.getTool(db, req.pluginIdentity.toolId)
+      : false;
+    req.pluginAccess = resolveAccess({ identity: req.pluginIdentity, policy, toolInstalled });
   } catch (err) {
     return fail(res, err);
   }
-  req.pluginPermissions = req.pluginIdentity ? pluginGrantsFor(req.pluginIdentity.toolId) : null;
   return next();
 }
 
-// 未配置策略的旧插件保持兼容；配置后 strict：未授权直接 403。
+// Legacy 兼容模式保留旧行为；Strict 模式（已配置策略/新运行时/策略损坏）
+// 一律按权限 + 资源范围校验，缺失时 403。
 function requirePermission(req, permission, resource) {
-  const policy = req.pluginPermissions;
-  if (!policy || !policy.configured) return;
-  policy.store.require(req.pluginIdentity.toolId, permission, resource);
+  requireAccess(req.pluginAccess, req.pluginIdentity && req.pluginIdentity.toolId, permission, resource);
 }
 
 router.use('/internal/toolbox', requireInternal, (req, res, next) => {

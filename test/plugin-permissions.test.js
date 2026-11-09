@@ -70,6 +70,49 @@ test('未知权限、未知实例与非法输入一律拒绝', () => {
   assert.equal(grants.has('missing', PERMISSIONS.BOOKS_READ), false);
 });
 
+test('敏感操作必须提供资源范围，不能靠省略 resource 绕过 scope', () => {
+  const grants = new GrantStore();
+  grants.grant('inst.a', PERMISSIONS.BOOKS_READ, 'book:1');
+  grants.grant('inst.a', PERMISSIONS.BOOKS_DELETE, '*');
+
+  // 展示性查询允许省略 resource。
+  assert.equal(grants.has('inst.a', PERMISSIONS.BOOKS_READ), true);
+
+  // 敏感操作必须明确作用于哪个资源。
+  for (const permission of [PERMISSIONS.BOOKS_READ, PERMISSIONS.BOOKS_DELETE, PERMISSIONS.FILES_READ]) {
+    assert.throws(
+      () => grants.require('inst.a', permission),
+      (err) => err.code === 'PERMISSION_RESOURCE_REQUIRED' && err.status === 403,
+      `${permission} 缺少 resource 必须拒绝`,
+    );
+  }
+
+  assert.equal(grants.require('inst.a', PERMISSIONS.BOOKS_READ, 'book:1'), true);
+  assert.throws(
+    () => grants.require('inst.a', PERMISSIONS.BOOKS_READ, 'book:2'),
+    (err) => err.code === 'PERMISSION_DENIED' && err.status === 403,
+  );
+  assert.equal(grants.require('inst.a', PERMISSIONS.BOOKS_DELETE, 'book:9'), true, 'scope=* 仍要求声明资源');
+});
+
+test('非资源绑定权限（如 metadata.read）不强制 resource', () => {
+  const grants = new GrantStore();
+  grants.grant('inst.a', PERMISSIONS.METADATA_READ, '*');
+  assert.equal(grants.require('inst.a', PERMISSIONS.METADATA_READ), true);
+});
+
+test('权限撤销后立即拒绝', () => {
+  const grants = new GrantStore();
+  grants.grant('inst.a', PERMISSIONS.BOOKS_READ, 'book:1');
+  assert.equal(grants.require('inst.a', PERMISSIONS.BOOKS_READ, 'book:1'), true);
+
+  grants.revoke('inst.a', PERMISSIONS.BOOKS_READ, 'book:1');
+  assert.throws(
+    () => grants.require('inst.a', PERMISSIONS.BOOKS_READ, 'book:1'),
+    (err) => err.code === 'PERMISSION_DENIED' && err.status === 403,
+  );
+});
+
 test('list 返回排序后的授权快照', () => {
   const grants = new GrantStore();
   grants.grant('inst.a', PERMISSIONS.METADATA_WRITE, 'book:2');

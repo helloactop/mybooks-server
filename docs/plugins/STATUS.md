@@ -11,6 +11,7 @@ Phase 3a 完成：权限模型 + 运行时身份绑定（Context/Kernel 已接�
 Phase 3b 部分完成：Runtime Manager + Legacy 运行时只读状态 + `GET /api/plugins/runtime`。
 Phase 3c 部分完成：内部接口按工具令牌校验归属（旧 Worker 不带令牌仍兼容）。
 Phase 3d 部分完成：内部书库/导入/导出/任务按 `state/grants.json` 裁剪；未配置的工具保持兼容。
+Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出校验），元数据服务已迁移。
 未完成：隔离进程/容器、Runtime Manager 的 invoke/cancel、`source.*` / `book.*` 能力、UI、SDK。
 旧 Toolbox 路由/Bridge/安装包/迁移保持兼容；仅新增可选身份令牌与策略文件。
 
@@ -34,8 +35,9 @@ Phase 3d 部分完成：内部书库/导入/导出/任务按 `state/grants.json`
 | Metadata 契约 | [metadata-search.js](../../src/core/plugins/capabilities/metadata-search.js) | 输入/输出校验、上限、稳定错误码、候选规范化 | 4.1–4.3 | `26fd251d` |
 | Providers | [douban.js](../../src/core/plugins/providers/douban.js) · [openlibrary.js](../../src/core/plugins/providers/openlibrary.js) | 双来源统一候选，可显式切换 | 4.2、17.3 | `26fd251d` |
 | Metadata 服务 | [services/metadata.js](../../src/core/plugins/services/metadata.js) + [plugin-services.js](../../src/http/plugin-services.js) | 注册/优先级选择/超时/错误映射；旧路由复用 | 3.6、4.1、4.4 | `26fd251d` |
+| Capability Router | [capability-router.js](../../src/core/plugins/capability-router.js) | 权限门禁 → Provider 选择 → 超时 → 输入/输出校验 | 3.6、4.1、13.3 | `9b70229b` |
 
-测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`，共 113 个。
+测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`，共 121 个。
 
 ## 目标文件结构（架构 第十五章）
 
@@ -56,7 +58,7 @@ src/
 │   │   │   ├── legacy-toolbox.js ✅  legacy-runtime.js ✅（只读健康）
 │   │   │   └── python.js ○  javascript.js ○  http.js ○  calibre.js ○  legado.js ○  Phase 3/6
 │   │   ├── permissions.js ✅  identity.js ✅（本次新增）
-│   │   ├── runtime-manager.js ✅  capability-router.js ○             Phase 3b
+│   │   ├── runtime-manager.js ✅  capability-router.js ✅
 │   │   ├── jobs.js ○  artifacts.js ○                                Phase 3+
 │   │   ├── manifest.js ○  dependencies.js ○  manager.js ○           Phase 5
 │   │   └── ui-registry.js ○                                         Phase 4
@@ -96,23 +98,24 @@ Phase 2 门禁（规范 13 章 / 架构 17.3）：契约、内置 Provider、旧
 Phase 3a：权限与身份绑定内核 ✅。
 Phase 3b：Runtime Manager 与只读状态 ✅（仅 health；Legacy 的 invoke/cancel 显式 unsupported）。
 Phase 3c：内部 import/export/tasks 按工具令牌校验归属 ✅；无令牌旧 Worker 仍兼容。
-Phase 3d：书库/元数据/文件/任务接口按 `grants.json` 裁剪 ✅；未配置工具保持兼容。隔离未做。
+Phase 3d：书库/元数据/文件/任务接口按 `grants.json` 裁剪 ✅；未配置工具保持兼容。
+Phase 3e：Capability Router 统一权限/Provider/超时/输出校验 ✅；元数据服务已迁移。隔离未做。
 
 ## 测试基线
 
 ```bash
-npm test                                  # 722/722
+npm test                                  # 730/730
 npm run check:public                      # 通过
 cd toolbox-runtime
 "C:/Users/11731/.venvs/mybooks-toolbox/Scripts/python.exe" -m unittest discover -s tests -v
                                           # 10/10（本机 Python 3.15；镜像 3.12 未跑）
 ```
 
-## 下一步：Phase 3e 隔离运行时
+## 下一步：Phase 3f 隔离运行时（需先定部署模型）
 
-1. 独立进程/容器隔离：网络出口、资源限制；共享 Worker 仅限已审查插件（规范 6.4），隔离完成前不开放第三方代码。
-2. Runtime Manager 的 invoke/cancel/start/stop 接隔离运行时，禁止用 Legacy 假实现。
-3. 隔离后把身份令牌升级为真正的进程级凭据（当前共享进程内仍可被恶意插件绕过）。
+1. 选隔离模型并写 ADR：容器内每插件子进程 vs 每插件容器；明确资源、网络、文件边界。
+2. Runtime Manager 的 invoke/cancel/start/stop 接隔离运行时；共享 Worker 仅限已审查插件（规范 6.4）。
+3. 隔离后把身份令牌升级为进程级凭据（当前共享进程内仍可被恶意插件绕过）。
 4. 测试：越权拒绝、插件失联撤能力、超时/取消、资源上限。
 
 对应规范 3.6、6.1–6.6；架构 7、13、17.4。
@@ -143,6 +146,10 @@ ctx.on('book.imported', handler);
 kernel.grants.grant('inst.alpha', 'metadata.read', 'book:*');
 const identities = new IdentityRegistry();
 identities.bind({ token, instanceId: 'inst.alpha', runtimeId: 'legacy-toolbox' });
+
+// 通用能力调用（传 principal 时先校验权限）
+const router = new CapabilityRouter({ registry, grants });
+await router.invoke({ capability, version, input, contract, principal });
 
 // 元数据与运行时服务（旧路由已接入）
 const { metadata, runtimes } = require('./src/http/plugin-services');

@@ -224,6 +224,29 @@ SDK 抽象过度、与现有 CoreAPI 重复。
 
 SDK 是可选依赖；旧插件移除 import 即可恢复 CoreAPI 调用。内部新增接口保持向后兼容，不做删除。
 
+### 13. 实施结果（Phase 4B，2026-11-09）
+
+已完成：
+
+- [x] 4B.1 基线审查：确认 HEAD `fd61d391`，复用内部路由/任务表/书库适配/CapabilityRouter/NodeClient。
+- [x] 4B.2 宿主接口：`POST /books`、`PATCH /books/:id`、`GET /books/:id/reading`、`POST/GET/DELETE /artifacts`、`GET /tasks/:id`、`GET /tasks/:id/result`、`POST /tasks/:id/cancel`、`POST /config/validate`、`POST /metadata/search`。
+- [x] 4B.2 数据层：`migrateV28` 新增 `toolbox_artifacts`（软删除生命周期、插件/任务归属、三段索引）。
+- [x] 4B.3 Python SDK 1.0.0：`books/files/jobs/config/metadata/errors/contract/client/compat`；`CoreAPI.sdk` 懒加载；镜像 `/app/sdk`。
+- [x] 4B.4 前端 SDK `/static/plugin-sdk/v1.js`；CSP 精确放行；任务监听可停止。
+- [x] 4B.5 测试：Node 800/800；Python SDK 13 项；runtime 4 项；Docker 镜像内导入与测试通过；最小链路（任务→进度→产物→导入→完成）通过。
+
+权限落地（按批准决策）：
+
+- `books.update@1`：`books.write` + `book:<id>`；现有 metadata 更新保持 `metadata.write`。
+- `files.publish@1`：`files.write` + `artifact:create`；读取 `files.read` + `artifact:<id>`；授权范围 `artifact:*`。
+- 导入书库仍单独检查 `books.write`；不扩大默认授权。
+
+未完成（4C/4D 前置）：
+
+- `Plugin`/`route` 装饰器加载体系（明确不实施）。
+- 事件订阅与 UI Slot（4D）。
+- 真实 zlibrary/md_to_epub 数据包的本轮端到端复跑（旧路径由 800 项回归覆盖）。
+
 ---
 
 ## 4C：插件商店与宿主管理 UI

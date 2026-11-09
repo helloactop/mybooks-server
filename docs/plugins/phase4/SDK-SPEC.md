@@ -1,6 +1,6 @@
 # Plugin SDK 规范
 
-> 状态：○ 规划（Python 4B / 前端 4B–4D）
+> 状态：◐ Phase 4B 已实施（Python SDK 1.0.0 / 前端 `/static/plugin-sdk/v1.js`）；4D UI Slot 与事件订阅未实施
 > 原则：SDK 是**薄封装**，不复制宿主逻辑；所有权限、校验、审计仍在 Node 侧完成。
 
 ## 1. 分层
@@ -38,29 +38,29 @@
 | --- | --- | --- | --- |
 | `books.search@1` | `books.read` | ◐ 现有 `/internal/toolbox/library/books?q=` | 返回精简列表，必须带 scope |
 | `books.get@1` | `books.read` | ◐ 现有 `?ids=` | 单本/批量详情 |
-| `books.create@1` | `books.write` | ○ 4B 新增 | 创建书籍记录，返回 `book_id` |
-| `books.update@1` | `books.write` | ◐ 现有 metadata 更新接口 | 字段白名单更新 |
-| `books.reading-status@1` | `books.read` | ○ 4B 新增 | 只读阅读状态与进度 |
+| `books.create@1` | `books.write` | ✅ 4B | 创建书籍记录，返回 `book_id`；不创建文件/阅读记录 |
+| `books.update@1` | `books.write`（`book:<id>`） | ✅ 4B `PATCH /books/:id` | 字段白名单更新；现有 metadata 接口仍用 `metadata.write` |
+| `books.reading-status@1` | `books.read` | ✅ 4B `GET /books/:id/reading` | 只读阅读状态与进度 |
 
 ### 3.2 文件
 
 | 能力 | 权限 | 现状 | 说明 |
 | --- | --- | --- | --- |
-| `files.publish@1` | `files.write` | ○ 4B 新增 | 把 `work/` 产物登记为 Artifact，返回 `artifact_id` |
+| `files.publish@1` | `files.write`（`artifact:create`） | ✅ 4B | 把 `work/` 产物登记为 Artifact，返回 `artifact_id`；授权范围 `artifact:*` |
 | `files.download@1` | `files.read` | ◐ 现有下载路由 | 流式下载，不整块读入内存 |
 | `files.import@1` | `files.write` + `books.write` | ✅ 现有 `/internal/toolbox/import` | 兼容旧 `file_path` 入参 |
 | `files.export@1` | `files.read` | ✅ 现有 `/internal/toolbox/library/export` | 导出指定格式 |
-| `files.metadata@1` | `files.read` | ○ 4B 新增 | 大小、格式、SHA-256、所属任务 |
+| `files.metadata@1` | `files.read`（`artifact:<id>`） | ✅ 4B `GET /artifacts/:id` | 大小、格式、SHA-256、任务归属；不返回路径 |
 
 ### 3.3 任务
 
 | 能力 | 权限 | 现状 | 说明 |
 | --- | --- | --- | --- |
 | `jobs.create@1` | `jobs.create` | ✅ 现有 `POST /internal/toolbox/tasks` | 创建任务 |
-| `jobs.get@1` | `jobs.create`（本人任务） | ○ 4B 新增 | 查询状态/阶段 |
+| `jobs.get@1` | `jobs.create`（本人任务） | ✅ 4B `GET /tasks/:id` | 查询状态/阶段 |
 | `jobs.progress@1` | `jobs.create` | ✅ 现有 `PATCH /tasks/:id` | 进度 0–100 |
-| `jobs.cancel@1` | `jobs.create` | ◐ 现有插件 cancel 路由 | 跨插件取消 404 |
-| `jobs.result@1` | `jobs.create` | ○ 4B 新增 | 结果摘要（不含宿主绝对路径） |
+| `jobs.cancel@1` | `jobs.create` | ✅ 4B `POST /tasks/:id/cancel` | 跨插件 403；无 cancel 路由 409 `CANCEL_UNSUPPORTED` |
+| `jobs.result@1` | `jobs.create` | ✅ 4B `GET /tasks/:id/result` | 结果摘要 + 书籍 + Artifacts；不含宿主路径 |
 
 ### 3.4 配置
 
@@ -68,7 +68,7 @@
 | --- | --- | --- | --- |
 | `config.get@1` | 无（仅本插件） | ✅ 现有 `storage.get_config` | 敏感字段返回掩码 |
 | `config.set@1` | 无（仅本插件） | ✅ 现有 `storage.set_config` | 加密落盘 |
-| `config.validate@1` | 无（仅本插件） | ○ 4B 新增 | 按 Manifest `config.schema` 校验 |
+| `config.validate@1` | 无（仅本插件） | ✅ 4B `POST /config/validate` | 按 Manifest `config.schema` 校验，不回显值 |
 
 ### 3.5 元数据
 
@@ -287,3 +287,21 @@ MyBooksUI.onLocaleChange((locale) => {});
 - 权限测试：未授权调用必须 403，且错误码不被改写。
 - 传输测试：Bridge v1 请求在 v2 宿主上仍工作；未知消息被忽略。
 - 真实插件：zlibrary、md_to_epub 各跑一条完整链路（搜索/转换/下载/入库）。
+
+## 8. Phase 4B 实施结果（2026-11-09）
+
+已实现并验证：
+
+- Python `plugin-sdk/python/mybooks_plugin_sdk` 1.0.0：`books/files/jobs/config/metadata` + `PluginError` + `compat.from_tool/attach`；无第三方运行时依赖。
+- Runtime：`CoreAPI.sdk` 懒加载（旧属性不变）、`NodeClient.request` 与新能力方法、`toolbox/sdk.py` 缓存装配；镜像构建前 `npm run sdk:sync`，SDK 位于 `/app/sdk`。
+- 内部接口：books create/PATCH/reading、artifacts publish/get/delete、tasks get/result/cancel、config validate、metadata search。
+- Artifact：`toolbox_artifacts`（migrate v28，纯增量）；`files.write:artifact:*` / `files.read:artifact:*`；路径穿越、符号链接、跨插件、超限、SHA 校验均有测试。
+- 前端：`/static/plugin-sdk/v1.js`（Bridge 薄封装、`jobs.watch().stop()`、pagehide 自动释放）；CSP 精确放行该文件。
+- 测试：Node 800/800（新增 `test/plugins-sdk-contract.test.js`）；Python SDK 13 项、runtime 4 项；Docker 镜像内可导入并跑通 runtime SDK 测试。
+
+未实施（不得标记为完成）：
+
+- `Plugin` / `route` 装饰器加载体系（宿主仍只加载 `BaseTool`）。
+- 事件订阅（`book.created` 等）与 4D UI Slot。
+- `files.download@1` 的独立 Artifact 下载端点（现有书库下载路由保持不变）。
+- 真实插件数据包本轮未重新下载；旧插件兼容由现有 `plugin-*.test.js` / `toolbox.test.js` 回归覆盖。

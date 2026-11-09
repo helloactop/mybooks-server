@@ -300,6 +300,7 @@ class CoreAPI(object):
     VERSION = CORE_API_VERSION
 
     def __init__(self, owner):
+        self._owner = owner
         self.calibre = CalibreAPI(owner)
         self.db = AppDBAPI(owner)
         self.tasks = TasksNamespace(owner)
@@ -307,3 +308,9 @@ class CoreAPI(object):
         self.storage = StorageAPI(owner)
         self.settings = SettingsAPI()
         self.utils = UtilsAPI()
+
+    @property
+    def sdk(self):
+        """Phase 4B：统一宿主能力 SDK（延迟装配，旧属性完全不变）。"""
+        from .sdk import sdk_for
+        return sdk_for(self._owner)

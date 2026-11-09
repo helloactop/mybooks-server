@@ -19,6 +19,10 @@ notes-files/
 toolbox-runtime/__pycache__/
 toolbox-runtime/**/__pycache__/
 toolbox-runtime/.pytest_cache/
+plugin-sdk/**/__pycache__/
+# SDK 镜像构建产物（由 npm run sdk:sync 生成，源在 plugin-sdk/python）
+/toolbox-runtime/sdk/*
+!/toolbox-runtime/sdk/.gitkeep
 
 # 日志
 logs/

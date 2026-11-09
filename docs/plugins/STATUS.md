@@ -22,7 +22,8 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 2026-11-09 真实插件验收 + 隔离增量：商店下载 zlibrary@0.1.0 / md_to_epub@1.1.0 并完成真实转换、下载、入库；supervisor 每子进程独立 runtime-secret、裁剪子进程环境、按插件注入身份令牌；Docker 镜像内 Python 测试通过。设计见 [isolation-design.md](isolation-design.md)。
 2026-11-09 Phase 3g 内部认证 + 独立 UID：Node 内部接口接受每插件令牌（`MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY` 下只认令牌，共享 `internal-secret` 被拒），Python `NodeClient` 隔离模式不再读取宿主共享密钥；`TOOLBOX_CHILD_UID_BASE` 让每个插件以独立 UID 运行，插件数据目录 0711 / 产物 0755 / `config.json` 0600，`state/config.key` 由 supervisor 生成并注入。Docker 双容器内完成负向认证、越权、身份冒用、真实插件转换入库与进程重启验证。
 2026-11-09 Phase 4A：Manifest v1（`manifest_version: 1`）+ 统一 `PluginDescriptor`；Legacy 与 v1 同结构输出，权限/配置/UI/依赖/事件只声明不授权；新增只读 `/api/plugins/descriptors`。设计见 [phase4/MANIFEST-V1.md](phase4/MANIFEST-V1.md)。
-未完成：Z-Library 外部网络（本机/容器 DNS 被 VPN fake-IP 命中 SSRF 防护）、UI 浏览器验收、`source.*` / `book.*` 能力、SDK、Phase 4B–4F。
+2026-11-09 Phase 4B：统一宿主能力接口 + Python SDK 1.0.0 + 前端 `/static/plugin-sdk/v1.js`。新增 `toolbox_artifacts`（migrate v28）、books create/PATCH/reading、artifacts publish/get/delete、tasks get/result/cancel、config validate、metadata search；Artifact 使用 `files.write:artifact:*` / `files.read:artifact:*`。`Plugin`/`route` 装饰器明确不实施。设计见 [phase4/SDK-SPEC.md](phase4/SDK-SPEC.md)。
+未完成：Z-Library 外部网络（本机/容器 DNS 被 VPN fake-IP 命中 SSRF 防护）、UI 浏览器验收、`source.*` / `book.*` 能力、事件订阅、Phase 4C–4F。
 旧 Toolbox 路由/Bridge/安装包/迁移保持兼容；仅新增可选身份令牌与策略文件。
 
 ## 已完成
@@ -57,9 +58,15 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 | Disabled Plugin Guard | [routes.toolbox.internal.js](../../src/http/routes.toolbox.internal.js) | 已安装但停用的插件统一 `TOOL_DISABLED` 403 | 11.3、13.3 | `96e077e7` |
 | Isolation Supervisor | [supervisor.py](../../toolbox-runtime/webserver/supervisor.py) + [runtime.py](../../toolbox-runtime/runtime.py) | 每插件子进程、懒启动、容量上限、空闲淘汰、崩溃重启、反向代理；`/internal/start`、`/internal/stop`；每子进程独立 runtime-secret、裁剪环境、按插件注入令牌 | 6.1、6.5 | `7f825df6`、`d9052f0e`、`238aad33` |
 | CI / Sprite | [lucide-icons.json](../../scripts/lucide-icons.json) | 补齐 `arrow-left` 并同步 sprite/资源版本 | — | `8b4171bb` |
+| Phase 4B Artifacts | [artifacts.js](../../src/core/toolbox/artifacts.js) + [migrateV28](../../src/db/index.js) | 插件/任务归属、相对路径、格式/大小/SHA-256、软删除；跨插件 403 | 4B | 未提交 |
+| Phase 4B Internal APIs | [routes.toolbox.internal.js](../../src/http/routes.toolbox.internal.js) + [config-schema.js](../../src/core/toolbox/config-schema.js) | books/artifacts/tasks/config/metadata；复用现有认证与 `requirePermission` | 4B | 未提交 |
+| Phase 4B Python SDK | [plugin-sdk/python](../../plugin-sdk/python) + [sdk.py](../../toolbox-runtime/webserver/toolbox/sdk.py) + [node_client.py](../../toolbox-runtime/webserver/toolbox/node_client.py) | `sdk.books/files/jobs/config/metadata`、`PluginError`、`compat.from_tool`；`CoreAPI.sdk` | 4B | 未提交 |
+| Phase 4B Frontend SDK | [plugin-sdk/v1.js](../../public/static/plugin-sdk/v1.js) + [routes.toolbox.ui.js](../../src/http/routes.toolbox.ui.js) | Bridge 薄封装、可停止的任务监听、CSP 精确放行 | 4B | 未提交 |
 
 测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`、
-`test/toolbox-access-policy.test.js`、`test/toolbox-grants.test.js`、`test/plugin-descriptor.test.js`。整套 `npm test` 798/798。
+`test/toolbox-access-policy.test.js`、`test/toolbox-grants.test.js`、`test/plugin-descriptor.test.js`、
+`test/plugins-sdk-contract.test.js`。整套 `npm test` 800/800。
+Python：`plugin-sdk/python/tests` 13 项、`toolbox-runtime/tests/test_sdk.py` 4 项；Docker 镜像内导入与测试通过。
 
 ## 目标文件结构（架构 第十五章）
 

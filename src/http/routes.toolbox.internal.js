@@ -17,6 +17,11 @@ const { pluginGrantsFor, policyState } = require('../core/toolbox/plugin-grants'
 const { resolveAccess, requireAccess, pluginAuthOnlyEnabled } = require('../core/toolbox/access-policy');
 const { importToolFile, getBookMetadata } = require('../core/toolbox/import');
 const library = require('../core/toolbox/library');
+const artifacts = require('../core/toolbox/artifacts');
+const { cancelTask } = require('../core/toolbox/tasks');
+const { getPluginDescriptor } = require('../core/toolbox/descriptor');
+const { validateConfig } = require('../core/toolbox/config-schema');
+const { metadata } = require('./plugin-services');
 
 const router = express.Router();
 
@@ -348,6 +353,225 @@ router.post('/internal/toolbox/tasks/:id/message', (req, res) => {
     res.json({ ok: true, task: toolboxRepo.updateTask(db, task.id, { message }) });
   } catch (err) {
     fail(res, err);
+  }
+});
+
+// -- Phase 4B：统一能力接口 -------------------------------------------------
+
+function parseDetails(raw) {
+  try {
+    const value = JSON.parse(raw || '{}');
+    return value && typeof value === 'object' ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+function taskDto(task) {
+  return {
+    job_id: task.id,
+    tool_id: task.tool_id,
+    operation: task.operation,
+    status: task.status,
+    stage: task.stage || '',
+    progress: Number(task.progress) || 0,
+    created_at: task.created_at,
+    finished_at: task.finished_at || null,
+    error: task.error || '',
+    message: task.message || '',
+    result_book_id: task.result_book_id == null ? null : Number(task.result_book_id),
+    runtime_task_id: task.runtime_task_id == null ? null : Number(task.runtime_task_id),
+    details: parseDetails(task.details),
+  };
+}
+
+function requireInstalledTool(toolId) {
+  const tool = toolboxRepo.getTool(db, toolId);
+  if (!tool) throw new ToolboxError('TOOL_NOT_INSTALLED', '工具尚未安装', 404);
+  if (!tool.enabled) throw new ToolboxError('TOOL_DISABLED', '工具未启用', 403);
+  return tool;
+}
+
+// books.create@1：只写元数据，不创建文件/阅读记录，避免绕过导入流程。
+router.post('/internal/toolbox/books', (req, res) => {
+  try {
+    const body = req.body || {};
+    const toolId = toolIdForRequest(req, body.tool_id);
+    requireInstalledTool(toolId);
+    requirePermission(req, 'books.write', 'library:all');
+    const book = library.createBook(db, body);
+    res.status(201).json({ ok: true, book });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// books.update@1：按批准决策只要求 books.write；现有 metadata 接口保持 metadata.write。
+router.patch('/internal/toolbox/books/:id', (req, res) => {
+  try {
+    const body = req.body || {};
+    const toolId = toolIdForRequest(req, body.tool_id);
+    requireInstalledTool(toolId);
+    requirePermission(req, 'books.write', `book:${req.params.id}`);
+    const book = library.updateBook(db, req.params.id, body);
+    res.json({ ok: true, book });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+router.get('/internal/toolbox/books/:id/reading', (req, res) => {
+  try {
+    const toolId = toolIdForRequest(req, req.query.tool_id);
+    requireInstalledTool(toolId);
+    requirePermission(req, 'books.read', `book:${req.params.id}`);
+    res.json({ ok: true, reading: library.readingStatus(db, req.params.id) });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// files.publish@1：资源标识固定为 artifact:create，授权范围写作 files.write:artifact:*。
+router.post('/internal/toolbox/artifacts', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const toolId = toolIdForRequest(req, body.tool_id);
+    requireInstalledTool(toolId);
+    requirePermission(req, 'files.write', 'artifact:create');
+    const artifact = await artifacts.publishArtifact({
+      toolId,
+      taskId: body.task_id,
+      path: body.path,
+      format: body.format,
+      title: body.title,
+      sha256: body.sha256,
+      maxBytes: body.max_bytes,
+      handleDb: db,
+    });
+    res.status(201).json({ ok: true, artifact });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+router.get('/internal/toolbox/artifacts/:id', (req, res) => {
+  try {
+    const toolId = toolIdForRequest(req, req.query.tool_id);
+    requireInstalledTool(toolId);
+    requirePermission(req, 'files.read', `artifact:${req.params.id}`);
+    res.json({ ok: true, artifact: artifacts.getArtifact({ toolId, artifactId: req.params.id, handleDb: db }) });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+router.delete('/internal/toolbox/artifacts/:id', (req, res) => {
+  try {
+    const toolId = toolIdForRequest(req, req.query.tool_id);
+    requireInstalledTool(toolId);
+    requirePermission(req, 'files.write', `artifact:${req.params.id}`);
+    artifacts.getArtifact({ toolId, artifactId: req.params.id, handleDb: db });
+    const removed = toolboxRepo.softDeleteArtifact(db, req.params.id, toolId);
+    if (!removed) throw new ToolboxError('ARTIFACT_NOT_FOUND', '产物不存在', 404);
+    res.json({ ok: true, artifact_id: req.params.id, deleted: true });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+router.get('/internal/toolbox/tasks/:id', (req, res) => {
+  try {
+    const task = taskForRequest(req, req.params.id);
+    requirePermission(req, 'jobs.create');
+    res.json({ ok: true, task: taskDto(task) });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+router.get('/internal/toolbox/tasks/:id/result', (req, res) => {
+  try {
+    const task = taskForRequest(req, req.params.id);
+    requirePermission(req, 'jobs.create');
+    if (task.status === 'running') {
+      throw new ToolboxError('TASK_NOT_FINISHED', '任务尚未结束', 409);
+    }
+    let book = null;
+    if (task.result_book_id) {
+      try { book = getBookMetadata(task.result_book_id, db); } catch { book = null; }
+    }
+    res.json({
+      ok: true,
+      result: {
+        ...taskDto(task),
+        book,
+        artifacts: artifacts.listTaskArtifacts({ toolId: task.tool_id, taskId: task.id, handleDb: db }),
+      },
+    });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+router.post('/internal/toolbox/tasks/:id/cancel', async (req, res) => {
+  try {
+    const task = taskForRequest(req, req.params.id);
+    requirePermission(req, 'jobs.create');
+    const result = await cancelTask(task.id, { toolId: task.tool_id });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// config.validate@1：只看 Schema，不回显任何配置值。
+router.post('/internal/toolbox/config/validate', (req, res) => {
+  try {
+    const body = req.body || {};
+    const toolId = toolIdForRequest(req, body.tool_id);
+    requireInstalledTool(toolId);
+    const descriptor = getPluginDescriptor(toolId, { db });
+    const schema = descriptor && descriptor.configuration && descriptor.configuration.schema;
+    if (!schema) throw new ToolboxError('CONFIG_SCHEMA_MISSING', '插件未声明配置 Schema', 404);
+    const result = validateConfig(schema, body.values !== undefined ? body.values : body.config);
+    res.json({ ok: result.ok, errors: result.errors });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// metadata.search@1：复用现有 CapabilityRouter + 豆瓣/Open Library Provider。
+router.post('/internal/toolbox/metadata/search', async (req, res) => {
+  let timer = null;
+  try {
+    const body = req.body || {};
+    const toolId = toolIdForRequest(req, body.tool_id);
+    requireInstalledTool(toolId);
+    requirePermission(req, 'metadata.read', 'library:all');
+    const isbn = String(body.isbn || '').trim();
+    const query = String(body.query || '').trim();
+    if (!isbn && !query) throw new ToolboxError('METADATA_QUERY_REQUIRED', '缺少查询条件');
+    const controller = new AbortController();
+    timer = setTimeout(() => controller.abort(), 20000);
+    const result = await metadata.service.search(
+      isbn ? { isbn } : { query },
+      { signal: controller.signal },
+    );
+    const fields = ['source', 'sourceId', 'title', 'subtitle', 'authors', 'translators',
+      'publisher', 'pubYear', 'language', 'isbn10', 'isbn13', 'cover', 'description',
+      'tags', 'rating', 'series', 'seriesIndex', 'sourceUrl'];
+    const limit = Math.max(1, Math.min(Number(body.limit) || 20, 20));
+    const candidates = (result && result.candidates ? result.candidates : []).slice(0, limit).map((item) => {
+      const out = {};
+      for (const key of fields) if (item[key] !== undefined) out[key] = item[key];
+      return out;
+    });
+    res.json({ ok: true, candidates });
+  } catch (err) {
+    if (err && err.name === 'AbortError') return fail(res, new ToolboxError('METADATA_TIMEOUT', '元数据查询超时', 504));
+    return fail(res, err);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 });
 

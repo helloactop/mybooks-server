@@ -695,8 +695,35 @@ function migrateV27(db) {
   if (!cols.includes('last_error')) db.exec("ALTER TABLE toolbox_tools ADD COLUMN last_error TEXT NOT NULL DEFAULT ''");
 }
 
+// v28:插件产物（Artifact）登记表。纯增量表，不改任务/书籍/文件表。
+// rel_path 相对 TOOLBOX_DIR/data，不存宿主绝对路径；status 支持软删除生命周期。
+function migrateV28(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS toolbox_artifacts (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      artifact_id TEXT NOT NULL UNIQUE,
+      tool_id     TEXT NOT NULL,
+      task_id     INTEGER,
+      format      TEXT NOT NULL DEFAULT '',
+      mime        TEXT NOT NULL DEFAULT 'application/octet-stream',
+      size        INTEGER NOT NULL DEFAULT 0 CHECK (size >= 0),
+      sha256      TEXT NOT NULL DEFAULT '',
+      title       TEXT NOT NULL DEFAULT '',
+      rel_path    TEXT NOT NULL,
+      status      TEXT NOT NULL DEFAULT 'active'
+                   CHECK (status IN ('active', 'deleted')),
+      created_at  TEXT NOT NULL,
+      updated_at  TEXT NOT NULL,
+      deleted_at  TEXT
+    );
+    CREATE INDEX IF NOT EXISTS toolbox_artifacts_tool_idx ON toolbox_artifacts (tool_id, id DESC);
+    CREATE INDEX IF NOT EXISTS toolbox_artifacts_task_idx ON toolbox_artifacts (task_id);
+    CREATE INDEX IF NOT EXISTS toolbox_artifacts_status_idx ON toolbox_artifacts (status, id DESC);
+  `);
+}
+
 // 迁移注册表:顺序即版本，历史迁移保持不变。
-const migrations = [migrateV1, migrateV2, migrateV3, migrateV4, migrateV5, migrateV6, migrateV7, migrateV8, migrateV9, migrateV10, migrateV11, migrateV12, migrateV13, migrateV14, migrateV15, migrateV16, migrateV17, migrateV18, migrateV19, migrateV20, migrateV21, migrateV22, migrateV23, migrateV24, migrateV25, migrateV26, migrateV27];
+const migrations = [migrateV1, migrateV2, migrateV3, migrateV4, migrateV5, migrateV6, migrateV7, migrateV8, migrateV9, migrateV10, migrateV11, migrateV12, migrateV13, migrateV14, migrateV15, migrateV16, migrateV17, migrateV18, migrateV19, migrateV20, migrateV21, migrateV22, migrateV23, migrateV24, migrateV25, migrateV26, migrateV27, migrateV28];
 
 function runMigrations(db, dataDir) {
   const current = db.prepare('PRAGMA user_version').get().user_version;

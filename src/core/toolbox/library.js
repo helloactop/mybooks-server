@@ -259,6 +259,79 @@ function createItem(bookId, userId) {
   return { id: 0, book_id: Number(bookId), collector_id: userId || null };
 }
 
+// 只接受元数据字段；不创建正文文件、不写阅读记录，避免插件绕过导入流程。
+const CREATE_FIELDS = [
+  'title', 'authors', 'author', 'tags', 'translators', 'publisher', 'pubdate',
+  'pub_year', 'isbn', 'series', 'series_index', 'rating', 'summary', 'comments',
+];
+const UPDATE_FIELDS = [
+  'title', 'authors', 'author', 'tags', 'translators', 'publisher', 'pubdate',
+  'isbn', 'series', 'series_index', 'rating', 'comments', 'summary',
+];
+
+function pickFields(fields, allowed) {
+  const out = {};
+  for (const key of allowed) {
+    if (fields && fields[key] !== undefined) out[key] = fields[key];
+  }
+  return out;
+}
+
+function createBook(handleDb, fields = {}) {
+  const input = pickFields(fields, CREATE_FIELDS);
+  const title = String(input.title || '').trim();
+  if (!title) throw new ToolboxError('BOOK_TITLE_REQUIRED', '缺少书名');
+  const authors = input.authors !== undefined
+    ? input.authors
+    : (input.author !== undefined ? splitAuthors(String(input.author || '')) : []);
+  const parsed = parseBook({
+    title,
+    authors,
+    tags: input.tags,
+    translators: input.translators,
+    publisher: input.publisher,
+    pub_year: input.pub_year !== undefined ? input.pub_year : input.pubdate,
+    isbn: input.isbn,
+    series: input.series,
+    series_index: input.series_index,
+    rating: input.rating,
+    summary: input.summary !== undefined ? input.summary : input.comments,
+    status: 'wish',
+  });
+  if (parsed.errors.length) throw new ToolboxError('BOOK_INVALID', parsed.errors.join(';'));
+  const created = books.addBook(parsed.values, null, handleDb);
+  return bookDto(handleDb, created);
+}
+
+function updateBook(handleDb, bookId, fields = {}) {
+  return updateMetadata(handleDb, bookId, pickFields(fields, UPDATE_FIELDS));
+}
+
+function readingStatus(handleDb, bookId) {
+  const id = Number(bookId);
+  const row = books.getBook(id, handleDb);
+  if (!row) throw new ToolboxError('BOOK_NOT_FOUND', '书籍不存在', 404);
+  let logs = [];
+  try { logs = JSON.parse(row.read_logs || '[]'); } catch { logs = []; }
+  let lastReadAt = null;
+  if (Array.isArray(logs) && logs.length) {
+    const last = logs[logs.length - 1];
+    if (last && typeof last === 'object') {
+      lastReadAt = last.at || last.date || last.time || null;
+    } else if (typeof last === 'string') {
+      lastReadAt = last;
+    }
+  }
+  return {
+    book_id: row.id,
+    status: row.status || '',
+    read_count: Number(row.read_count) || 0,
+    start_date: row.start_date || null,
+    finish_date: row.finish_date || null,
+    last_read_at: lastReadAt,
+  };
+}
+
 module.exports = {
   bookDto,
   getBooks,
@@ -268,6 +341,9 @@ module.exports = {
   exportFile,
   coverData,
   updateMetadata,
+  createBook,
+  updateBook,
+  readingStatus,
   deleteBook,
   mergeFormats,
   createItem,

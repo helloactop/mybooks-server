@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node scripts/test.js",
+    "sdk:sync": "node scripts/sync-plugin-sdk.mjs",
     "setup": "node scripts/setup-admin.js",
     "check:public": "node scripts/check-public.mjs",
     "icons": "node scripts/build-icons.mjs",

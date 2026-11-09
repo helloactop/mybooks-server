@@ -10,6 +10,8 @@ const TOOL_COLUMNS = `tool_id, name, revision, runtime, enabled, install_path,
   installed_at, updated_at, tool_type, pending_restart, last_error`;
 const TASK_COLUMNS = `id, tool_id, operation, status, stage, progress, created_at,
   finished_at, error, message, result_book_id, runtime_task_id, details`;
+const ARTIFACT_COLUMNS = `id, artifact_id, tool_id, task_id, format, mime, size, sha256,
+  title, rel_path, status, created_at, updated_at, deleted_at`;
 
 function parseJson(value, fallback) {
   try {
@@ -171,7 +173,59 @@ function recoverRunningTasks(db, reason = '服务重启，任务已中断') {
   `).run(ts, reason).changes;
 }
 
+// -- Artifact 登记 ---------------------------------------------------------
+// 只做 SQL；路径校验、大小与摘要由 core/toolbox/artifacts.js 负责。
+
+function insertArtifact(db, record) {
+  const ts = record.created_at || new Date().toISOString();
+  db.prepare(`
+    INSERT INTO toolbox_artifacts (artifact_id, tool_id, task_id, format, mime,
+      size, sha256, title, rel_path, status, created_at, updated_at)
+    VALUES (@artifact_id, @tool_id, @task_id, @format, @mime,
+      @size, @sha256, @title, @rel_path, 'active', @created_at, @updated_at)
+  `).run({
+    artifact_id: record.artifact_id,
+    tool_id: record.tool_id,
+    task_id: record.task_id == null ? null : Number(record.task_id),
+    format: record.format || '',
+    mime: record.mime || 'application/octet-stream',
+    size: Number(record.size) || 0,
+    sha256: record.sha256 || '',
+    title: record.title || '',
+    rel_path: record.rel_path,
+    created_at: ts,
+    updated_at: ts,
+  });
+  return getArtifactByPublicId(db, record.artifact_id);
+}
+
+function getArtifactByPublicId(db, artifactId, { includeDeleted = false } = {}) {
+  const row = db.prepare(`SELECT ${ARTIFACT_COLUMNS} FROM toolbox_artifacts WHERE artifact_id = ?`)
+    .get(String(artifactId || ''));
+  if (!row) return null;
+  if (!includeDeleted && row.status !== 'active') return null;
+  return row;
+}
+
+function listArtifactsForTask(db, taskId) {
+  return db.prepare(`SELECT ${ARTIFACT_COLUMNS} FROM toolbox_artifacts
+    WHERE task_id = ? AND status = 'active' ORDER BY id ASC`).all(Number(taskId));
+}
+
+function softDeleteArtifact(db, artifactId, toolId) {
+  const ts = new Date().toISOString();
+  return db.prepare(`UPDATE toolbox_artifacts SET status = 'deleted', deleted_at = ?, updated_at = ?
+    WHERE artifact_id = ? AND tool_id = ? AND status = 'active'`)
+    .run(ts, ts, String(artifactId || ''), String(toolId || '')).changes;
+}
+
+function deleteArtifactsForTool(db, toolId) {
+  return db.prepare('DELETE FROM toolbox_artifacts WHERE tool_id = ?').run(String(toolId || '')).changes;
+}
+
 module.exports = {
   listTools, getTool, insertTool, updateTool, setEnabled, removeTool,
   createTask, getTask, listTasks, updateTask, finishTask, recoverRunningTasks,
+  insertArtifact, getArtifactByPublicId, listArtifactsForTask,
+  softDeleteArtifact, deleteArtifactsForTool,
 };

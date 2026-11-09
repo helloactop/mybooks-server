@@ -301,6 +301,8 @@ function uninstall(toolId, { purgeData = false, handleDb = defaultDb } = {}) {
   }
   try {
     toolboxRepo.removeTool(handleDb, toolId);
+    // 插件卸载后产物登记立即失效；数据目录是否保留由 purgeData 决定。
+    toolboxRepo.deleteArtifactsForTool(handleDb, toolId);
     fs.rmSync(trash, { recursive: true, force: true });
     fs.rmSync(previousDir(toolId), { recursive: true, force: true });
     if (purgeData) fs.rmSync(assertInside(path.join(TOOLBOX_DIR, 'data'), path.join(TOOLBOX_DIR, 'data', toolId), 'PATH_ESCAPE'), { recursive: true, force: true });

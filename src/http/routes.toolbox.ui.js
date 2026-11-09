@@ -71,7 +71,7 @@ function pluginCsp(req, toolId) {
     // 不透明源 + 禁止下载之外的能力；下载由用户点击触发，allow-downloads 只放行下载
     'sandbox allow-scripts allow-modals allow-downloads',
     "default-src 'none'",
-    `script-src ${base} ${origin}/static/toolbox-bridge.js`,
+    `script-src ${base} ${origin}/static/toolbox-bridge.js ${origin}/static/plugin-sdk/v1.js`,
     `style-src ${base} 'unsafe-inline'`,
     `img-src ${origin} ${base} https: data:`,
     `font-src ${base} data:`,

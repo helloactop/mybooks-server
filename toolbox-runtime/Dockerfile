@@ -1,6 +1,6 @@
 FROM python:3.12-slim-bookworm
 
-ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app:/app/sdk
 WORKDIR /app
 
 RUN groupadd -g 1000 toolbox \
@@ -14,6 +14,8 @@ ARG PIP_INDEX_URL=https://pypi.org/simple
 RUN pip install --no-cache-dir --index-url "$PIP_INDEX_URL" -r requirements.txt
 
 COPY --chown=1000:1000 webserver ./webserver
+# 由 `npm run sdk:sync` 从 plugin-sdk/python 生成；单一源不在运行时维护第二份实现。
+COPY --chown=1000:1000 sdk ./sdk
 COPY --chown=1000:1000 runtime.py ./
 
 USER 1000:1000

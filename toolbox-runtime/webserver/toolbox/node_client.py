@@ -212,3 +212,73 @@ class NodeClient(object):
         return self._request("POST", "/internal/toolbox/library/items", {
             "book_id": int(book_id), "user_id": user_id,
         }, timeout=15)["item"]
+
+    # -- Phase 4B：统一能力接口（供 mybooks_plugin_sdk 薄封装复用） ----------
+    def request(self, method, path, payload=None, timeout=20):
+        """公开的通用请求入口；参数与 _request 完全一致。"""
+        return self._request(method, path, payload, timeout)
+
+    def create_book(self, fields):
+        payload = dict(fields or {})
+        payload.setdefault("tool_id", self.tool_id)
+        return self._request("POST", "/internal/toolbox/books", payload, timeout=30)["book"]
+
+    def update_book(self, book_id, fields):
+        payload = dict(fields or {})
+        payload.setdefault("tool_id", self.tool_id)
+        return self._request(
+            "PATCH", "/internal/toolbox/books/%d" % int(book_id), payload, timeout=30)["book"]
+
+    def reading_status(self, book_id):
+        from urllib.parse import quote
+        return self._request(
+            "GET", "/internal/toolbox/books/%d/reading?tool_id=%s" % (
+                int(book_id), quote(self.tool_id)), timeout=15)["reading"]
+
+    def publish_artifact(self, task_id, file_path, fmt="", title="", sha256="", max_bytes=None):
+        payload = {
+            "tool_id": self.tool_id,
+            "task_id": task_id,
+            "path": file_path,
+            "format": fmt,
+            "title": title,
+            "sha256": sha256,
+        }
+        if max_bytes is not None:
+            payload["max_bytes"] = int(max_bytes)
+        return self._request("POST", "/internal/toolbox/artifacts", payload, timeout=120)["artifact"]
+
+    def get_artifact(self, artifact_id):
+        from urllib.parse import quote
+        return self._request(
+            "GET", "/internal/toolbox/artifacts/%s?tool_id=%s" % (
+                quote(str(artifact_id)), quote(self.tool_id)), timeout=15)["artifact"]
+
+    def delete_artifact(self, artifact_id):
+        from urllib.parse import quote
+        return self._request(
+            "DELETE", "/internal/toolbox/artifacts/%s?tool_id=%s" % (
+                quote(str(artifact_id)), quote(self.tool_id)), timeout=15)
+
+    def get_task(self, task_id):
+        return self._request("GET", "/internal/toolbox/tasks/%d" % int(task_id), timeout=15)["task"]
+
+    def task_result(self, task_id):
+        return self._request("GET", "/internal/toolbox/tasks/%d/result" % int(task_id), timeout=30)["result"]
+
+    def cancel_task(self, task_id):
+        return self._request("POST", "/internal/toolbox/tasks/%d/cancel" % int(task_id), {}, timeout=30)
+
+    def validate_config(self, values):
+        return self._request("POST", "/internal/toolbox/config/validate", {
+            "tool_id": self.tool_id,
+            "values": values or {},
+        }, timeout=15)
+
+    def metadata_search(self, query="", isbn="", limit=20):
+        payload = {"tool_id": self.tool_id, "limit": int(limit)}
+        if isbn:
+            payload["isbn"] = str(isbn)
+        else:
+            payload["query"] = str(query or "")
+        return self._request("POST", "/internal/toolbox/metadata/search", payload, timeout=30)["candidates"]

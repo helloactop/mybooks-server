@@ -27,6 +27,52 @@ Phase 2 完成：`metadata.search@1` 契约、豆瓣/OpenLibrary 双 Provider、
 
 测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`，共 77 个。
 
+## 目标文件结构（架构 第十五章）
+
+图例：✅ 已有 ｜ ○ 规划（按 Phase 增量创建，禁止先建空壳）
+
+```text
+src/
+├── core/
+│   ├── plugins/
+│   │   ├── kernel.js ✅          registry.js ✅       context.js ✅
+│   │   ├── lifecycle.js ✅       events.js ✅
+│   │   ├── capabilities/metadata-search.js ✅（本次新增分层）
+│   │   ├── providers/douban.js ✅  providers/openlibrary.js ✅（本次新增分层）
+│   │   ├── services/
+│   │   │   ├── metadata.js ✅
+│   │   │   └── sources.js ○  books.js ○  reader.js ○  device.js ○   Phase 3+
+│   │   ├── adapters/
+│   │   │   ├── legacy-toolbox.js ✅
+│   │   │   └── python.js ○  javascript.js ○  http.js ○  calibre.js ○  legado.js ○  Phase 3/6
+│   │   ├── permissions.js ○  runtime-manager.js ○  capability-router.js ○  Phase 3
+│   │   ├── jobs.js ○  artifacts.js ○                                Phase 3+
+│   │   ├── manifest.js ○  dependencies.js ○  manager.js ○           Phase 5
+│   │   └── ui-registry.js ○                                         Phase 4
+│   └── toolbox/ ✅（已有代码原位保留，不迁移）
+├── db/
+│   ├── plugins.js ○                                                 Phase 5（暂不建表）
+│   └── toolbox.js ✅
+└── http/
+    ├── routes.plugins.js ✅
+    ├── routes.plugins.ui.js ○                                       Phase 4
+    ├── plugin-services.js ✅（本仓库组装点，不在架构树内）
+    └── routes.toolbox*.js ✅（保留兼容）
+
+plugin-runtimes/ ○                                                   Phase 3+
+├── python/{runner.py, rpc.py, sdk/}
+├── javascript/{runner.js, rpc.js, sdk/}
+└── legacy/toolbox-runtime（引用现有实现）
+
+plugin-sdk/ ○                                                        Phase 5
+├── javascript/  python/  schemas/  examples/  test-kit/  docs/
+```
+
+说明：
+- `capabilities/` + `providers/` 是本次实现的分层（契约与实现分离）；架构文档原树只列 `services/`，三者均在 `src/core/plugins/`。
+- `core/toolbox/`、`db/toolbox.js`、`http/routes.toolbox*.js` 是兼容边界：不迁移、不改协议。
+- 规划文件按 Phase 增量创建，不得用空壳/TODO 占位。
+
 ## 验收对照（规范 13.2）
 
 - ✅ 1、2、4、5、6、7、8、9、11

@@ -1,6 +1,6 @@
 # 插件平台进度（AI 接手）
 
-> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`）
+> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，HEAD `96e077e7`）
 > 文档：[架构](mybooks-plugin-architecture.md) · [规范](mybooks-plugin-development-standards.md)
 
 ## 现状
@@ -12,7 +12,8 @@ Phase 3b 部分完成：Runtime Manager + Legacy 运行时只读状态 + `GET /a
 Phase 3c 部分完成：内部接口按工具令牌校验归属（旧 Worker 不带令牌仍兼容）。
 Phase 3d 部分完成：内部书库/导入/导出/任务按 `state/grants.json` 裁剪；未配置的工具保持兼容。
 Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出校验），元数据服务已迁移。
-审查修复轮次完成：Legacy/Strict 访问模式、grants fail-closed、Context 私有封装、宿主组合根、ISBN 检索、Provider 兜底、AbortSignal 取消传播。
+2026-11-09 审查修复完成：CI 图标校验、Legacy/Strict 访问模式、grants fail-closed、Context 私有封装、宿主组合根、ISBN 检索、Provider 兜底、AbortSignal 取消传播。
+2026-11-09 第二轮修复：损坏策略前置阻断无身份 Legacy 路径、停用插件统一拒绝、错误类型授权不再 fail-open、Python 身份文件仅对 FileNotFoundError 降级。
 未完成：隔离进程/容器、Runtime Manager 的真实 invoke/cancel、`source.*` / `book.*` 能力、UI、SDK。
 旧 Toolbox 路由/Bridge/安装包/迁移保持兼容；仅新增可选身份令牌与策略文件。
 
@@ -37,16 +38,18 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 | Providers | [douban.js](../../src/core/plugins/providers/douban.js) · [openlibrary.js](../../src/core/plugins/providers/openlibrary.js) | 双来源统一候选，可显式切换 | 4.2、17.3 | `26fd251d` |
 | Metadata 服务 | [services/metadata.js](../../src/core/plugins/services/metadata.js) + [plugin-services.js](../../src/http/plugin-services.js) | 注册/优先级选择/超时/错误映射；旧路由复用 | 3.6、4.1、4.4 | `26fd251d` |
 | Capability Router | [capability-router.js](../../src/core/plugins/capability-router.js) | 权限门禁 → Provider 选择 → 超时/取消 → 输入/输出校验 | 3.6、4.1、13.3 | `9b70229b` |
-| Access Policy | [access-policy.js](../../src/core/toolbox/access-policy.js) | 区分 Legacy 兼容 / Strict 插件；未知新插件默认拒绝 | 4.2、6.2、6.4 | 本次 |
-| Grants Fail-Closed | [plugin-grants.js](../../src/core/toolbox/plugin-grants.js) | `absent/ok/last-good/broken` 四态；损坏不扩权、重启仍安全 | 5.2、5.3 | 本次 |
-| Scope Enforcement | [permissions.js](../../src/core/plugins/permissions.js) | `can()` 展示 vs `require()` 授权；资源型权限必须带 resource | 5.3 | 本次 |
-| Context Encapsulation | [context.js](../../src/core/plugins/context.js) | WeakMap 私有状态；不暴露 Registry/EventBus/GrantStore | 6.2、6.3 | 本次 |
-| Host Composition | [plugin-services.js](../../src/http/plugin-services.js) | 单一 Kernel/Registry/RuntimeManager；内置 Provider 统一注册 | 7.1–7.4 | 本次 |
-| Metadata Fallback | [services/metadata.js](../../src/core/plugins/services/metadata.js) | Provider 优先级 + 可配置兜底；显式来源不兜底 | 8.3、8.4 | 本次 |
-| Cancellation | [capability-router.js](../../src/core/plugins/capability-router.js) | AbortSignal 传达到 Provider/fetch；超时与取消语义分离 | 9.2–9.4 | 本次 |
+| Access Policy | [access-policy.js](../../src/core/toolbox/access-policy.js) | 区分 Legacy 兼容 / Strict 插件；未知新插件默认拒绝；损坏策略前置阻断 | 4.2、6.2、6.4 | `d7121c1e`、`96e077e7` |
+| Grants Fail-Closed | [plugin-grants.js](../../src/core/toolbox/plugin-grants.js) | `absent/ok/last-good/broken` 四态；损坏不扩权、重启仍安全；错误类型不退宽松 | 5.2、5.3 | `d7121c1e`、`96e077e7` |
+| Scope Enforcement | [permissions.js](../../src/core/plugins/permissions.js) | `can()` 展示 vs `require()` 授权；资源型权限必须带 resource | 5.3 | `d7121c1e` |
+| Context Encapsulation | [context.js](../../src/core/plugins/context.js) | WeakMap 私有状态；不暴露 Registry/EventBus/GrantStore | 6.2、6.3 | `938a2d71` |
+| Host Composition | [plugin-services.js](../../src/http/plugin-services.js) | 单一 Kernel/Registry/RuntimeManager；内置 Provider 统一注册 | 7.1–7.4 | `f8c4e0ae` |
+| Metadata Fallback | [services/metadata.js](../../src/core/plugins/services/metadata.js) | Provider 优先级 + 可配置兜底；显式来源不兜底 | 8.3、8.4 | `f8c4e0ae`、`57ed3576` |
+| Cancellation | [capability-router.js](../../src/core/plugins/capability-router.js) | AbortSignal 传达到 Provider/fetch；超时与取消语义分离 | 9.2–9.4 | `2cc697a4` |
+| Disabled Plugin Guard | [routes.toolbox.internal.js](../../src/http/routes.toolbox.internal.js) | 已安装但停用的插件统一 `TOOL_DISABLED` 403 | 11.3、13.3 | `96e077e7` |
+| CI / Sprite | [lucide-icons.json](../../scripts/lucide-icons.json) | 补齐 `arrow-left` 并同步 sprite/资源版本 | — | `8b4171bb` |
 
 测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`、
-`test/toolbox-access-policy.test.js`、`test/toolbox-grants.test.js`。整套 `npm test` 760/760。
+`test/toolbox-access-policy.test.js`、`test/toolbox-grants.test.js`。整套 `npm test` 762/762。
 
 ## 目标文件结构（架构 第十五章）
 
@@ -120,11 +123,16 @@ Phase 3e：Capability Router 统一权限/Provider/超时/输出校验 ✅；元
 | 身份令牌有效 + 工具已在 `grants.json` 配置 | `strict` | 按权限 + 资源 scope 校验，缺失 403 |
 | 身份令牌有效 + 已安装旧插件但无策略 | `legacy-verified` | 兼容旧插件，但归属已校验 |
 | 身份令牌有效 + 未知/未安装的新运行时 | `strict` | 默认拒绝 |
-| `grants.json` 损坏且无快照 | `strict` | 全局 fail-closed |
+| 已安装但 `enabled=false` 的插件 | `strict` | 统一 `TOOL_DISABLED` 403，任何内部读写/任务都不再放行 |
+| `grants.json` 损坏且无快照 | `strict` | 全局 fail-closed；无身份 Legacy 路径同样 403 `POLICY_BROKEN` |
 
 `grants.json` 状态：`absent`（无策略文件）/ `ok` / `last-good`（文件损坏但沿用
 `state/grants.last-good.json` 可信快照）/ `broken`（无任何可信策略，全部拒绝）。
 删除 `grants.json` 但保留快照时不会回到宽松模式；恢复 Legacy 兼容需同时移除快照。
+`broken` 在读取身份之前判定，因此关闭 `MYBOOKS_TOOLBOX_LEGACY_COMPAT` 与否都无法绕过。
+
+授权值必须是数组：合法 JSON 里写成字符串/`null` 等错误类型时，该插件仍进入严格模式
+（`configured=true`、空授权 → 全部 403），不会退回宽松兼容。
 
 权限判定拆分为：`has()` 只用于展示性查询（可省略 resource）；`require()` 用于敏感操作，
 `books.read/write/delete`、`files.read/write`、`metadata.write` 必须显式给出
@@ -148,19 +156,20 @@ Phase 3e：Capability Router 统一权限/Provider/超时/输出校验 ✅；元
 - 主镜像 `USER node`（uid/gid 1000），`toolbox-runtime` 镜像显式 `USER 1000:1000`，
   同一 `toolbox-data` 卷下 `state/identities.json`（0600）双方可读写。
 - 宿主 UID 不同（NAS bind mount）时，Python 读取身份文件失败会抛
-  `PLUGIN_IDENTITY_UNAVAILABLE`，拒绝静默降级；需让两个容器使用同一 UID/GID，
+  `PLUGIN_IDENTITY_UNAVAILABLE`，拒绝静默降级；只有 `FileNotFoundError` 才允许
+  旧协议，`PermissionError` 等一律显式失败。需让两个容器使用同一 UID/GID，
   或改用受控凭据交付，不允许 `chmod 777`。
 - 严格部署可设 `MYBOOKS_TOOLBOX_LEGACY_COMPAT=false`：无身份头的内部请求一律 403。
 
 ## 测试基线
 
 ```bash
-npm test                                  # 760/760（2026-11-09）
+npm test                                  # 762/762（2026-11-09）
 npm run check:public                      # 通过
 npm run check:icons                       # 通过（lucide-static 1.70.0，23 个图标）
 cd toolbox-runtime
 "C:/Users/11731/.venvs/mybooks-toolbox/Scripts/python.exe" -m unittest discover -s tests -v
-                                          # 11/11（本机 Python 3.15；镜像 3.12 未跑）
+                                          # 12/12（本机 Python 3.15；镜像 3.12 未跑）
 ```
 
 `npm ci --ignore-scripts` 未在本机重复执行（依赖与 lockfile 未变）；CI 会执行。

@@ -1,6 +1,6 @@
 # 插件平台进度（AI 接手）
 
-> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，HEAD `cdd410e6`）
+> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，HEAD `7f825df6`）
 > 文档：[架构](mybooks-plugin-architecture.md) · [规范](mybooks-plugin-development-standards.md)
 
 ## 现状
@@ -15,7 +15,8 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 2026-11-09 审查修复完成：CI 图标校验、Legacy/Strict 访问模式、grants fail-closed、Context 私有封装、宿主组合根、ISBN 检索、Provider 兜底、AbortSignal 取消传播。
 2026-11-09 第二轮修复：损坏策略前置阻断无身份 Legacy 路径、停用插件统一拒绝、错误类型授权不再 fail-open、Python 身份文件仅对 FileNotFoundError 降级。
 2026-11-09 第三轮修复：Python 身份文件严格校验 `version`/`tokens` 结构，文件存在但缺令牌不再降级；Legacy 共享密钥路径与 Docker 共享卷的隔离缺口写为 Phase 3f 强制验收项。
-未完成：隔离进程/容器、Runtime Manager 的真实 invoke/cancel、`source.*` / `book.*` 能力、UI、SDK。
+2026-11-09 隔离运行时（opt-in）：容器内每插件子进程 supervisor（懒启动、容量上限、空闲淘汰、崩溃重启、反向代理）；`TOOLBOX_ISOLATE_PLUGINS=1` 启用。
+未完成：跨容器/恶意代码沙箱、Runtime Manager 的真实 invoke/cancel、`source.*` / `book.*` 能力、UI、SDK。
 旧 Toolbox 路由/Bridge/安装包/迁移保持兼容；仅新增可选身份令牌与策略文件。
 
 ## 已完成
@@ -47,6 +48,7 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 | Metadata Fallback | [services/metadata.js](../../src/core/plugins/services/metadata.js) | Provider 优先级 + 可配置兜底；显式来源不兜底 | 8.3、8.4 | `f8c4e0ae`、`57ed3576` |
 | Cancellation | [capability-router.js](../../src/core/plugins/capability-router.js) | AbortSignal 传达到 Provider/fetch；超时与取消语义分离 | 9.2–9.4 | `2cc697a4` |
 | Disabled Plugin Guard | [routes.toolbox.internal.js](../../src/http/routes.toolbox.internal.js) | 已安装但停用的插件统一 `TOOL_DISABLED` 403 | 11.3、13.3 | `96e077e7` |
+| Isolation Supervisor | [supervisor.py](../../toolbox-runtime/webserver/supervisor.py) + [runtime.py](../../toolbox-runtime/runtime.py) | 每插件子进程、懒启动、容量上限、空闲淘汰、崩溃重启、反向代理 | 6.1、6.5 | `7f825df6` |
 | CI / Sprite | [lucide-icons.json](../../scripts/lucide-icons.json) | 补齐 `arrow-left` 并同步 sprite/资源版本 | — | `8b4171bb` |
 
 测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`、
@@ -112,7 +114,8 @@ Phase 3a：权限与身份绑定内核 ✅。
 Phase 3b：Runtime Manager 与只读状态 ✅（仅 health；Legacy 的 invoke/cancel 显式 unsupported）。
 Phase 3c：内部 import/export/tasks 按工具令牌校验归属 ✅；无令牌旧 Worker 仍兼容。
 Phase 3d：书库/元数据/文件/任务接口按 `grants.json` 裁剪 ✅；未配置工具保持兼容。
-Phase 3e：Capability Router 统一权限/Provider/超时/输出校验 ✅；元数据服务已迁移。隔离未做。
+Phase 3e：Capability Router 统一权限/Provider/超时/输出校验 ✅；元数据服务已迁移。
+Phase 3f（部分完成）：容器内每插件子进程（opt-in），故障/资源隔离 ✅；跨容器/恶意代码沙箱、宿主凭据隔离未做。
 
 ## 内部接口信任模型（本次新增）
 
@@ -183,19 +186,33 @@ npm run check:public                      # 通过
 npm run check:icons                       # 通过（lucide-static 1.70.0，23 个图标）
 cd toolbox-runtime
 "C:/Users/11731/.venvs/mybooks-toolbox/Scripts/python.exe" -m unittest discover -s tests -v
-                                          # 14/14（本机 Python 3.15；镜像 3.12 未跑）
+                                          # 20/20（含 supervisor / busy 探活；本机 Python 3.15，镜像 3.12 未跑）
 ```
 
 `npm ci --ignore-scripts` 未在本机重复执行（依赖与 lockfile 未变）；CI 会执行。
 
-## 下一步：Phase 3f 隔离运行时（需先定部署模型）
+## Phase 3f 隔离运行时
 
-1. 选隔离模型并写 ADR：容器内每插件子进程 vs 每插件容器；明确资源、网络、文件边界。
-2. Runtime Manager 的 invoke/cancel/start/stop 接隔离运行时；共享 Worker 仅限已审查插件（规范 6.4）。
-3. 隔离后把身份令牌升级为进程级凭据（当前共享进程内仍可被恶意插件绕过）。
-4. **强制验收**：不可信插件不得使用 `legacy-compat` 无身份路径；宿主凭据与插件数据目录分离；
-   Docker 共享卷不再对插件进程可写；越权、缺令牌、身份文件损坏均显式 403 且无降级路径。
-5. 测试：越权拒绝、插件失联撤能力、超时/取消、资源上限。
+已实现（opt-in，`TOOLBOX_ISOLATE_PLUGINS=1`）：
+
+- supervisor 在容器内为每个插件拉起独立子进程（`runtime.py` + `TOOLBOX_ONLY_TOOL`），
+  supervisor 只做反向代理，不再于主进程加载插件代码；
+- 懒启动；`TOOLBOX_MAX_CHILDREN`（默认 2）限制并发子进程；
+  `TOOLBOX_CHILD_MEMORY_MB`（默认 384，POSIX `ulimit -v`）；
+  `TOOLBOX_CHILD_IDLE_SECONDS`（默认 600）空闲淘汰，淘汰前探测 `/internal/busy`；
+- 子进程崩溃只影响自身，下次请求自动重启；`POST /internal/reload` 全量重载；
+- `/healthz` 额外返回 `isolated / children / deferred`，Node 侧 `/tool/{id}/...` 协议不变。
+
+明确边界：同一容器、同一 UID、共享 `/toolbox` 与网络 —— 这是**故障/资源隔离**，
+不是恶意代码沙箱。
+
+仍未完成：
+
+1. 跨容器隔离或独立 UID + 只读插件数据目录，把身份令牌升级为进程级凭据。
+2. Runtime Manager 的 invoke/cancel/start/stop 接到该 supervisor（当前 Node 仍走兼容路由）。
+3. 真实插件验收（Z-Library、Markdown 转 EPUB）与资源上限压测。
+4. **强制验收**：不可信插件不得走 `legacy-compat` 无身份路径；越权、缺令牌、身份文件损坏
+   均显式 403 且无降级路径；宿主凭据与插件数据目录分离。
 
 对应规范 3.6、6.1–6.6；架构 7、13、17.4。
 

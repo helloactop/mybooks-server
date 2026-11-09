@@ -27,6 +27,7 @@ const routesPublic = require('./src/http/routes.public');
 const routesToolbox = require('./src/http/routes.toolbox');
 const routesToolboxInternal = require('./src/http/routes.toolbox.internal');
 const routesToolboxUi = require('./src/http/routes.toolbox.ui');
+const routesPlugins = require('./src/http/routes.plugins');
 const { auth, requireSession } = require('./src/http/middleware.auth');
 const routesAuth = require('./src/http/routes.auth');
 const routesSync = require('./src/http/routes.sync');
@@ -122,6 +123,8 @@ app.use('/api', attachVlScope);
 
 // 工具箱：商店/安装管理/任务/插件接口代理（全部要求会话）
 app.use(routesToolbox);
+// 统一插件只读视图：在 /api 会话守卫之后，不改旧工具箱行为。
+app.use(routesPlugins);
 
 // 电子书文件路由(multipart 上传/列表/删除/下载登记)
 app.use(routesFiles);

@@ -8,6 +8,8 @@ BaseHandler / PluginHost / NodeClient），不需要真实 Node、网络或第�
 import json
 import os
 import shutil
+import stat
+import subprocess
 import sys
 import tempfile
 import threading
@@ -16,6 +18,7 @@ import types
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -493,17 +496,16 @@ class SupervisorTests(_SupervisorFixture, unittest.TestCase):
         self._teardown_supervisor()
 
     def test_child_uid_disabled_by_default_and_stable_when_enabled(self):
-        from unittest import mock
-
         self.assertEqual(self.supervisor._child_uid("alpha"), 0)
 
         self.supervisor.child_uid_base = 2000
-        with mock.patch.object(self._module.os, "geteuid", return_value=0, create=True), \
-                mock.patch.object(self._module.os, "name", "posix"):
-            first = self.supervisor._child_uid("alpha")
-            self.assertGreaterEqual(first, 2000)
-            self.assertLess(first, 2200)
-            self.assertEqual(first, self.supervisor._child_uid("alpha"), "同一插件 UID 必须稳定")
+        self.supervisor._uid_registry = self._module.UidRegistry(
+            str(self.root / "uid-map.json"), 2000, 8)
+        first = self.supervisor._child_uid("alpha")
+        self.assertGreaterEqual(first, 2000)
+        self.assertLess(first, 2008)
+        self.assertEqual(first, self.supervisor._child_uid("alpha"), "同一插件 UID 必须稳定")
+        self.assertNotEqual(first, self.supervisor._child_uid("beta"), "不同插件不得共用 UID")
 
     def test_private_data_dir_is_owner_only(self):
         import stat
@@ -806,6 +808,10 @@ class SupervisorAppTests(_SupervisorFixture, AsyncHTTPTestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertTrue(payload["isolated"])
         self.assertEqual(payload["children"], [])
+        # 部署核对字段：两侧开关 + 真实生效的 UID 隔离状态。
+        self.assertIn("plugin_auth_only", payload)
+        self.assertIn("node_plugin_auth_only", payload)
+        self.assertFalse(payload["uid_isolation"]["uid_enabled"])
 
         response = self.fetch("/internal/reload", method="POST", body="",
                               headers={"X-Mybooks-Runtime-Secret": "unit-test-secret"})
@@ -871,6 +877,368 @@ class BaseHandlerAuthTests(AsyncHTTPTestCase):
     def test_requires_user_context(self):
         response = self.fetch("/ping", headers={"X-Mybooks-Runtime-Secret": "unit-test-secret"})
         self.assertEqual(response.code, 401)
+
+
+class UidRegistryTests(unittest.TestCase):
+    """持久化、无冲突的 UID 分配（Phase 3g.1）。"""
+
+    def setUp(self):
+        from webserver import supervisor as module
+
+        self.module = module
+        self.root = Path(tempfile.mkdtemp(prefix="mybooks-uid-reg-", dir=_TMP))
+        self.path = str(self.root / "uid-map.json")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _registry(self, base=3000, count=8):
+        return self.module.UidRegistry(self.path, base, count)
+
+    def test_allocates_unique_stable_uids_and_persists(self):
+        registry = self._registry()
+        tool_ids = ["tool_%02d" % index for index in range(8)]
+        assigned = [registry.allocate(tool_id) for tool_id in tool_ids]
+        self.assertEqual(len(set(assigned)), len(tool_ids), "同一池内不得出现重复 UID")
+        self.assertEqual(sorted(assigned), list(range(3000, 3008)))
+        # 重启（新实例读同一文件）后同一插件仍是同一 UID。
+        reopened = self._registry()
+        for tool_id, uid in zip(tool_ids, assigned):
+            self.assertEqual(reopened.allocate(tool_id), uid)
+        if os.name == "posix":
+            self.assertEqual(stat.S_IMODE(os.stat(self.path).st_mode), 0o600)
+
+    def test_pool_exhaustion_fails_loud(self):
+        registry = self._registry(count=2)
+        registry.allocate("alpha")
+        registry.allocate("beta")
+        with self.assertRaises(self.module.IsolationError) as ctx:
+            registry.allocate("gamma")
+        self.assertIn("池已耗尽", str(ctx.exception))
+
+    def test_corrupted_registry_with_duplicate_uids_fails_closed(self):
+        Path(self.path).write_text(json.dumps({
+            "version": 1, "base": 3000,
+            "assignments": {"alpha": 3000, "beta": 3000},
+        }), encoding="utf-8")
+        with self.assertRaises(self.module.IsolationError) as ctx:
+            self._registry().allocate("gamma")
+        self.assertIn("冲突", str(ctx.exception))
+
+    def test_corrupted_registry_json_fails_closed(self):
+        Path(self.path).write_text("{not json", encoding="utf-8")
+        with self.assertRaises(self.module.IsolationError) as ctx:
+            self._registry().allocate("gamma")
+        self.assertIn("无法读取", str(ctx.exception))
+
+    def test_historical_owner_uid_is_adopted(self):
+        data_root = self.root / "data"
+        (data_root / "alpha").mkdir(parents=True)
+        registry = self._registry()
+        # 非 root 无法真的创建别的属主，替换探测函数模拟 Phase 3g 的哈希 UID。
+        registry._owner_uid = lambda path: 3005
+        alpha = registry.allocate("alpha", installed_ids={"alpha"}, data_root=str(data_root))
+        self.assertEqual(alpha, 3005, "历史数据目录的属主 UID 应被采纳，避免不必要的迁移")
+        beta = registry.allocate("beta", installed_ids={"alpha", "beta"}, data_root=str(data_root))
+        self.assertNotEqual(beta, alpha)
+
+    def test_duplicate_historical_owners_are_never_shared(self):
+        data_root = self.root / "data"
+        (data_root / "alpha").mkdir(parents=True)
+        (data_root / "beta").mkdir(parents=True)
+        registry = self._registry()
+        registry._owner_uid = lambda path: 3005
+        alpha = registry.allocate("alpha", data_root=str(data_root))
+        beta = registry.allocate("beta", data_root=str(data_root))
+        self.assertEqual(alpha, 3005)
+        self.assertNotEqual(beta, 3005, "历史 UID 冲突时后一个插件必须换 UID")
+
+    def test_uninstalled_uid_is_reclaimed_only_after_data_removed(self):
+        data_root = self.root / "data"
+        (data_root / "alpha").mkdir(parents=True)
+        (data_root / "beta").mkdir(parents=True)
+        registry = self._registry(count=4)
+        registry._owner_uid = lambda path: 1000  # 不在池区间，不参与采纳
+        registry.allocate("alpha", installed_ids={"alpha", "beta"}, data_root=str(data_root))
+        beta = registry.allocate("beta", installed_ids={"alpha", "beta"}, data_root=str(data_root))
+        gamma = registry.allocate("gamma", installed_ids={"alpha", "gamma"}, data_root=str(data_root))
+        self.assertNotEqual(gamma, beta, "数据还在时不能把已卸载插件的 UID 让给别人")
+
+        shutil.rmtree(data_root / "beta")
+        reopened = self._registry(count=4)
+        reopened.reconcile(installed_ids={"alpha", "gamma"}, data_root=str(data_root))
+        self.assertNotIn("beta", reopened.snapshot()["assignments"],
+                         "数据已清理的已卸载插件应释放 UID")
+
+
+class IsolationConfigTests(unittest.TestCase):
+    """启用独立 UID 但环境不满足时必须显式失败（fail-closed）。"""
+
+    def setUp(self):
+        from webserver import supervisor as module
+
+        self.module = module
+        self.root = Path(tempfile.mkdtemp(prefix="mybooks-isolation-", dir=_TMP))
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _build(self, **env):
+        with mock.patch.dict(os.environ, env):
+            return self.module.PluginSupervisor(child_command=[sys.executable, "-c", "pass"])
+
+    def test_uid_mode_without_root_fails_loud(self):
+        if os.name != "posix":
+            self.skipTest("独立 UID 仅 POSIX")
+        with mock.patch.object(self.module.os, "geteuid", return_value=1000, create=True):
+            with self.assertRaises(self.module.IsolationError) as ctx:
+                self._build(TOOLBOX_CHILD_UID_BASE="2000")
+        message = str(ctx.exception)
+        self.assertIn("root", message)
+        self.assertIn("不会退回共享 UID", message)
+
+    def test_missing_capabilities_fail_loud(self):
+        if os.name != "posix":
+            self.skipTest("capabilities 仅 Linux")
+        with mock.patch.object(self.module.os, "geteuid", return_value=0, create=True), \
+                mock.patch.object(self.module, "missing_capabilities", return_value=["CAP_SETUID"]):
+            with self.assertRaises(self.module.IsolationError) as ctx:
+                self._build(TOOLBOX_CHILD_UID_BASE="2000")
+        self.assertIn("CAP_SETUID", str(ctx.exception))
+
+    def test_missing_capability_parser(self):
+        path = self.root / "status"
+        # CapEff=0xa0：只有 bit5(CAP_KILL) 与 bit7(CAP_SETUID)
+        path.write_text("Name:\tpython\nCapEff:\t00000000000000a0\n", encoding="utf-8")
+        missing = self.module.missing_capabilities(str(path))
+        self.assertEqual(sorted(missing),
+                         ["CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_FOWNER", "CAP_FSETID", "CAP_SETGID"])
+
+    def test_valid_uid_mode_initializes_persistent_registry(self):
+        if os.name != "posix":
+            self.skipTest("独立 UID 仅 POSIX")
+        with mock.patch.object(self.module.os, "geteuid", return_value=0, create=True), \
+                mock.patch.object(self.module, "missing_capabilities", return_value=[]), \
+                mock.patch.object(config, "STATE_DIR", str(self.root / "state")):
+            supervisor = self._build(TOOLBOX_CHILD_UID_BASE="4000")
+            # isolation_status 会重新探测 capabilities，必须在 mock 生效期间调用，
+            # 否则在无 capability 的测试容器里结果取决于运行用户。
+            status = supervisor.isolation_status()
+        self.assertIsNotNone(supervisor._uid_registry)
+        self.assertTrue(status["uid_enabled"])
+        self.assertEqual(status["uid_base"], 4000)
+        self.assertEqual(status["missing_capabilities"], [])
+
+    def test_uid_mode_never_silently_returns_zero(self):
+        supervisor = self._build()
+        supervisor.child_uid_base = 2000
+        supervisor._uid_registry = None
+        with self.assertRaises(self.module.IsolationError):
+            supervisor._child_uid("alpha")
+
+
+class PopenOptionsTests(unittest.TestCase):
+    """多线程 supervisor 不得使用 preexec_fn。"""
+
+    def setUp(self):
+        from webserver import supervisor as module
+
+        self.module = module
+        self.supervisor = module.PluginSupervisor(child_command=[sys.executable, "-c", "pass"])
+
+    def test_uid_mode_uses_popen_user_parameters(self):
+        if os.name != "posix":
+            with self.assertRaises(self.module.IsolationError):
+                self.supervisor._popen_options(2077, {})
+            return
+        options = self.supervisor._popen_options(2077, {})
+        self.assertEqual(options["user"], 2077)
+        self.assertEqual(options["group"], 2077)
+        self.assertEqual(options["extra_groups"], [])
+        self.assertEqual(options["umask"], 0o027)
+        self.assertNotIn("preexec_fn", options)
+        self.assertTrue(options["start_new_session"])
+
+    def test_shared_mode_keeps_legacy_options(self):
+        options = self.supervisor._popen_options(0, {})
+        self.assertNotIn("user", options)
+        self.assertNotIn("group", options)
+        self.assertNotIn("extra_groups", options)
+        self.assertNotIn("preexec_fn", options)
+
+
+class PrivateDataTests(unittest.TestCase):
+    """独立 UID 下的数据目录权限与失败行为。"""
+
+    def setUp(self):
+        from webserver import supervisor as module
+
+        self.module = module
+        self.root = Path(tempfile.mkdtemp(prefix="mybooks-private-", dir=_TMP))
+        self.old_data_root = config.DATA_ROOT
+        config.DATA_ROOT = str(self.root / "data")
+        self.supervisor = module.PluginSupervisor(child_command=[sys.executable, "-c", "pass"])
+
+    def tearDown(self):
+        config.DATA_ROOT = self.old_data_root
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_private_layout_is_group_deliverable_not_world_readable(self):
+        if os.name != "posix":
+            self.skipTest("POSIX 权限语义")
+        data_root = Path(config.DATA_ROOT)
+        work = data_root / "alpha" / "abc123"
+        work.mkdir(parents=True)
+        (work / "book.epub").write_bytes(b"epub")
+        (data_root / "alpha" / "config.json").write_text("{}", encoding="utf-8")
+        calls = []
+
+        def fake_chown(*args, **kwargs):
+            calls.append((args, kwargs))
+
+        with mock.patch.object(os, "chown", side_effect=fake_chown):
+            self.supervisor._prepare_tool_data("alpha", 2077)
+        self.assertEqual(stat.S_IMODE(os.stat(data_root / "alpha").st_mode), 0o2710)
+        self.assertEqual(stat.S_IMODE(os.stat(work).st_mode), 0o2750)
+        self.assertEqual(stat.S_IMODE(os.stat(work / "book.epub").st_mode), 0o640)
+        self.assertEqual(stat.S_IMODE(os.stat(data_root / "alpha" / "config.json").st_mode), 0o600)
+        self.assertTrue(any(len(args) >= 3 and args[2] == config.host_gid() for args, _ in calls),
+                        "目录/文件必须改到宿主属组，Node 才能按组读取产物")
+
+    def test_chown_failure_raises_clear_error(self):
+        if os.name != "posix":
+            self.skipTest("POSIX 权限语义")
+        with mock.patch.object(os, "chown", side_effect=PermissionError("operation not permitted")):
+            with self.assertRaises(self.module.IsolationError) as ctx:
+                self.supervisor._prepare_tool_data("beta", 2078)
+        self.assertIn("CHOWN", str(ctx.exception))
+
+    def test_storage_uses_private_modes_when_enabled(self):
+        if os.name != "posix":
+            self.skipTest("POSIX 权限语义")
+        tool_id = "private_storage"
+        root = Path(config.DATA_ROOT) / tool_id
+        root.mkdir(parents=True, exist_ok=True)
+        os.chmod(root, 0o2710)
+        with mock.patch.dict(os.environ, {"MYBOOKS_TOOLBOX_PRIVATE_DATA": "1"}):
+            work = storage.get_work_dir(tool_id, "token-1")
+            self.assertEqual(stat.S_IMODE(os.stat(work).st_mode), 0o2750)
+            # 插件进程没有 CAP_FSETID：不能因为 tool_root 的 chmod 把 setgid 清掉。
+            self.assertEqual(stat.S_IMODE(os.stat(root).st_mode), 0o2710)
+
+
+class ModeConsistencyTests(unittest.TestCase):
+    """Node 与 Python 的 MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY 必须一致。"""
+
+    def setUp(self):
+        from webserver import supervisor as module
+
+        self.module = module
+        self.root = Path(tempfile.mkdtemp(prefix="mybooks-mode-", dir=_TMP))
+        self.state_dir = self.root / "state"
+        self.state_dir.mkdir()
+        self._state_patch = mock.patch.object(config, "STATE_DIR", str(self.state_dir))
+        self._state_patch.start()
+        self.supervisor = module.PluginSupervisor(child_command=[sys.executable, "-c", "pass"])
+
+    def tearDown(self):
+        self._state_patch.stop()
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _write_mode(self, value):
+        (self.state_dir / "runtime-mode.json").write_text(
+            json.dumps({"version": 1, "plugin_auth_only": value}), encoding="utf-8")
+
+    def test_matching_mode_passes(self):
+        self._write_mode(False)
+        with mock.patch.dict(os.environ, {"MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY": "false"}):
+            self.supervisor._check_mode_consistency()
+
+    def test_mismatched_mode_fails_loud(self):
+        self._write_mode(True)
+        with mock.patch.dict(os.environ, {"MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY": "false"}):
+            with self.assertRaises(self.module.ModeMismatchError) as ctx:
+                self.supervisor._check_mode_consistency()
+        self.assertIn("部署配置不一致", str(ctx.exception))
+
+    def test_missing_or_corrupt_mode_file_is_tolerated(self):
+        self.supervisor._check_mode_consistency()
+        (self.state_dir / "runtime-mode.json").write_text("{not json", encoding="utf-8")
+        self.supervisor._check_mode_consistency()
+
+
+@unittest.skipUnless(sys.platform.startswith("linux") and Path("/bin/sh").exists(), "需要 Linux shell")
+class MemoryLimitTests(unittest.TestCase):
+    """验证 ulimit 真的生效，而不是“配置了就算验证过”。"""
+
+    def setUp(self):
+        from webserver import supervisor as module
+
+        self.module = module
+        self.supervisor = module.PluginSupervisor(child_command=[sys.executable, "-c", "pass"])
+
+    def test_ulimit_really_sets_rlimit_as(self):
+        self.supervisor.memory_mb = 128
+        command = self.supervisor._limited_command([
+            sys.executable, "-c",
+            "import json, resource; print(json.dumps(resource.getrlimit(resource.RLIMIT_AS)))",
+        ])
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        soft, _hard = json.loads(result.stdout.strip())
+        self.assertEqual(soft, 128 * 1024 * 1024)
+
+    def test_memory_limit_blocks_oversized_allocation(self):
+        self.supervisor.memory_mb = 128
+        command = self.supervisor._limited_command([
+            sys.executable, "-c", "block = bytearray(512 * 1024 * 1024); print('allocated')",
+        ])
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, timeout=60)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("allocated", result.stdout)
+        self.assertIn("MemoryError", result.stderr)
+
+
+_IS_ROOT_POSIX = os.name == "posix" and hasattr(os, "geteuid") and os.geteuid() == 0
+
+
+@unittest.skipUnless(_IS_ROOT_POSIX, "需要 root 才能创建不同属主（Docker 容器内执行）")
+class CrossPluginReadTests(unittest.TestCase):
+    """跨插件文件读取：其他插件 UID 不可读，宿主属组可读。"""
+
+    def setUp(self):
+        from webserver import supervisor as module
+
+        self.module = module
+        self.root = Path(tempfile.mkdtemp(prefix="mybooks-cross-", dir=_TMP))
+        self.old_data_root = config.DATA_ROOT
+        config.DATA_ROOT = str(self.root / "data")
+        self.supervisor = module.PluginSupervisor(child_command=[sys.executable, "-c", "pass"])
+
+    def tearDown(self):
+        config.DATA_ROOT = self.old_data_root
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_other_plugin_cannot_read_work_artifact_but_host_group_can(self):
+        work = Path(config.DATA_ROOT) / "alpha" / "work1"
+        work.mkdir(parents=True)
+        artifact = work / "book.epub"
+        artifact.write_bytes(b"secret")
+        self.supervisor._prepare_tool_data("alpha", 3001)
+
+        denied = subprocess.run(
+            ["/bin/sh", "-c", "cat %s" % artifact], user=3002, group=3002,
+            extra_groups=[], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.assertNotEqual(denied.returncode, 0, "其他插件 UID 不能读 work 产物")
+        self.assertIn("Permission denied", denied.stderr)
+
+        allowed = subprocess.run(
+            ["/bin/sh", "-c", "cat %s" % artifact], user=3002, group=config.host_gid(),
+            extra_groups=[], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.assertEqual(allowed.returncode, 0, allowed.stderr)
+        self.assertEqual(allowed.stdout, "secret", "宿主属组必须能读取产物以完成入库")
 
 
 if __name__ == "__main__":

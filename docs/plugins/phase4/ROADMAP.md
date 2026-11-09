@@ -24,11 +24,13 @@ flowchart LR
 
 ## 4A：Manifest v1 与插件注册标准
 
+> 状态：✅ 已实施（2026-11-09）。实施结果见本节末尾与 [MANIFEST-V1.md](MANIFEST-V1.md#10-phase-4a-实施状态)。
+
 ### 1. 开发目标
 
 - 引入 `manifest_version: 1`，双读新旧 Manifest，输出统一 `PluginDescriptor`。
 - 建立权限/配置/UI/依赖/事件的声明结构，但不改变现有授权与运行行为。
-- `GET /api/plugins` 返回统一描述符（保留旧字段）。
+- 新增只读描述符 API，保留 `GET /api/plugins` 原有契约不变。
 
 ### 2. 涉及模块
 
@@ -44,24 +46,23 @@ flowchart LR
 ### 4. 新增代码位置
 
 ```text
-src/core/toolbox/manifest-v1.js      # 解析/严格校验/字段映射
-src/core/plugins/descriptor.js       # Descriptor 归一化与查询视图
-test/plugin-manifest-v1.test.js
-test/plugin-descriptor.test.js
+src/core/toolbox/manifest-v1.js      # 解析/严格校验/字段映射（已实施）
+src/core/toolbox/descriptor.js       # Descriptor 归一化与查询视图（已实施）
+test/plugin-descriptor.test.js       # 29 项测试（已实施）
 ```
 
 ### 5. API 设计
 
 ```http
-GET /api/plugins
-→ { plugins: [PluginDescriptor], builtin: [...], legacy: [...] }
+GET /api/plugins                    # 保持既有契约（LegacyToolboxAdapter）
+GET /api/plugins/descriptors
+→ { manifest_mode: "auto", plugins: [PluginDescriptor] }
 
-GET /api/plugins/:id
-→ PluginDescriptor（已安装）或 404；商店条目由 4C 提供
-
-GET /api/plugins/:id/manifest
-→ 脱敏后的 v1 视图（不返回 raw/内部路径）
+GET /api/plugins/:id/descriptor
+→ { manifest_mode: "auto", plugin: PluginDescriptor } 或 404
 ```
+
+`PluginDescriptor` 已删除 `raw` 字段，不返回绝对路径。
 
 ### 6. 数据结构
 
@@ -105,7 +106,7 @@ GET /api/plugins/:id/manifest
 
 1. 无 `manifest_version` 的旧包行为与 Phase 3g.1 完全一致。
 2. v1 包可安装/启用/调用/回滚。
-3. `GET /api/plugins` 同时返回 Legacy 与 v1 描述符，字段稳定。
+3. `/api/plugins/descriptors` 同时返回 Legacy 与 v1 描述符，字段稳定；`/api/plugins` 契约不变。
 4. 严格校验能拒绝未知权限与非法 Slot。
 5. 无数据库迁移要求。
 
@@ -115,9 +116,22 @@ GET /api/plugins/:id/manifest
 
 **缓解**：统一 Descriptor 契约测试；冲突字段以 Legacy 为准并记录 warning。
 
-### 12. 回滚方案
+### 12. 实施结果（Phase 4A）
 
-`MYBOOKS_PLUGIN_MANIFEST_V1=off` 后重启 Node，全部按 Legacy 解析；安装目录与数据不变。
+| 项 | 结果 |
+| --- | --- |
+| Legacy 兼容 | 全部旧包继续使用 `parseManifest` 字段；Node 全量测试通过 |
+| v1 解析 | `manifest_version: 1`、字段校验、长度/数量上限、路径穿越防护 |
+| 统一 Descriptor | `src/core/toolbox/descriptor.js`，深冻结只读，Legacy 与 v1 同一结构 |
+| 环境开关 | `auto` / `off` / `strict`；`off` 明确拒绝 v1 安装，不静默降级 |
+| 安装门禁 | required 依赖缺失、UI 入口缺失、后端模块缺失均在落盘前拒绝 |
+| 权限 | 只声明；未知权限（含 `jobs.read`/`events.subscribe`）直接拒绝，不产生 grants |
+| 测试 | `npm test` 799/799；新增 29 项 Descriptor/Manifest 测试 |
+| 未实施 | `manifest.sig` 验签、生命周期执行、事件投递、Slot 渲染 |
+
+### 13. 回滚方案
+
+`MYBOOKS_PLUGIN_MANIFEST_V1=off` 后重启 Node：新 v1 安装被明确拒绝，已安装 v1 包仍按 v1 只读识别（不降级为 Legacy）；安装目录与数据不变。
 
 ---
 

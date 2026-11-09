@@ -61,10 +61,10 @@ plugins/<id>/manifest.json
 | 环境变量 | 取值 | 行为 |
 | --- | --- | --- |
 | `MYBOOKS_PLUGIN_MANIFEST_V1` | `auto`（默认） | 有 `manifest_version` 用 v1，否则 Legacy |
-| | `off` | 忽略 v1 字段，全部按 Legacy 解析（紧急回滚） |
-| | `strict` | 只接受 v1；用于新部署/CI，不用于旧数据 |
+| | `off` | 拒绝安装/更新 v1 包（`MANIFEST_VERSION_UNSUPPORTED`，不静默降级）；已安装 v1 包与本地回滚仍按只读方式识别，描述符带 `MANIFEST_V1_DISABLED` warning |
+| | `strict` | 只接受 v1；用于新部署/CI，不用于旧数据（Legacy 包安装被拒绝） |
 
-回滚只需把开关设为 `off` 并重启 Node；已安装目录与数据不变。
+回滚只需把开关设为 `off` 并回滚宿主版本；已安装目录与数据不变。`off` 不会把 v1 包重新解释为 Legacy，避免字段被错误忽略。
 
 ## 4. 字段迁移对照
 
@@ -201,7 +201,7 @@ TOOLBOX_CHILD_UID_BASE=0
 
 1. 旧包（无 `manifest_version`）安装/启用/调用/停用/回滚全部通过。
 2. 同一宿主同时安装 Legacy 包与 v1 包，互不影响。
-3. v1 包在 `MYBOOKS_PLUGIN_MANIFEST_V1=off` 下按 Legacy 解析，仍能启动（字段缺失时给出明确错误）。
+3. v1 包在 `MYBOOKS_PLUGIN_MANIFEST_V1=off` 下不会被重新解释为 Legacy：新安装被明确拒绝，已安装包仍可只读描述并带 `MANIFEST_V1_DISABLED` warning（Phase 4A 已由测试覆盖）。
 4. 权限新增未授权 → 403；授权后 → 200。
 5. Bridge v1 页面在 v2 宿主上无回归。
 6. 回滚单插件与宿主后，书库/文件/配置/UID 均不丢失。

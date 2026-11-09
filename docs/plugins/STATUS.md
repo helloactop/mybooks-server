@@ -1,7 +1,7 @@
 # 插件平台进度（AI 接手）
 
-> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，Phase 3g.1 提交见 `git log --oneline -5`）
-> 最近提交：Phase 3g.1 安全补强（UID 注册表 / Popen 降权 / 严格配置校验）· `4f7f6718` Phase 3g 文档 · `238aad33` 子进程凭据隔离 · `a45c920d` 任务取消 + 崩溃管道回收
+> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，Phase 4A 提交见 `git log --oneline -5`）
+> 最近提交：Phase 4A Manifest v1 与统一 Descriptor · Phase 3g.1 安全补强（UID 注册表 / Popen 降权 / 严格配置校验）· `4f7f6718` Phase 3g 文档 · `238aad33` 子进程凭据隔离 · `a45c920d` 任务取消 + 崩溃管道回收
 > 文档：[架构](mybooks-plugin-architecture.md) · [规范](mybooks-plugin-development-standards.md) · [隔离设计](isolation-design.md) · [Phase 4 规划](phase4/README.md)
 
 ## 现状
@@ -21,7 +21,8 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 2026-11-09 剩余项处理：Runtime Manager `cancel` 接入插件 cancel 路由（禁止跨工具取消）；崩溃子进程重启前回收 stdout/stderr；补不可信插件安装门禁测试。
 2026-11-09 真实插件验收 + 隔离增量：商店下载 zlibrary@0.1.0 / md_to_epub@1.1.0 并完成真实转换、下载、入库；supervisor 每子进程独立 runtime-secret、裁剪子进程环境、按插件注入身份令牌；Docker 镜像内 Python 测试通过。设计见 [isolation-design.md](isolation-design.md)。
 2026-11-09 Phase 3g 内部认证 + 独立 UID：Node 内部接口接受每插件令牌（`MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY` 下只认令牌，共享 `internal-secret` 被拒），Python `NodeClient` 隔离模式不再读取宿主共享密钥；`TOOLBOX_CHILD_UID_BASE` 让每个插件以独立 UID 运行，插件数据目录 0711 / 产物 0755 / `config.json` 0600，`state/config.key` 由 supervisor 生成并注入。Docker 双容器内完成负向认证、越权、身份冒用、真实插件转换入库与进程重启验证。
-未完成：Z-Library 外部网络（本机/容器 DNS 被 VPN fake-IP 命中 SSRF 防护）、UI 浏览器验收、`source.*` / `book.*` 能力、UI、SDK。
+2026-11-09 Phase 4A：Manifest v1（`manifest_version: 1`）+ 统一 `PluginDescriptor`；Legacy 与 v1 同结构输出，权限/配置/UI/依赖/事件只声明不授权；新增只读 `/api/plugins/descriptors`。设计见 [phase4/MANIFEST-V1.md](phase4/MANIFEST-V1.md)。
+未完成：Z-Library 外部网络（本机/容器 DNS 被 VPN fake-IP 命中 SSRF 防护）、UI 浏览器验收、`source.*` / `book.*` 能力、SDK、Phase 4B–4F。
 旧 Toolbox 路由/Bridge/安装包/迁移保持兼容；仅新增可选身份令牌与策略文件。
 
 ## 已完成
@@ -58,7 +59,7 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 | CI / Sprite | [lucide-icons.json](../../scripts/lucide-icons.json) | 补齐 `arrow-left` 并同步 sprite/资源版本 | — | `8b4171bb` |
 
 测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`、
-`test/toolbox-access-policy.test.js`、`test/toolbox-grants.test.js`。整套 `npm test` 769/769。
+`test/toolbox-access-policy.test.js`、`test/toolbox-grants.test.js`、`test/plugin-descriptor.test.js`。整套 `npm test` 798/798。
 
 ## 目标文件结构（架构 第十五章）
 
@@ -193,7 +194,7 @@ Phase 3f（部分完成）：容器内每插件子进程（opt-in），故障/�
 ## 测试基线
 
 ```bash
-npm test                                  # 770/770（2026-11-09，含 test/plugins-internal-auth.test.js）
+npm test                                  # 798/798（2026-11-09，含 test/plugin-descriptor.test.js）
 npm run check:public                      # 通过
 npm run check:icons                       # 通过（lucide-static 1.70.0，23 个图标）
 cd toolbox-runtime
@@ -383,6 +384,68 @@ docker compose up -d
 - 独立 UID 分配、降权与产物权限已可复现验证，可作为 SDK/Manifest 的默认假设；
 - **不可信第三方插件**的对外承诺仍需网络出口限制与容器级隔离，不计入本轮完成项；
 - 未完成项：Z-Library 外网验收、UI 浏览器验收、资源压测。
+
+## Phase 4A Manifest v1 与 Plugin Descriptor（2026-11-09）
+
+只新增解析层与只读描述符，未改 Kernel / Runtime Manager / Installer 语义 / 权限系统。
+
+### 实现
+
+| 模块 | 文件 | 行为 |
+| --- | --- | --- |
+| Manifest v1 解析 | [manifest-v1.js](../../src/core/toolbox/manifest-v1.js) | 版本识别、字段校验、长度/数量上限、路径穿越防护、未知字段策略、依赖检查、环境开关 |
+| 统一 Descriptor | [descriptor.js](../../src/core/toolbox/descriptor.js) | Legacy 与 v1 → 同一深冻结只读对象；信任级别由宿主计算；公开 DTO 去除 `raw` |
+| 安装门禁 | [installer.js](../../src/core/toolbox/installer.js) | v1 解析复用同一入口；required 依赖、UI 入口、后端模块在落盘前校验 |
+| 只读 API | [routes.plugins.js](../../src/http/routes.plugins.js) | `GET /api/plugins/descriptors`、`GET /api/plugins/:id/descriptor`；原 `/api/plugins` 契约不变 |
+
+### 关键决策
+
+1. **单一事实来源**：所有入口（安装、只读 API、诊断）都走 `normalizeManifest()`，
+   不再有第二套独立解析；Legacy 内部仍然复用 `parseManifest()`。
+2. **只声明不授权**：`permissions` 只进入描述符；不写 `grants.json`，不改变 GrantStore。
+   未知权限（含尚未实现的 `jobs.read` / `events.subscribe`）直接拒绝。
+3. **`enforced` 如实标注**：`network.public` / `network.private` / `ui.contribute`
+   目前没有运行时强制点，描述符标记 `enforced: false`。
+4. **开关 `MYBOOKS_PLUGIN_MANIFEST_V1`**：`auto`（默认）/ `off` / `strict`。
+   `off` 下新 v1 安装被明确拒绝，不静默降级为 Legacy；已安装 v1 包仍可只读识别并带
+   `MANIFEST_V1_DISABLED` warning。回滚到本地已安装包不受开关阻断。
+5. **信任级别**：`local` / `reviewed` / `community` / `unreviewed`；
+   仅声明 `publisher` 不会升为 `official`，`official` 需公钥验签（未实现，不返回）。
+6. **`id` / `version` 别名**：v1 同时接受 `tool_id` / `revision` 与 `id` / `version`，
+   同时出现必须一致；旧字段始终保留在归一化结果中，运行时与 UI 读取路径未改。
+
+### 测试结果
+
+- `npm test`：**799/799 通过**（新增 `test/plugin-descriptor.test.js` 29 项）。
+- 覆盖：v1 正常解析、缺必填、类型错误、不支持版本、非法权限、未知字段、`x-*`、
+  路径穿越、依赖缺失/自依赖/依赖环、UI 入口不存在、Legacy 兼容、Descriptor 契约一致、
+  开关 auto/off/strict、已安装 v1 在 off 下只读、恶意 Manifest 安装拒绝。
+- Python 测试未涉及（本轮无 Python 改动）。
+
+### 真实插件兼容结果
+
+直接下载商店真实包并在原始目录上执行解析与安装预检（不修改包内容）：
+
+| 插件 | 版本 | Manifest | 解析 | `ensurePluginManifest` | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| Markdown to EPUB | 1.1.0 | Legacy | 通过 | 通过 | `backend.main.MdToEpubTool` / `index.html` / 2 条路由 |
+| Z-Library | 0.1.0 | Legacy | 通过 | 通过 | `tool.ZlibraryTool` / `index.html` / `config` 路由 |
+
+两个真实包目前都没有 `manifest_version`，因此按 Legacy 解析；未改动包格式，也不需要迁移即可继续运行。
+将它们升级为 v1 属于后续包发布工作（4B 之后），本轮不做强制迁移。
+
+### 尚未解决
+
+- `manifest.sig` 签名校验与 `official` 信任级别。
+- 生命周期钩子执行、事件投递、能力 Provider 自动注册（4B/4D）。
+- `ui.slots` 除 `toolbox.tool` 外的真实渲染（4D）。
+- 商店条目（未安装包）的描述符预检：需 4C 商店索引支持。
+- 依赖只做“已安装”判断，未做版本区间求解（`^`/`~` 仅声明，不参与运行时选择）。
+
+### Phase 4A 验收结论
+
+**通过**。Legacy 与 v1 已统一为同一 Descriptor；旧包安装/运行/回滚行为未改变；
+安全边界（路径、权限、依赖、开关）有测试覆盖；SDK、商店 UI、插件 UI 容器均未提前实现。
 
 ## Phase 3 验收对照（本阶段收尾）
 

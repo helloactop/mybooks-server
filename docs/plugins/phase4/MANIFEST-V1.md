@@ -1,6 +1,7 @@
 # Manifest v1 规范
 
-> 状态：○ 规划（Phase 4A 实施）· 与现有 `src/core/toolbox/manifest.js` 双读兼容
+> 状态：◐ 已实施（Phase 4A 解析与描述符）· 签名、生命周期执行、事件投递尚未实施
+> 实现位置：`src/core/toolbox/manifest-v1.js`、`src/core/toolbox/descriptor.js`
 > 关键词：MUST / SHOULD / MAY 按 RFC 2119 语义使用。
 
 ## 1. 目标与原则
@@ -15,10 +16,11 @@
 
 | 字段 | 含义 | 规则 |
 | --- | --- | --- |
-| `manifest_version` | Manifest 结构版本 | 整数；v1 = `1`；缺失视为 Legacy（等价 0） |
-| `revision` | 插件版本（沿用旧字段名） | `x.y.z` 语义化版本；同一版本内容不可变 |
-| `core_api_version` | 插件依赖的宿主 CoreAPI 版本 | `x.y.z`；大于宿主 `CORE_API_MAX` 时拒绝加载 |
-| `min_host_version` | 可选的最低宿主版本 | `x.y.z`；仅用于展示与阻断，不能替代 `core_api_version` |
+| `manifest_version` | Manifest 结构版本 | 整数；v1 = `1`；缺失视为 Legacy（等价 0）；其他值（含字符串 `"1"`）→ `MANIFEST_VERSION_UNSUPPORTED` |
+| `tool_id` / `id` | 插件稳定 ID | `id` 是 v1 等价别名，同时出现必须一致 |
+| `revision` / `version` | 插件版本 | `version` 是 v1 等价别名，同时出现必须一致；`x.y.z` 语义化版本；同一版本内容不可变 |
+| `core_api_version` | 插件依赖的宿主 CoreAPI 版本 | `x.y.z`；大于宿主 `CORE_API_MAX` 时兼容性结论为不支持 |
+| `min_host_version` | 可选的最低宿主版本 | `x.y.z`；只做声明与展示，不能替代 `core_api_version` |
 | `api_version` | 新增能力的契约版本 | 出现在 `provides[].version`，如 `1` |
 
 > 注意：`core_api_version` 是 **宿主能力版本**，`manifest_version` 是 **文件结构版本**，两者不能混用。
@@ -45,7 +47,7 @@
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `homepage` | string | https URL |
-| `icon` | string | 包内相对路径，默认 `icon.png`；只允许 png/jpg/jpeg/webp |
+| `icon` | string | 包内相对路径；只允许 png/jpg/jpeg/webp；省略时不推断 `icon.png` |
 | `license` | string | SPDX 标识或短文本 |
 | `categories` | string[] | 最多 8 项，取值见 §3.8 |
 | `tags` | string[] | 最多 20 项，≤32 字符 |
@@ -117,8 +119,15 @@ v1 保留旧 `api_routes`，并新增可直接表达方法与超时的 `routes`�
 | --- | --- | --- |
 | `entry` | 否 | 包内 HTML；映射旧 `entry_frontend`；无前端可省略 |
 | `bridge` | 否 | 支持的最高 Bridge 版本；默认 1 |
-| `theme` | 否 | `auto` / `light` / `dark` |
-| `min_height` | 否 | 宿主 iframe 初始高度 |
+| `theme` | 否 | `auto` / `light` / `dark`，默认 `auto` |
+| `min_height` | 否 | 宿主 iframe 初始高度，0–4000，默认 0 |
+
+入口路径规则（v1 与 Legacy 双向映射）：
+
+- v1 写 `frontend/index.html` 或 `index.html` 都接受，归一化为包内 `frontend/index.html`；
+- 旧字段 `entry_frontend` 相对 `frontend/` 目录（如 `index.html`），归一化时自动补 `frontend/` 前缀；
+- 两者同时出现时必须指向同一文件，否则 `MANIFEST_INVALID`；
+- 安装器会逐一检查 `frontend.entry` 与每个 `ui.pages[].entry` 是否真实存在。
 
 ### 3.6 权限声明
 
@@ -132,7 +141,7 @@ v1 保留旧 `api_routes`，并新增可直接表达方法与超时的 `routes`�
 
 规则：
 
-1. `name` 必须在权限目录中（见 [SECURITY.md](SECURITY.md#3-权限体系)）；未知权限 → 严格模式拒绝安装。
+1. `name` 必须在统一权限目录中（`src/core/plugins/permissions.js` 的 `PERMISSION_SET`）；未知权限一律 `MANIFEST_PERMISSION_UNKNOWN`，不会“先声明后生效”。
 2. 资源型权限（`books.*`、`files.*`、`metadata.write`）必须给出 `scope`。
 3. `scope` 只表达“申请范围上限”，用户授权可进一步收窄，不能扩大。
 4. `reason` 必填且 ≤200 字符，用于授权 UI；禁止空泛文案。
@@ -185,8 +194,8 @@ other         其他
 }
 ```
 
-- 只允许声明已安装或商店可解析的依赖；循环依赖必须在安装前拒绝。
-- 依赖失败不自动安装（Phase 4A 只做检测与提示），避免供应链放大。
+- 安装时检查 `dependencies.plugins`：`required` 依赖未安装 → `MANIFEST_DEPENDENCY_MISSING` 拒绝安装；`optional` 只产生 warning。
+- 不自动安装依赖，避免供应链放大；跨 manifest 的依赖环通过 `detectDependencyCycles()` 检测。
 - 运行时（4B）可按 `capabilities` 声明做 Provider 选择，但不改变现有 Registry。
 
 ### 3.10 资源与生命周期
@@ -273,40 +282,76 @@ Phase 4 只强制实现 `toolbox.tool`（整页 iframe）；其他 Slot 由 4D �
 
 | 情况 | 运行期（安装/加载） | 严格校验（打包/发布/审核） |
 | --- | --- | --- |
-| `x-` 前缀字段 | 允许，原样保留 | 允许 |
-| 未知顶层字段 | 忽略 + warning（不参与执行） | 拒绝 `MANIFEST_UNKNOWN_FIELD` |
+| `x-` 前缀字段 | 允许，原样保留在 `raw` | 允许 |
+| 未知顶层字段 | 忽略 + `MANIFEST_UNKNOWN_FIELD` warning | 拒绝 `MANIFEST_UNKNOWN_FIELD` |
 | 未知 `routes[]` 字段 | 忽略 + warning | 拒绝 |
-| 未知权限名 | 拒绝该插件进入严格模式 | 拒绝 |
-| 未知 `ui.slot` | 忽略该 Slot | warning |
-| 未知 `runtime.type` | 拒绝加载 `RUNTIME_UNSUPPORTED` | 拒绝 |
+| 未知权限名 | 一律拒绝 `MANIFEST_PERMISSION_UNKNOWN` | 拒绝 |
+| 未知 `ui.slot` | 忽略该 Slot + warning | 拒绝 `MANIFEST_UI_SLOT_UNKNOWN` |
+| 未知 `runtime.type` | 解析通过，兼容性结论 `RUNTIME_UNSUPPORTED` | 同左 |
 
 严格校验模式通过 `validateManifest(raw, { strict: true })` 提供，供商店发布与 CI 使用。
 
+环境开关 `MYBOOKS_PLUGIN_MANIFEST_V1`：
+
+| 取值 | 行为 |
+| --- | --- |
+| `auto`（默认，含未设置/非法值） | Legacy 与 v1 都接受 |
+| `off` | 拒绝安装/更新 v1 包（`MANIFEST_VERSION_UNSUPPORTED`，不静默降级）；已安装的 v1 包与本地回滚仍按只读方式识别，描述符带 `MANIFEST_V1_DISABLED` warning |
+| `strict` | 只接受 `manifest_version=1`；Legacy 包安装被拒绝 |
+
 ## 5. 归一化描述符（PluginDescriptor）
 
-解析结果统一为：
+Legacy 与 v1 最终都转换为同一个冻结对象（`src/core/toolbox/descriptor.js`）：
 
 ```json
 {
   "id": "md_to_epub",
-  "name": "Markdown to EPUB",
-  "version": "1.2.0",
   "manifest_version": 1,
+  "version": "1.2.0",
+  "legacy": false,
+  "identity": {
+    "id": "md_to_epub", "name": "Markdown to EPUB",
+    "author": { "name": "PoxenStudio", "url": "" },
+    "publisher": { "name": "PoxenStudio", "key_id": "", "url": "" },
+    "repo_url": "https://...", "homepage": "", "license": "MIT"
+  },
+  "metadata": {
+    "description": "...", "icon": "icon.png",
+    "categories": ["conversion"], "tags": ["markdown"],
+    "publish_date": "2026-11-05", "locales": ["zh"], "default_locale": "zh", "page": ""
+  },
+  "runtime": {
+    "type": "python",
+    "entry": { "module": "backend.main", "className": "MdToEpubTool" },
+    "python": ">=3.12",
+    "limits": { "memory_mb": 384, "timeout_seconds": 300, "max_open_files": 256 }
+  },
+  "routes": [{ "path": "convert", "handler": { "module": "backend.routes", "className": "ConvertHandler" }, "methods": ["POST"], "timeout_ms": 300000 }],
+  "frontend": { "entry": "frontend/index.html", "bridge": 2, "theme": "auto", "min_height": 520 },
+  "permissions": [
+    { "name": "files.write", "scope": "artifact:md_to_epub:*", "reason": "...", "resource_scoped": true, "enforced": true },
+    { "name": "network.public", "scope": "", "reason": "...", "resource_scoped": false, "enforced": false }
+  ],
+  "configuration": { "schema": { "...": "..." }, "sensitive_fields": ["cookie"] },
+  "ui": { "protocol": 2, "pages": [{ "id": "main", "title": "...", "entry": "frontend/index.html", "slot": "toolbox.tool" }], "slots": [] },
+  "dependencies": { "plugins": [{ "tool_id": "zlibrary", "version": "^0.1.0", "optional": false }], "capabilities": [] },
+  "resources": { "memory_mb": 384, "timeout_seconds": 300, "max_artifact_mb": 80, "max_concurrent_jobs": 2 },
+  "lifecycle": { "on_disable": "backend.hooks.on_disable" },
+  "events": [{ "name": "book.imported" }],
+  "capabilities": [{ "capability": "books.convert", "version": "1", "entry": { "module": "backend.capabilities", "className": "ConvertProvider" } }],
+  "compatibility": { "supported": true, "manifest_version": 1, "core_api_version": "1.3.0", "host_core_api_version": "1.3.0", "reviewed": true, "allow_unreviewed": false, "reasons": [], "warnings": [] },
   "source": "store",
   "trust": "reviewed",
-  "runtime": { "type": "python", "entry": "backend.main.MdToEpubTool" },
-  "routes": [{ "path": "convert", "methods": ["POST"] }],
-  "frontend": { "entry": "frontend/index.html", "bridge": 2 },
-  "permissions": [{ "name": "files.write", "scope": "artifact:md_to_epub:*" }],
-  "config_schema": { "...": "..." },
-  "ui": { "protocol": 2, "pages": ["main"], "slots": [] },
-  "compatibility": { "supported": true, "reasons": [] },
-  "raw": { "...": "原始 manifest..." }
+  "installed": true,
+  "manifest_mode": "auto",
+  "raw": { "...": "原始 manifest，仅内部诊断" }
 }
 ```
 
-- `trust` 由宿主赋值：`official | reviewed | community | unreviewed | local`，Manifest 不能自证。
-- `raw` 仅内部使用，对外 DTO 必须脱敏（不返回绝对路径、密钥、完整签名材料）。
+- `trust` 由宿主赋值：`reviewed | community | unreviewed | local`；`official` 需要可信公钥验签，Phase 4A 未实现，因此不会返回。
+- `permissions[].enforced=false` 表示权限已在目录中、但没有完整运行时强制点（当前为 `network.public`、`network.private`、`ui.contribute`）。
+- 描述符被深冻结；修改它不会改变授权、安装状态或数据库。
+- `raw` 仅内部使用；对外 DTO（`toPublicDescriptor`）会删除 `raw`。
 
 ## 6. 完整示例 A：Z-Library 插件
 
@@ -520,30 +565,48 @@ Phase 4 只强制实现 `toolbox.tool`（整页 iframe）；其他 Slot 由 4D �
 
 | 错误码 | 触发条件 |
 | --- | --- |
-| `MANIFEST_INVALID` | 缺必填、类型错误、格式非法（沿用现有） |
-| `MANIFEST_VERSION_UNSUPPORTED` | `manifest_version` 非 1 |
+| `MANIFEST_INVALID` | 缺必填、类型错误、格式非法、路径穿越、超长/超量 |
+| `MANIFEST_VERSION_UNSUPPORTED` | `manifest_version` 非 1，或环境开关拒绝该结构版本 |
 | `MANIFEST_UNKNOWN_FIELD` | 严格模式出现未知顶层字段 |
-| `MANIFEST_PERMISSION_UNKNOWN` | 声明了权限目录外的权限 |
+| `MANIFEST_PERMISSION_UNKNOWN` | 声明了权限目录外的权限（含尚未实现的 `jobs.read` / `events.subscribe`） |
 | `MANIFEST_PERMISSION_SCOPE_REQUIRED` | 资源型权限缺 scope |
-| `MANIFEST_ROUTE_DUPLICATE` | 路由重复 |
+| `MANIFEST_ROUTE_DUPLICATE` | 同一数组内路由重复 |
 | `MANIFEST_UI_SLOT_UNKNOWN` | 严格模式出现未知 Slot |
-| `MANIFEST_DEPENDENCY_CYCLE` | 依赖成环 |
-| `CORE_API_TOO_NEW` | 依赖的 CoreAPI 高于宿主实现 |
-| `RUNTIME_UNSUPPORTED` | `runtime.type` 不受支持 |
+| `MANIFEST_DEPENDENCY_CYCLE` | 自依赖，或跨 manifest 检测到依赖环 |
+| `MANIFEST_DEPENDENCY_MISSING` | required 依赖未安装 |
+| `CORE_API_TOO_NEW` | 依赖的 CoreAPI 高于宿主实现（兼容性结论） |
+| `RUNTIME_UNSUPPORTED` | `runtime.type` 不受支持（兼容性结论） |
 
 ## 9. 与旧 Manifest 的字段映射
 
 | 旧字段 | v1 字段 | 处理 |
 | --- | --- | --- |
-| `tool_id` | `tool_id` | 同义，保持 |
-| `revision` | `revision` | 同义，保持 |
-| `author`（字符串） | `author` / `author.name` | 归一化为 `{ name }` |
-| `repo_url` | `repo_url` / `repository` | 保持旧值 |
-| `entry_backend` | `runtime.entry` | 双向映射 |
-| `entry_frontend` | `frontend.entry` | 双向映射 |
+| `tool_id` | `tool_id` / `id` | 同义，保持 |
+| `revision` | `revision` / `version` | 同义，保持 |
+| `author`（字符串） | `author` / `author.name` | 归一化为 `{ name, url }` |
+| `repo_url` | `repo_url` | 保持旧值 |
+| `entry_backend` | `runtime.entry` | 双向映射，必须一致 |
+| `entry_frontend` | `frontend.entry` | 双向映射，必须指向同一文件 |
 | `api_routes` | `routes` | 合并，`routes` 优先 |
 | `page` | `ui.pages[].id`（legacy） | 旧字段保留但不再新增使用 |
 | `locales` / `default_locale` | 同名 | 保持 |
 | `core_api_version` | 同名 | 保持 |
 
 迁移细则见 [MIGRATION.md](MIGRATION.md)。
+
+## 10. Phase 4A 实施状态
+
+已实现：
+
+- `src/core/toolbox/manifest-v1.js`：版本识别、v1 字段校验、Legacy 归一化、未知字段策略、路径安全、依赖检查、环境开关。
+- `src/core/toolbox/descriptor.js`：统一只读描述符、信任级别计算、已安装插件描述符读取、公开 DTO。
+- 安装器接入：`prepareStaging()` 与回滚路径复用同一解析器；required 依赖与 UI 入口在落盘前校验。
+- 只读 API：`GET /api/plugins/descriptors`、`GET /api/plugins/:id/descriptor`（需会话）。
+- 测试：`test/plugin-descriptor.test.js`（29 项）。
+
+尚未实现（不得视为已生效）：
+
+- `manifest.sig` 签名校验与 `official` 信任级别。
+- 生命周期钩子执行、事件投递、能力 Provider 注册。
+- `jobs.read`、`events.subscribe` 权限：目录与运行时执行点均不存在，声明会被拒绝。
+- `ui.slots` 除 `toolbox.tool` 外的 Slot 实际渲染（Phase 4D）。

@@ -263,4 +263,4 @@ class ServiceRegistry {
   }
 }
 
-module.exports = { ServiceRegistry, RegistryError };
+module.exports = { ServiceRegistry, RegistryError, PLUGIN_ID_RE: ID_RE };

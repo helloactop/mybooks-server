@@ -14,7 +14,13 @@ const { PluginKernel } = require('../core/plugins/kernel');
 const { createBuiltinMetadataService } = require('../core/plugins/services/metadata');
 const { RuntimeManager } = require('../core/plugins/runtime-manager');
 const { createLegacyRuntimeAdapter } = require('../core/plugins/adapters/legacy-runtime');
-const { runtimeHealth } = require('../core/toolbox/runtime');
+const {
+  runtimeHealth,
+  reloadRuntime,
+  proxyTool,
+  startTool,
+  stopTool,
+} = require('../core/toolbox/runtime');
 const {
   searchDouban,
   lookupIsbnDouban,
@@ -35,8 +41,15 @@ const builtin = createBuiltinMetadataService({
 
 // Runtime Manager 同样由宿主统一持有；内置 Provider 走进程内调用，
 // 不强制经过 Runtime RPC（架构图是逻辑依赖，不是进程边界）。
+// Toolbox 适配器只代理运行时动作，安装/启用仍走旧 /api/toolbox/*。
 const runtimes = new RuntimeManager();
-runtimes.register(createLegacyRuntimeAdapter({ health: runtimeHealth }));
+runtimes.register(createLegacyRuntimeAdapter({
+  health: runtimeHealth,
+  reload: reloadRuntime,
+  start: startTool,
+  stop: stopTool,
+  invoke: (toolId, request) => proxyTool(toolId, request.route || '', request),
+}));
 
 let started = null;
 

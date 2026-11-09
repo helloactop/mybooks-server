@@ -94,21 +94,24 @@ class PluginSupervisor(object):
         self._lock = threading.RLock()
         self._ensure_lock = asyncio.Lock()
         self._reloading = False
+        self._generation = 0
 
     # ---------- state ----------
 
     def _read_state(self):
+        """始终返回 dict；文件缺失/损坏/结构非法时返回空表，绝不返回 list。"""
         try:
             with open(config.STATE_FILE, "r", encoding="utf-8") as handle:
                 document = json.load(handle)
         except FileNotFoundError:
-            return []
+            return {}
         except (OSError, ValueError) as err:
             LOGGER.error("[supervisor] state file invalid: %s", err)
-            return []
+            return {}
         tools = document.get("tools") if isinstance(document, dict) else None
         if not isinstance(tools, list):
-            return []
+            LOGGER.error("[supervisor] state file tools must be a list")
+            return {}
         items = {}
         for item in tools:
             if not isinstance(item, dict) or not item.get("enabled"):
@@ -123,15 +126,16 @@ class PluginSupervisor(object):
 
     def reload(self):
         with self._lock:
+            self._generation += 1
             self._reloading = True
             for tool_id in list(self._children):
                 self._stop_child(tool_id)
-            state = self._read_state()
-            self._state_items = state
-
         reports = []
         started = 0
         try:
+            state = self._read_state()
+            with self._lock:
+                self._state_items = state
             for tool_id, item in state.items():
                 revision = str(item.get("revision") or "")
                 if started >= self.max_children:
@@ -149,6 +153,9 @@ class PluginSupervisor(object):
                     LOGGER.exception("[supervisor] failed to start %s", tool_id)
                     reports.append({"tool_id": tool_id, "loaded": False, "deferred": False,
                                     "revision": revision, "error": str(err)})
+        except Exception:
+            # reload 是 Node 的“更新插件”入口，任何异常都必须转成报告，不能把调用方打挂。
+            LOGGER.exception("[supervisor] reload failed")
         finally:
             with self._lock:
                 self._reloading = False
@@ -223,8 +230,13 @@ class PluginSupervisor(object):
         except Exception:
             pass
 
+    def stop_child(self, tool_id):
+        """供 Node / Runtime Manager 显式停止单个插件进程（下次请求会重新懒启动）。"""
+        return self._stop_child(tool_id)
+
     def _stop_child(self, tool_id):
-        child = self._children.pop(tool_id, None)
+        with self._lock:
+            child = self._children.pop(tool_id, None)
         if not child:
             return False
         self._terminate(child.process)
@@ -268,6 +280,7 @@ class PluginSupervisor(object):
                 if item is None:
                     raise ChildNotFound("工具未启用或不存在")
                 at_capacity = len(self._children) >= self.max_children
+                generation = self._generation
 
             if at_capacity:
                 evicted = await self._evict_one()
@@ -277,15 +290,26 @@ class PluginSupervisor(object):
             loop = tornado.ioloop.IOLoop.current()
             child = await loop.run_in_executor(None, self._spawn_sync, tool_id, item)
             with self._lock:
-                self._children[tool_id] = child
+                stale = self._reloading or generation != self._generation
+                if not stale:
+                    self._children[tool_id] = child
+            if stale:
+                # 启动期间发生了 reload：丢弃旧世代的进程，让调用方重试。
+                self._terminate(child.process)
+                raise ReloadingError("插件运行时已更新，请重试")
             return child
+
+    def _child_current(self, child):
+        with self._lock:
+            return child.alive() and self._children.get(child.tool_id) is child
 
     async def _evict_one(self):
         now = time.time()
-        candidates = [
-            child for child in self._children.values()
-            if child.inflight == 0 and now - child.last_used >= self.idle_seconds
-        ]
+        with self._lock:
+            candidates = [
+                child for child in self._children.values()
+                if child.inflight == 0 and now - child.last_used >= self.idle_seconds
+            ]
         candidates.sort(key=lambda child: child.last_used)
         for child in candidates:
             if await self._is_busy(child):
@@ -312,27 +336,38 @@ class PluginSupervisor(object):
             return True
 
     async def proxy(self, tool_id, request):
-        child = await self.ensure_child(tool_id)
-        with self._lock:
-            child.inflight += 1
-            child.last_used = time.time()
-        try:
-            headers = {
-                key: value for key, value in request.headers.items()
-                if key.lower() not in ("host", "content-length", "connection")
-            }
-            body = request.body if request.method not in ("GET", "HEAD") else None
-            client = tornado.httpclient.AsyncHTTPClient()
-            response = await client.fetch(tornado.httpclient.HTTPRequest(
-                "http://127.0.0.1:%d%s" % (child.port, request.uri),
-                method=request.method,
-                headers=headers,
-                body=body,
-                request_timeout=self.proxy_timeout,
-                follow_redirects=False,
-            ), raise_error=False)
-            return response
-        finally:
+        attempt = 0
+        while True:
+            child = await self.ensure_child(tool_id)
             with self._lock:
-                child.inflight = max(0, child.inflight - 1)
+                child.inflight += 1
                 child.last_used = time.time()
+            try:
+                headers = {
+                    key: value for key, value in request.headers.items()
+                    if key.lower() not in ("host", "content-length", "connection")
+                }
+                body = request.body if request.method not in ("GET", "HEAD") else None
+                client = tornado.httpclient.AsyncHTTPClient()
+                response = await client.fetch(tornado.httpclient.HTTPRequest(
+                    "http://127.0.0.1:%d%s" % (child.port, request.uri),
+                    method=request.method,
+                    headers=headers,
+                    body=body,
+                    request_timeout=self.proxy_timeout,
+                    follow_redirects=False,
+                ), raise_error=False)
+            except Exception:
+                # 子进程可能在请求期间崩溃或被 reload 停掉：重启后重试一次。
+                if attempt == 0 and not self._child_current(child):
+                    attempt = 1
+                    continue
+                raise
+            finally:
+                with self._lock:
+                    child.inflight = max(0, child.inflight - 1)
+                    child.last_used = time.time()
+            if attempt == 0 and response.code == 599 and not self._child_current(child):
+                attempt = 1
+                continue
+            return response

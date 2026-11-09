@@ -392,6 +392,57 @@ class SupervisorTests(_SupervisorFixture, unittest.TestCase):
             with self.assertRaises(self._module.ChildNotFound):
                 asyncio.run(self.supervisor.ensure_child(tool_id))
 
+    def test_reload_with_invalid_state_never_raises(self):
+        Path(config.STATE_FILE).write_text("{ not json", encoding="utf-8")
+        reports = self.supervisor.reload()
+        self.assertEqual(reports, [])
+        self.assertEqual(self.supervisor.summary(), [])
+        self.assertEqual(self.supervisor.deferred(), [])
+
+        Path(config.STATE_FILE).write_text(
+            json.dumps({"version": 1, "tools": "invalid"}), encoding="utf-8")
+        self.assertEqual(self.supervisor.reload(), [])
+
+    def test_crash_recovery_replaces_dead_child(self):
+        import asyncio
+
+        self.supervisor.reload()
+        child = self.supervisor._children["alpha"]
+        child.process.kill()
+        child.process.wait(timeout=5)
+        recovered = asyncio.run(self.supervisor.ensure_child("alpha"))
+        self.assertTrue(recovered.alive())
+        self.assertNotEqual(recovered.port, child.port)
+
+    def test_busy_child_blocks_eviction(self):
+        import asyncio
+        from unittest import mock
+
+        self.supervisor.reload()
+        with mock.patch.object(self.supervisor, "_is_busy", mock.AsyncMock(return_value=True)):
+            with self.assertRaises(self._module.CapacityError):
+                asyncio.run(self.supervisor.ensure_child("beta"))
+
+        with mock.patch.object(self.supervisor, "_is_busy", mock.AsyncMock(return_value=False)):
+            child = asyncio.run(self.supervisor.ensure_child("beta"))
+        self.assertTrue(child.alive())
+        self.assertNotIn("alpha", self.supervisor._children)
+
+    def test_concurrent_ensure_starts_only_one_child(self):
+        import asyncio
+        from unittest import mock
+
+        self.supervisor.reload()
+        self.supervisor.max_children = 2
+        with mock.patch.object(self.supervisor, "_is_busy", mock.AsyncMock(return_value=False)):
+            async def start_both():
+                return await asyncio.gather(
+                    self.supervisor.ensure_child("beta"),
+                    self.supervisor.ensure_child("beta"))
+            children = asyncio.run(start_both())
+        self.assertIs(children[0], children[1])
+        self.assertEqual(sorted(self.supervisor._children), ["alpha", "beta"])
+
 
 class BusyHandlerTests(AsyncHTTPTestCase):
     def get_app(self):
@@ -452,6 +503,28 @@ class SupervisorAppTests(_SupervisorFixture, AsyncHTTPTestCase):
         response = self.fetch("/tool/ghost/ping")
         self.assertEqual(response.code, 404)
         self.assertEqual(json.loads(response.body)["err"], "tool.disabled")
+
+    def test_start_stop_endpoints(self):
+        headers = {"X-Mybooks-Runtime-Secret": "unit-test-secret"}
+        self.supervisor.reload()
+
+        self.assertEqual(self.fetch("/internal/start/alpha", method="POST", body="").code, 403)
+
+        response = self.fetch("/internal/stop/alpha", method="POST", body="", headers=headers)
+        self.assertEqual(response.code, 200)
+        self.assertTrue(json.loads(response.body)["stopped"])
+        self.assertEqual(self.supervisor.summary(), [])
+
+        response = self.fetch("/internal/stop/alpha", method="POST", body="", headers=headers)
+        self.assertFalse(json.loads(response.body)["stopped"])
+
+        response = self.fetch("/internal/start/alpha", method="POST", body="", headers=headers)
+        self.assertEqual(response.code, 200)
+        self.assertTrue(json.loads(response.body)["ok"])
+        self.assertEqual([child["tool_id"] for child in self.supervisor.summary()], ["alpha"])
+
+        response = self.fetch("/internal/start/ghost", method="POST", body="", headers=headers)
+        self.assertEqual(response.code, 404)
 
 
 class _PingHandler(BaseHandler):

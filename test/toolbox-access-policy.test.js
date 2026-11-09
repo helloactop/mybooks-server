@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const {
   ENV_LEGACY_COMPAT,
   legacyCompatEnabled,
+  modeNotice,
   resolveAccess,
   requireAccess,
 } = require('../src/core/toolbox/access-policy');
@@ -157,4 +158,20 @@ test('严格模式下资源绑定的权限仍必须显式给出 resource', () =>
     () => requireAccess(access, 'legacy_tool', 'books.read'),
     (err) => err.code === 'PERMISSION_RESOURCE_REQUIRED' && err.status === 403,
   );
+});
+
+test('启动提示：未审查插件开启兼容模式时明确警告同信任域', () => {
+  const previous = process.env.MYBOOKS_TOOLBOX_ALLOW_UNREVIEWED;
+  process.env.MYBOOKS_TOOLBOX_ALLOW_UNREVIEWED = 'true';
+  try {
+    withLegacyCompat('true', () => {
+      const notice = modeNotice();
+      assert.match(notice, /不是强隔离/);
+      assert.match(notice, /ALLOW_UNREVIEWED/);
+      assert.match(notice, /不可信插件/);
+    });
+  } finally {
+    if (previous === undefined) delete process.env.MYBOOKS_TOOLBOX_ALLOW_UNREVIEWED;
+    else process.env.MYBOOKS_TOOLBOX_ALLOW_UNREVIEWED = previous;
+  }
 });

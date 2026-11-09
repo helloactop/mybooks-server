@@ -150,6 +150,20 @@ async function proxyTool(toolId, route, {
   return result;
 }
 
+// 隔离子进程模式下预热单个插件；共享 Worker 模式下运行时会返回 unsupported。
+async function startTool(toolId, { timeoutMs = 20_000 } = {}) {
+  return callRuntime(`/internal/start/${encodeURIComponent(toolId)}`, {
+    method: 'POST', body: {}, timeoutMs,
+  });
+}
+
+// 停止单个插件子进程；下一次调用会重新懒启动（不改变数据库里的启用状态）。
+async function stopTool(toolId, { timeoutMs = 10_000 } = {}) {
+  return callRuntime(`/internal/stop/${encodeURIComponent(toolId)}`, {
+    method: 'POST', body: {}, timeoutMs,
+  });
+}
+
 module.exports = {
   RUNTIME_URL,
   ensureToolboxDirs,
@@ -162,4 +176,6 @@ module.exports = {
   reloadRuntime,
   runtimeHealth,
   proxyTool,
+  startTool,
+  stopTool,
 };

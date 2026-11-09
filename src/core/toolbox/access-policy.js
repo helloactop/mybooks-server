@@ -18,6 +18,7 @@
  * ============================================================ */
 
 const { ToolboxError } = require('./security');
+const { allowUnreviewed } = require('./allowlist');
 const { GrantStore } = require('../plugins/permissions');
 
 const ENV_LEGACY_COMPAT = 'MYBOOKS_TOOLBOX_LEGACY_COMPAT';
@@ -30,9 +31,13 @@ function legacyCompatEnabled() {
 }
 
 function modeNotice() {
-  return legacyCompatEnabled()
-    ? 'Legacy 兼容模式已启用：未带插件身份的内部调用仍可用共享密钥访问（不是强隔离）'
-    : 'Legacy 兼容模式已关闭：内部敏感调用必须携带有效插件身份令牌';
+  if (!legacyCompatEnabled()) {
+    return 'Legacy 兼容模式已关闭：内部敏感调用必须携带有效插件身份令牌';
+  }
+  const extra = allowUnreviewed()
+    ? '；且 MYBOOKS_TOOLBOX_ALLOW_UNREVIEWED=true：未审查插件与宿主同信任域，绝不能用于不可信插件'
+    : '';
+  return `Legacy 兼容模式已启用：未带插件身份的内部调用仍可用共享密钥访问（不是强隔离）${extra}`;
 }
 
 function resolveAccess({ identity, policy, toolInstalled, policyState } = {}) {

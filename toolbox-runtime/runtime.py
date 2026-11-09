@@ -39,6 +39,12 @@ def json_response(handler, status, payload):
     handler.finish(json.dumps(payload, ensure_ascii=False, default=str))
 
 
+def runtime_authorized(handler):
+    expected = runtime_secret()
+    provided = handler.request.headers.get("X-Mybooks-Runtime-Secret", "")
+    return bool(expected) and hmac.compare_digest(str(provided), str(expected))
+
+
 class HealthHandler(tornado.web.RequestHandler):
     def get(self):
         json_response(self, 200, {"status": "ok", "plugins": [item["tool_id"] for item in host.summary()]})
@@ -46,9 +52,7 @@ class HealthHandler(tornado.web.RequestHandler):
 
 class ReloadHandler(tornado.web.RequestHandler):
     def post(self):
-        expected = runtime_secret()
-        provided = self.request.headers.get("X-Mybooks-Runtime-Secret", "")
-        if not expected or not hmac.compare_digest(str(provided), str(expected)):
+        if not runtime_authorized(self):
             return json_response(self, 403, {"ok": False, "error": "forbidden"})
         reports = host.reload()
         return json_response(self, 200, {"ok": True, "plugins": reports, "loaded": host.summary()})
@@ -58,9 +62,7 @@ class BusyHandler(tornado.web.RequestHandler):
     """供 supervisor 判断子进程是否能安全淘汰。"""
 
     def get(self):
-        expected = runtime_secret()
-        provided = self.request.headers.get("X-Mybooks-Runtime-Secret", "")
-        if not expected or not hmac.compare_digest(str(provided), str(expected)):
+        if not runtime_authorized(self):
             return json_response(self, 403, {"ok": False, "error": "forbidden"})
         background = 0
         try:
@@ -177,9 +179,7 @@ class SupervisorReloadHandler(tornado.web.RequestHandler):
         self._supervisor = supervisor
 
     async def post(self):
-        expected = runtime_secret()
-        provided = self.request.headers.get("X-Mybooks-Runtime-Secret", "")
-        if not expected or not hmac.compare_digest(str(provided), str(expected)):
+        if not runtime_authorized(self):
             return json_response(self, 403, {"ok": False, "error": "forbidden"})
         loop = tornado.ioloop.IOLoop.current()
         reports = await loop.run_in_executor(None, self._supervisor.reload)
@@ -188,6 +188,43 @@ class SupervisorReloadHandler(tornado.web.RequestHandler):
             "plugins": reports,
             "loaded": self._supervisor.summary(),
         })
+
+
+class SupervisorStartHandler(tornado.web.RequestHandler):
+    """预热单个插件子进程（懒启动语义，失败显式返回错误）。"""
+
+    def initialize(self, supervisor):
+        self._supervisor = supervisor
+
+    async def post(self, tool_id):
+        from webserver.supervisor import CapacityError, ChildNotFound, ReloadingError
+
+        if not runtime_authorized(self):
+            return json_response(self, 403, {"ok": False, "error": "forbidden"})
+        try:
+            child = await self._supervisor.ensure_child(tool_id)
+        except ChildNotFound as err:
+            return json_response(self, 404, {"ok": False, "err": "tool.disabled", "msg": str(err)})
+        except (CapacityError, ReloadingError) as err:
+            return json_response(self, 503, {"ok": False, "err": err.code, "msg": str(err)})
+        except Exception:
+            LOGGER.exception("[supervisor] start %s failed", tool_id)
+            return json_response(self, 502, {"ok": False, "err": "runtime.unavailable", "msg": "插件进程不可用"})
+        json_response(self, 200, {"ok": True, "tool_id": tool_id, "port": child.port})
+
+
+class SupervisorStopHandler(tornado.web.RequestHandler):
+    """停止单个插件子进程；下一次请求会重新懒启动。"""
+
+    def initialize(self, supervisor):
+        self._supervisor = supervisor
+
+    async def post(self, tool_id):
+        if not runtime_authorized(self):
+            return json_response(self, 403, {"ok": False, "error": "forbidden"})
+        loop = tornado.ioloop.IOLoop.current()
+        stopped = await loop.run_in_executor(None, self._supervisor.stop_child, tool_id)
+        json_response(self, 200, {"ok": True, "tool_id": tool_id, "stopped": bool(stopped)})
 
 
 class SupervisorToolHandler(tornado.web.RequestHandler):
@@ -250,6 +287,8 @@ def make_supervisor_app(supervisor):
         [
             (r"/healthz", SupervisorHealthHandler, {"supervisor": supervisor}),
             (r"/internal/reload", SupervisorReloadHandler, {"supervisor": supervisor}),
+            (r"/internal/start/([a-z0-9_]+)", SupervisorStartHandler, {"supervisor": supervisor}),
+            (r"/internal/stop/([a-z0-9_]+)", SupervisorStopHandler, {"supervisor": supervisor}),
             (r"/tool/([a-z0-9_]+)/(.*)", SupervisorToolHandler, {"supervisor": supervisor}),
         ],
         compress_response=True,

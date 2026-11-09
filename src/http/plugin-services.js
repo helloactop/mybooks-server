@@ -49,6 +49,11 @@ runtimes.register(createLegacyRuntimeAdapter({
   start: startTool,
   stop: stopTool,
   invoke: (toolId, request) => proxyTool(toolId, request.route || '', request),
+  // 取消复用插件的 cancel 路由；延迟加载任务模块，避免仅做健康检查时打开数据库。
+  cancel: (toolId, taskId, options = {}) => {
+    const { cancelTask } = require('../core/toolbox/tasks');
+    return cancelTask(taskId, { toolId, userId: options.userId || '' });
+  },
 }));
 
 let started = null;

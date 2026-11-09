@@ -22,6 +22,7 @@ const library = require('../src/core/toolbox/library');
 const { sha256File } = require('../src/core/toolbox/security');
 const { FILES_DIR, TOOLBOX_DIR } = require('../src/core/paths');
 const { db } = require('../src/db/index');
+const { cancelTask } = require('../src/core/toolbox/tasks');
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -158,6 +159,19 @@ after(() => {
   try { dbHandle.close(); } catch { /* ignore */ }
   try { db.close(); } catch { /* ignore */ }
   try { fs.rmSync(suiteRoot, { recursive: true, force: true }); } catch { /* Windows 句柄可能仍占用 */ }
+});
+
+test('不可信插件：不在 allowlist 时拒绝本地安装，无静默降级', async () => {
+  const previous = process.env.MYBOOKS_TOOLBOX_ALLOW_UNREVIEWED;
+  delete process.env.MYBOOKS_TOOLBOX_ALLOW_UNREVIEWED;
+  try {
+    await assert.rejects(
+      installer.installFromLocalArchive(fixtureZip),
+      (err) => err.code === 'REVIEW_REQUIRED' && err.status === 403,
+    );
+  } finally {
+    if (previous !== undefined) process.env.MYBOOKS_TOOLBOX_ALLOW_UNREVIEWED = previous;
+  }
 });
 
 test('manifest：真实字段解析、路由白名单与兼容性结论', () => {
@@ -358,6 +372,33 @@ test('任务：创建/进度/完成/重启中断恢复', () => {
   const second = toolboxRepo.createTask(dbHandle, { toolId: 'fixture', operation: 'download' });
   assert.equal(toolboxRepo.recoverRunningTasks(dbHandle), 1);
   assert.equal(toolboxRepo.getTask(dbHandle, second.id).status, 'failed');
+});
+
+test('任务取消：归属校验、已结束拒绝、插件无 cancel 路由显式拒绝', async () => {
+  const task = toolboxRepo.createTask(dbHandle, { toolId: 'fixture', operation: 'download' });
+
+  await assert.rejects(
+    cancelTask(task.id, { toolId: 'other_tool' }),
+    (err) => err.code === 'TASK_NOT_FOUND' && err.status === 404,
+  );
+  await assert.rejects(
+    cancelTask(999999),
+    (err) => err.code === 'TASK_NOT_FOUND' && err.status === 404,
+  );
+
+  const finished = toolboxRepo.finishTask(dbHandle, task.id, { status: 'failed', error: 'x' });
+  assert.equal(finished.status, 'failed');
+  await assert.rejects(
+    cancelTask(task.id, { toolId: 'fixture' }),
+    (err) => err.code === 'TASK_NOT_RUNNING' && err.status === 409,
+  );
+
+  const running = toolboxRepo.createTask(dbHandle, { toolId: 'fixture', operation: 'download' });
+  await assert.rejects(
+    cancelTask(running.id, { toolId: 'fixture' }),
+    (err) => err.code === 'CANCEL_UNSUPPORTED' && err.status === 409,
+  );
+  toolboxRepo.finishTask(dbHandle, running.id, { status: 'cancelled' });
 });
 
 test('商店标注：已安装/可更新/未审查状态', () => {

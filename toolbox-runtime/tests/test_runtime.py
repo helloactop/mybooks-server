@@ -413,6 +413,9 @@ class SupervisorTests(_SupervisorFixture, unittest.TestCase):
         recovered = asyncio.run(self.supervisor.ensure_child("alpha"))
         self.assertTrue(recovered.alive())
         self.assertNotEqual(recovered.port, child.port)
+        # 崩溃子进程的 stdout/stderr 必须被回收，避免长期运行泄漏文件句柄。
+        self.assertTrue(child.process.stdout.closed)
+        self.assertTrue(child.process.stderr.closed)
 
     def test_busy_child_blocks_eviction(self):
         import asyncio

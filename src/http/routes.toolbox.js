@@ -18,6 +18,7 @@ const { ToolboxError, assertInside } = require('../core/toolbox/security');
 const store = require('../core/toolbox/store');
 const installer = require('../core/toolbox/installer');
 const { runtimeHealth, proxyTool } = require('../core/toolbox/runtime');
+const { cancelTask } = require('../core/toolbox/tasks');
 
 const router = express.Router();
 const upload = multer({
@@ -261,23 +262,10 @@ router.get('/api/toolbox/tasks/:id', (req, res) => {
 
 router.post('/api/toolbox/tasks/:id/cancel', async (req, res) => {
   try {
-    const task = toolboxRepo.getTask(db, Number(req.params.id));
-    if (!task) throw new ToolboxError('TASK_NOT_FOUND', '任务不存在', 404);
-    if (task.status !== 'running') throw new ToolboxError('TASK_NOT_RUNNING', '任务已结束', 409);
-    const tool = installedOrThrow(task.tool_id);
-    if (!tool.enabled) throw new ToolboxError('TOOL_DISABLED', '工具未启用', 409);
-    if (!findRoute(tool.manifest, 'cancel')) {
-      throw new ToolboxError('CANCEL_UNSUPPORTED', '该工具没有提供取消接口', 409);
-    }
-    const result = await proxyTool(task.tool_id, 'cancel', {
-      method: 'POST', body: {}, timeoutMs: 10_000, userId: req.authSession && req.authSession.id,
+    const result = await cancelTask(req.params.id, {
+      userId: req.authSession && req.authSession.id,
     });
-    if (!result.ok) {
-      const msg = result.json && (result.json.msg || result.json.error);
-      throw new ToolboxError('CANCEL_FAILED', msg || '取消请求失败', 502);
-    }
-    toolboxRepo.updateTask(db, task.id, { message: '已请求取消' });
-    res.json({ ok: true, plugin: result.json });
+    res.json({ ok: true, plugin: result.plugin });
   } catch (err) {
     fail(res, err);
   }

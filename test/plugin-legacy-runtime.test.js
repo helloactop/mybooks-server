@@ -73,11 +73,29 @@ test('start/stop/invoke 转发 toolId，非法实例显式拒绝', async () => {
   );
 });
 
-test('cancel 在旧协议下显式 unsupported，不伪装成功', async () => {
+test('cancel 未注入实现时显式 unsupported，不伪装成功', async () => {
   const adapter = createLegacyRuntimeAdapter({ health: async () => ({ online: true }) });
   await assert.rejects(
     () => adapter.cancel({ toolId: 'zlibrary' }, 42),
     (err) => err.code === 'RUNTIME_UNSUPPORTED' && err.status === 501,
+  );
+});
+
+test('cancel 注入后转发 toolId/taskId/userId，非法实例仍拒绝', async () => {
+  const calls = [];
+  const adapter = createLegacyRuntimeAdapter({
+    health: async () => ({ online: true }),
+    cancel: async (toolId, taskId, options) => {
+      calls.push(['cancel', toolId, taskId, options]);
+      return { ok: true };
+    },
+  });
+
+  assert.deepEqual(await adapter.cancel({ toolId: 'zlibrary', userId: 'u1' }, 42), { ok: true });
+  assert.deepEqual(calls, [['cancel', 'zlibrary', 42, { userId: 'u1' }]]);
+  await assert.rejects(
+    () => adapter.cancel({ toolId: '../etc' }, 42),
+    (err) => err.code === 'TOOL_ID_INVALID' && err.status === 400,
   );
 });
 
@@ -89,6 +107,10 @@ test('RuntimeManager 与 Toolbox 适配器的生命周期调用互通', async ()
     start: async (toolId) => { calls.push(['start', toolId]); return { tool_id: toolId, ok: true }; },
     stop: async (toolId) => { calls.push(['stop', toolId]); return { tool_id: toolId, stopped: true }; },
     invoke: async (toolId, request) => { calls.push(['invoke', toolId, request.route]); return { status: 200 }; },
+    cancel: async (toolId, taskId, options) => {
+      calls.push(['cancel', toolId, taskId, options.userId]);
+      return { ok: true };
+    },
     reload: async () => ({ ok: true }),
   }));
 
@@ -99,13 +121,14 @@ test('RuntimeManager 与 Toolbox 适配器的生命周期调用互通', async ()
     await manager.invoke('legacy-toolbox', { toolId: 'zlibrary' }, { route: 'books' }),
     { status: 200 },
   );
-  await assert.rejects(
-    () => manager.cancel('legacy-toolbox', { toolId: 'zlibrary' }, 42),
-    (err) => err.code === 'RUNTIME_UNSUPPORTED' && err.status === 501,
+  assert.deepEqual(
+    await manager.cancel('legacy-toolbox', { toolId: 'zlibrary', userId: 'u1' }, 42),
+    { ok: true },
   );
   assert.deepEqual(calls, [
     ['start', 'zlibrary'],
     ['stop', 'zlibrary'],
     ['invoke', 'zlibrary', 'books'],
+    ['cancel', 'zlibrary', 42, 'u1'],
   ]);
 });

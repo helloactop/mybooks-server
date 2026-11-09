@@ -1,12 +1,12 @@
 /* ============================================================
  * Toolbox Python 运行时适配器（共享 Worker 或 supervisor 子进程）
  *
- * 只负责运行时动作：health / start / stop / invoke / reload；
+ * 只负责运行时动作：health / start / stop / invoke / reload / cancel；
  * 安装、启用、权限策略仍由 toolbox 仓库与旧 /api/toolbox/* 管理，
  * 不在这里另起一套插件生命周期。
  *
- * cancel 在旧协议里没有任务句柄，显式返回 RUNTIME_UNSUPPORTED，
- * 不允许伪装成“已取消”。
+ * cancel 复用 Toolbox 任务取消（要求插件 manifest 声明 cancel 路由）；
+ * 未注入实现时显式返回 RUNTIME_UNSUPPORTED，不允许伪装成“已取消”。
  * ============================================================ */
 
 const RUNTIME_ID = 'legacy-toolbox';
@@ -30,7 +30,7 @@ function toolIdOf(instance) {
   return toolId;
 }
 
-function createLegacyRuntimeAdapter({ health, start, stop, invoke, reload } = {}) {
+function createLegacyRuntimeAdapter({ health, start, stop, invoke, reload, cancel } = {}) {
   if (typeof health !== 'function') {
     throw new TypeError('Legacy Runtime 适配器需要注入 health');
   }
@@ -70,8 +70,16 @@ function createLegacyRuntimeAdapter({ health, start, stop, invoke, reload } = {}
   if (typeof invoke === 'function') {
     adapter.invoke = async (instance, request, context) => invoke(toolIdOf(instance), request || {}, context || {});
   }
-  // 旧任务协议没有取消句柄；保留显式失败，避免调用方误判成功。
-  adapter.cancel = async () => { throw unsupported('cancel'); };
+  if (typeof cancel === 'function') {
+    // operationId 是 Toolbox 任务 id；同时带上 toolId 防止跨插件取消。
+    adapter.cancel = async (instance, operationId) => {
+      const userId = instance && typeof instance.userId === 'string' ? instance.userId : '';
+      return cancel(toolIdOf(instance), operationId, { userId });
+    };
+  } else {
+    // 没有注入取消实现：保留显式失败，避免调用方误判成功。
+    adapter.cancel = async () => { throw unsupported('cancel'); };
+  }
 
   return adapter;
 }

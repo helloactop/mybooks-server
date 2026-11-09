@@ -275,6 +275,9 @@ class PluginSupervisor(object):
                 if child and child.alive():
                     return child
                 if child:
+                    # 崩溃/被外部杀掉的子进程仍占着 stdout/stderr 管道；
+                    # 先回收（_terminate 对已退出进程只关闭管道）再移除。
+                    self._terminate(child.process)
                     self._children.pop(tool_id, None)
                 item = self._state_items.get(tool_id)
                 if item is None:

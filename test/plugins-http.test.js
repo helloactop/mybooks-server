@@ -222,8 +222,8 @@ test('GET /api/plugins 需要会话、只读且脱敏，旧工具箱接口不变
     };
     assert.equal(
       (await fetch(base + '/internal/toolbox/library/ids', { headers: mdHeaders })).status,
-      200,
-      '未配置策略的工具保持兼容',
+      403,
+      '停用的插件即使有有效令牌也必须拒绝',
     );
 
     const legacyList = await fetch(base + '/api/toolbox/list?include_disabled=1', { headers });
@@ -231,6 +231,14 @@ test('GET /api/plugins 需要会话、只读且脱敏，旧工具箱接口不变
     const legacyBody = await legacyList.json();
     assert.equal(legacyBody.tools.length, 2);
     assert.equal(legacyBody.store_enabled, true);
+
+    // 策略损坏且无可信快照：连“无身份旧 Worker”路径也必须 fail-closed。
+    fs.rmSync(path.join(root, 'toolbox', 'state', 'grants.last-good.json'), { force: true });
+    fs.writeFileSync(path.join(root, 'toolbox', 'state', 'grants.json'), '{ not json');
+    const broken = await fetch(base + '/internal/toolbox/library/ids', { headers: internalHeaders });
+    assert.equal(broken.status, 403, '策略损坏后旧 Worker 不能继续宽松访问');
+    const brokenBody = await broken.json();
+    assert.equal(brokenBody.code, 'POLICY_BROKEN');
   } finally {
     if (child) {
       child.kill();

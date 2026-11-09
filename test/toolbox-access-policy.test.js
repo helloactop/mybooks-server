@@ -106,6 +106,33 @@ test('未知/未安装的新插件没有策略时默认拒绝', () => {
   });
 });
 
+test('策略整体损坏（broken）时，无身份 Legacy 调用也被拒绝', () => {
+  const access = resolveAccess({
+    identity: null,
+    policy: null,
+    toolInstalled: false,
+    policyState: 'broken',
+  });
+  assert.equal(access.mode, 'strict');
+  assert.equal(access.reason, 'policy-broken');
+  assert.throws(
+    () => requireAccess(access, null, 'jobs.create'),
+    (err) => err.code === 'PLUGIN_IDENTITY_REQUIRED' && err.status === 403,
+  );
+
+  // 即使 Legacy 兼容开关打开，也不能绕过损坏策略的 fail-closed。
+  withLegacyCompat('true', () => {
+    const stillClosed = resolveAccess({
+      identity: null,
+      policy: null,
+      toolInstalled: false,
+      policyState: 'broken',
+    });
+    assert.equal(stillClosed.strict, true);
+    assert.equal(stillClosed.reason, 'policy-broken');
+  });
+});
+
 test('策略损坏（broken）时带身份的调用默认拒绝，不提供兼容回退', () => {
   const access = resolveAccess({
     identity: { toolId: 'zlibrary' },

@@ -13,7 +13,7 @@ const { TOOL_ID_RE } = require('../core/toolbox/manifest');
 const { ToolboxError, timingSafeEqualString } = require('../core/toolbox/security');
 const { internalSecret } = require('../core/toolbox/runtime');
 const { verifyIdentity } = require('../core/toolbox/identities');
-const { pluginGrantsFor } = require('../core/toolbox/plugin-grants');
+const { pluginGrantsFor, policyState } = require('../core/toolbox/plugin-grants');
 const { resolveAccess, requireAccess } = require('../core/toolbox/access-policy');
 const { importToolFile, getBookMetadata } = require('../core/toolbox/import');
 const library = require('../core/toolbox/library');
@@ -36,14 +36,25 @@ function requireInternal(req, res, next) {
     return res.status(403).json({ error: '禁止访问', code: 'INTERNAL_FORBIDDEN' });
   }
   try {
+    // 策略整体损坏且无快照时，连无身份的 Legacy 路径也必须拒绝（fail-closed 前置）。
+    const state = policyState();
+    if (state === 'broken') {
+      throw new ToolboxError('POLICY_BROKEN', '权限策略损坏，内部敏感操作已拒绝', 403);
+    }
     req.pluginIdentity = readRequestIdentity(req);
     const policy = req.pluginIdentity ? pluginGrantsFor(req.pluginIdentity.toolId) : null;
-    // 只有“带身份但未配置策略”时才需要查安装表判断是否可信旧插件；
-    // 已配置策略/无身份路径都不必多打一次数据库。
-    const toolInstalled = req.pluginIdentity && policy && !policy.configured
-      ? !!toolboxRepo.getTool(db, req.pluginIdentity.toolId)
-      : false;
-    req.pluginAccess = resolveAccess({ identity: req.pluginIdentity, policy, toolInstalled });
+    // 身份请求统一检查安装/启用状态：停用的插件不能通过内部接口继续读改书库。
+    // 未安装的插件（未来新 Runtime）交给 grants 判定，不在这里拦。
+    const tool = req.pluginIdentity ? toolboxRepo.getTool(db, req.pluginIdentity.toolId) : null;
+    if (tool && !tool.enabled) {
+      throw new ToolboxError('TOOL_DISABLED', '插件未启用', 403);
+    }
+    req.pluginAccess = resolveAccess({
+      identity: req.pluginIdentity,
+      policy,
+      toolInstalled: !!tool,
+      policyState: state,
+    });
   } catch (err) {
     return fail(res, err);
   }

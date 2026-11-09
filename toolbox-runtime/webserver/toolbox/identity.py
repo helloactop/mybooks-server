@@ -44,26 +44,36 @@ def _sanitize(raw):
     return tokens
 
 
+def _unavailable(err):
+    if _reported["error"] != str(err):
+        _reported["error"] = str(err)
+        logging.error(
+            "[identity] identities.json 无法读取（权限或格式问题），拒绝降级到无身份协议: %s", err)
+    return IdentityUnavailable(
+        "插件身份文件不可读，请检查 state/identities.json 的属主与权限")
+
+
 def _load():
     path = _path()
     try:
         mtime = os.path.getmtime(path)
-    except OSError:
-        # 文件不存在：旧协议（Legacy 兼容路径），由 Node 侧决定是否允许。
+    except FileNotFoundError:
+        # 只有确认文件不存在，才允许旧协议（Legacy 兼容路径）。
         return {}
+    except OSError as err:
+        # 权限不足、存储异常等不能伪装成“没有身份文件”。
+        raise _unavailable(err) from err
     with _lock:
         if _cache["mtime"] == mtime:
             return _cache["tokens"]
     try:
         with open(path, "r", encoding="utf-8") as handle:
             document = json.load(handle)
+    except FileNotFoundError:
+        # stat 与 open 之间被删除：按不存在处理，仍属可确认的缺失。
+        return {}
     except (OSError, ValueError) as err:
-        if _reported["error"] != str(err):
-            _reported["error"] = str(err)
-            logging.error(
-                "[identity] identities.json 无法读取（权限或格式问题），拒绝降级到无身份协议: %s", err)
-        raise IdentityUnavailable(
-            "插件身份文件不可读，请检查 state/identities.json 的属主与权限") from err
+        raise _unavailable(err) from err
     tokens = _sanitize(document.get("tokens") if isinstance(document, dict) else {})
     with _lock:
         _cache["mtime"] = mtime

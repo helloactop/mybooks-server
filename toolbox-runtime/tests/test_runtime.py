@@ -235,6 +235,16 @@ class NodeClientTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "PLUGIN_IDENTITY_UNAVAILABLE")
         self.assertEqual(raised.exception.status, 403)
 
+    def test_identity_permission_error_does_not_downgrade(self):
+        """getmtime 抛出 PermissionError 时不能当作“文件不存在”。"""
+        from unittest import mock
+        from webserver.toolbox import identity
+
+        identity.reset_cache()
+        with mock.patch.object(identity.os.path, "getmtime", side_effect=PermissionError("denied")):
+            with self.assertRaises(identity.IdentityUnavailable):
+                identity.token_for("fixture")
+
     def test_identity_headers(self):
         from webserver.toolbox import identity
         from webserver.toolbox.node_client import NodeClient

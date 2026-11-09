@@ -91,6 +91,29 @@ test('非法条目被跳过，但工具仍处于严格模式', () => {
   assert.equal(policy.store.has('partial', 'books.read', 'library:all'), false);
 });
 
+test('合法 JSON 中授权值类型错误也必须进入严格模式（不得退回宽松）', () => {
+  writePolicy({
+    version: 1,
+    tools: {
+      wrong_type: 'books.read:book:1',
+      null_value: null,
+    },
+  });
+
+  const policy = withoutWarn(() => pluginGrantsFor('wrong_type'));
+  assert.equal(policy.state, 'ok');
+  assert.equal(policy.configured, true, '写出错误类型仍表示该插件已被配置');
+  assert.equal(policy.store.has('wrong_type', 'books.read', 'book:1'), false);
+  assert.throws(
+    () => policy.store.require('wrong_type', 'books.read', 'book:1'),
+    (err) => err.code === 'PERMISSION_DENIED' && err.status === 403,
+  );
+
+  const nullPolicy = withoutWarn(() => pluginGrantsFor('null_value'));
+  assert.equal(nullPolicy.configured, true);
+  assert.equal(nullPolicy.store.has('null_value', 'jobs.create'), false);
+});
+
 test('策略损坏时沿用最近一次有效快照，绝不放宽授权', () => {
   // 先留下一个确实包含 zlibrary 的有效策略，再把它写坏。
   writePolicy({ version: 1, tools: { zlibrary: ['books.read:library:*', 'books.read:book:1'] } });

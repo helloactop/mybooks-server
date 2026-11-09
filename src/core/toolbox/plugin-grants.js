@@ -72,8 +72,14 @@ function buildPolicy(document) {
   if (entries.length > MAX_ENTRIES) return null;
 
   for (const [toolId, grants] of entries) {
-    if (!PLUGIN_ID_RE.test(toolId) || !Array.isArray(grants)) continue;
+    if (!PLUGIN_ID_RE.test(toolId)) continue;
+    // 只要出现合法插件 ID，就视为“该插件已被配置”，必须进入严格模式。
+    // 授权值类型错误（例如写成字符串而不是数组）不能让插件退回宽松兼容。
     configured.add(toolId);
+    if (!Array.isArray(grants)) {
+      console.warn(`[plugin-grants] ${toolId} 的授权必须是数组，已按拒绝全部权限处理`);
+      continue;
+    }
     for (const entry of grants.slice(0, MAX_ENTRIES)) {
       const parsed = parseEntry(entry);
       if (!parsed) continue;

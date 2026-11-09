@@ -35,7 +35,13 @@ function modeNotice() {
     : 'Legacy 兼容模式已关闭：内部敏感调用必须携带有效插件身份令牌';
 }
 
-function resolveAccess({ identity, policy, toolInstalled }) {
+function resolveAccess({ identity, policy, toolInstalled, policyState } = {}) {
+  // 策略整体损坏时，无论调用方是否携带身份都不得继续走宽松路径。
+  // 这是 fail-closed 的第一道门禁，必须先于 Legacy 兼容判断。
+  if (policyState === 'broken') {
+    return Object.freeze({ mode: 'strict', strict: true, configured: true, store: DENY_ALL, reason: 'policy-broken' });
+  }
+
   if (!identity) {
     if (!legacyCompatEnabled()) {
       throw new ToolboxError('LEGACY_MODE_DISABLED', '内部调用必须携带插件身份令牌', 403);

@@ -1,7 +1,7 @@
 # 插件平台进度（AI 接手）
 
-> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，Phase 3g 提交见 `git log --oneline -5`）
-> 最近提交：Phase 3g 分阶段提交（`git log --oneline` 查看）· `238aad33` 子进程凭据隔离 · `a45c920d` 任务取消 + 崩溃管道回收 · `d9052f0e` Phase 3f 收尾
+> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，Phase 3g.1 提交见 `git log --oneline -5`）
+> 最近提交：Phase 3g.1 安全补强（UID 注册表 / Popen 降权 / 严格配置校验）· `4f7f6718` Phase 3g 文档 · `238aad33` 子进程凭据隔离 · `a45c920d` 任务取消 + 崩溃管道回收
 > 文档：[架构](mybooks-plugin-architecture.md) · [规范](mybooks-plugin-development-standards.md) · [隔离设计](isolation-design.md)
 
 ## 现状
@@ -175,8 +175,9 @@ Phase 3f（部分完成）：容器内每插件子进程（opt-in），故障/�
 - 主镜像 `USER node`（uid/gid 1000），`toolbox-runtime` 镜像显式 `USER 1000:1000`，
   同一 `toolbox-data` 卷下 `state/identities.json`（0600）双方可读写。
 - 独立 UID 模式（`TOOLBOX_CHILD_UID_BASE>0` + `TOOLBOX_RUNTIME_USER=0:0`）下，插件子进程
-  UID 为 `base + sha256(tool_id) % 200`，读不到 0600 的 `state/identities.json`、
-  `state/internal-secret` 与 `state/config.key`；身份令牌与配置密钥由 supervisor 通过环境变量注入。
+  UID 由持久化注册表 `state/uid-map.json` 分配（见 Phase 3g.1），读不到 0600 的
+  `state/identities.json`、`state/internal-secret` 与 `state/config.key`；
+  身份令牌与配置密钥由 supervisor 通过环境变量注入。
 - 宿主 UID 不同（NAS bind mount）时，Python 读取身份文件失败会抛
   `PLUGIN_IDENTITY_UNAVAILABLE`，拒绝静默降级；只有 `FileNotFoundError` 才允许
   旧协议，`PermissionError` 等一律显式失败。需让两个容器使用同一 UID/GID，
@@ -197,12 +198,10 @@ npm run check:public                      # 通过
 npm run check:icons                       # 通过（lucide-static 1.70.0，23 个图标）
 cd toolbox-runtime
 python -m unittest discover -s tests -v
-                                          # 39 用例（38 通过 + 1 Windows 跳过；本机 Python 3.15）
-docker compose config -q                  # 通过
-docker compose build toolbox-runtime      # 通过
-docker run --rm -v "$PWD/tests:/app/tests:ro" \
-  --entrypoint python mybooks-server-toolbox-runtime:latest \
-  -m unittest discover -s tests -v        # 容器内 Python 3.12 全通过
+                                          # Windows 本机：POSIX-only 用例跳过
+docker run --rm -v "$PWD:/app:ro" --entrypoint python \
+  mybooks-server-toolbox-runtime:latest \
+  -m unittest discover -s tests -v        # 容器内 Python 3.12：62 通过 + 1 跳过（需 root）
 ```
 
 CI：`.github/workflows/ci.yml` 的 `test` 与 `python` job 在 `ceb7f5dd` 上均
@@ -262,14 +261,15 @@ CI：`.github/workflows/ci.yml` 的 `test` 与 `python` job 在 `ceb7f5dd` 上�
   身份头一旦出现即进入严格校验，错误令牌/未知/停用/无权限插件一律拒绝。
 
 第二阶段：独立 UID 与私有目录（opt-in）
-- `supervisor.py`：`TOOLBOX_CHILD_UID_BASE`（0=关闭）>0 时为每个插件分配稳定 UID
-  （`base + sha256(tool_id) % 200`），通过 `preexec_fn` `setgid`/`setuid` 降权；
+- `supervisor.py`：`TOOLBOX_CHILD_UID_BASE`（0=关闭）>0 时为每个插件分配稳定 UID；
+  **Phase 3g.1 起改为持久化注册表 `state/uid-map.json`（不再用哈希取模），并通过
+  `subprocess.Popen(user=/group=/extra_groups=/umask=)` 降权，不再使用 `preexec_fn`**。
   `TOOLBOX_RUNTIME_USER=0:0` 允许容器以 root 启动后降权。
-- 数据目录：`DATA_ROOT/<tool_id>` 为 0711（宿主 Node 可穿透读取产物、不可列举），
-  `work/<hash>` 为 0755，`config.json` 仍为 0600；`state/config.key` 由 supervisor 首次生成
-  （0600，属主为 state 目录属主）并通过 `MYBOOKS_TOOLBOX_DATA_KEY` 注入子进程。
-- Compose：`cap_drop: ALL` 之外按需补 `SETUID`/`SETGID`/`CHOWN`/`DAC_OVERRIDE`/`KILL`，
-  仅在 root 启动时生效；[compose.yaml](../../compose.yaml) 已同步变量与注释。
+- 数据目录：**Phase 3g.1 起为 `data/<tool_id>` 2710（setgid）、`work/<hash>` 2750、
+  产物 0640、`config.json` 0600**，其他插件不可读；宿主 Node 通过共享属组（`TOOLBOX_HOST_GID`）
+  读取产物完成入库。`state/config.key` 由 supervisor 首次生成（0600）并注入子进程。
+- Compose：`cap_drop: ALL` 之外按需补 `SETUID`/`SETGID`/`CHOWN`/`FOWNER`/`FSETID`/
+  `DAC_OVERRIDE`/`KILL`，仅在 root 启动时生效；[compose.yaml](../../compose.yaml) 已同步变量与注释。
 
 Docker 双容器真实验收（`docker compose up -d --build`，2026-11-09）
 
@@ -281,8 +281,8 @@ Docker 双容器真实验收（`docker compose up -d --build`，2026-11-09）
 | 严格模式无授权 | 同上 | 有效令牌但无 grants → 403 `PLUGIN_GRANTS_REQUIRED` |
 | 严格模式授权 | 同上 | 令牌 + `books.read:library:all` → 200；收窄到 `book:1` 后列表 403、`books?ids=1` 200、`ids=2` 403 |
 | 身份冒用 | 同上 | `zlibrary` 令牌 + `md_to_epub` 头 → 403；body `tool_id` 不一致 → 403 |
-| 独立 UID | `TOOLBOX_CHILD_UID_BASE=2000` | zlibrary 子进程 uid 2077、md_to_epub uid 2015；`/toolbox/state/internal-secret`（0600 root）读取报 Permission denied |
-| 私有目录/密钥 | 同上 | `data/<tool>` 0711、`work/*` 0755、`config.json` 0600、`state/config.key` 0600；插件配置写入返回 200 |
+| 独立 UID | `TOOLBOX_CHILD_UID_BASE=2000` | zlibrary 子进程 uid 2077、md_to_epub uid 2015（Phase 3g 哈希分配；3g.1 改为注册表分配） |
+| 私有目录/密钥 | 同上 | `data/<tool>` 0711、`work/*` 0755、`config.json` 0600、`state/config.key` 0600；插件配置写入返回 200（3g.1 收紧为 2710/2750/0640，见下节） |
 | 真实插件（严格+隔离） | 同上 | md_to_epub 转换 + 入库成功（`book_id=1`），子进程经插件令牌调用 Node 内部接口 |
 | 进程重启 | `docker compose restart toolbox-runtime` | 两插件按需重新拉起，`/healthz` 与原生路由恢复 200 |
 | 回滚 Legacy | 默认环境 + `chown -R 1000:1000 /toolbox/data` | 插件列表、配置解密、共享密钥、转换入库全部恢复 |
@@ -310,19 +310,89 @@ docker compose up -d
 ```
 （注意：卷名以 `docker volume ls` 实际名称为准。）
 
-已知边界：独立 UID 仍共用容器、网络与 `/toolbox` 卷；插件可穿透已知路径读取其他插件
-`work/` 下的产物，但读不到对方的 `config.json`、`identities.json`、`internal-secret`。
+已知边界（Phase 3g 状态；3g.1 已收紧为 2710/2750/0640，其他插件不可读 `work/` 产物）：
+独立 UID 仍共用容器、网络与 `/toolbox` 卷；读不到对方的 `config.json`、`identities.json`、`internal-secret`。
 这不是恶意代码沙箱，网络出口、syscall、CPU/内存仍需后续 Phase 的容器级隔离补齐。
+
+## Phase 3g.1 安全补强（2026-11-09）
+
+基线 `4f7f6718`，不修改 `main`，Toolbox API / Bridge / 安装包格式保持不变。
+
+### 已修复问题
+
+1. **UID 分配改为持久化注册表**：`state/uid-map.json`（`version=1`、`assignments`，0600）。
+   - 同一 `tool_id` 一旦分配即固定，安装、重启、回滚都不会漂移；
+   - 新插件取 `[base, base+TOOLBOX_CHILD_UID_COUNT)` 内**最小空闲 UID**，不再用
+     `sha256(tool_id) % 200`，两个插件不可能共用 UID；
+   - 升级前的哈希 UID 目录按目录属主**采纳**，重装/迁移不改属主；
+   - 卸载后只有在该插件数据目录**已删除**时才回收 UID，否则保留，避免新插件接管旧数据；
+   - 注册表损坏、分配重复、UID 池耗尽 → `IsolationError`，拒绝启动（fail-closed）。
+2. **移除 `preexec_fn`**：改用 `subprocess.Popen(user=uid, group=uid, extra_groups=[], umask=0o027, start_new_session=True)`，
+   多线程 supervisor 不再执行 fork 后的回调；非 POSIX 或 Python < 3.9 显式报错。
+3. **隔离配置严格校验**：
+   - 启用独立 UID 但 `euid != 0` → 明确提示“不会退回共享 UID”，supervisor 启动失败（`SystemExit(2)`）；
+   - 缺少 `CAP_CHOWN/CAP_DAC_OVERRIDE/CAP_FOWNER/CAP_FSETID/CAP_KILL/CAP_SETGID/CAP_SETUID`
+     时列出缺失项并拒绝启动；
+   - Node 安装/状态写入 `state/runtime-mode.json`，Python 启动子进程前对比本端
+     `MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY`；不一致时 `/internal/start`、代理与 reload 返回
+     503 `runtime.mode`，`/healthz` 同时返回 `plugin_auth_only` / `node_plugin_auth_only`。
+4. **产物受控交付**（不改导入 API）：`data/<tool_id>` 2710（setgid）、子目录 2750、
+   文件 0640、根级 `config.json` 0600；插件间**不可读**，宿主 Node 通过共享属组
+   `TOOLBOX_HOST_GID`（默认 1000）读取产物完成入库。`storage.py` 在私有模式下不再 chmod
+   根目录，避免插件进程（无 `CAP_FSETID`）清掉 setgid 位导致产物落入插件组。
+5. Compose 增加 `TOOLBOX_CHILD_UID_COUNT`、`TOOLBOX_HOST_GID`，并将 capabilities
+   固定为上述 7 项。
+
+### 实际测试结果
+
+- Node：`npm test` **770/770 通过**。
+- Python：容器内 `python -m unittest discover -s tests` **62 用例通过，1 跳过**
+  （需 root 的跨 UID 读取）；Windows 本机 10 项 POSIX-only 跳过。
+- Docker 双容器（`mybooks-g1`，真实插件）：
+  - `/healthz`：`plugin_auth_only=true`、`node_plugin_auth_only=true`、
+    `missing_capabilities=[]`、`assignments={"md_to_epub":2000}`；
+  - 子进程 `Uid 2000`；`Max open files 256`；`Max address space 402653184`（384MB，
+    实际生效的 `RLIMIT_AS`，不是仅写入 `ulimit` 配置）；
+  - `md_to_epub` 真实转换并入库：`{"err":"ok","imported":true,"book_id":1}`；
+  - 跨插件读取：`OTHER_PLUGIN_DENIED`、`IDENTITIES_DENIED`、`SECRET_DENIED`；
+    宿主属组读取产物 `HOST_GROUP_READ_OK`；
+  - `docker compose restart toolbox-runtime` 后 UID 仍为 2000（注册表持久化）；
+  - 人为制造 Node/Python 模式不一致 → reload 返回“部署配置不一致…”；恢复 Node 后正常；
+  - 非 root 启动：`euid=1000 不是 root…不会退回共享 UID`；
+  - 移除 `FOWNER`/`FSETID`：`缺少 capabilities：CAP_FOWNER, CAP_FSETID`；
+  - 注册表序列：5000/5001/5002 唯一、重启稳定、池耗尽给出明确错误。
+
+### 尚未解决的安全风险
+
+1. **共享网络**：插件仍可访问任意内网/外网地址，无出口限制（需方案 D）。
+2. **非容器级隔离**：不同 UID 只解决文件/凭据边界；同容器进程仍共享 PID/网络，
+   CPU 与内存仅靠 supervisor 容量上限和 `RLIMIT_AS`，不等于 cgroup 配额。
+3. **内存限制的边界**：`RLIMIT_AS` 已验证真实生效，但不覆盖线程栈、共享内存与
+   cgroup OOM 行为；未做长时间压测。
+4. **Legacy 模式**：默认部署仍与插件共享信任域；隔离结论只在推荐部署下成立。
+5. **root 容器**：`TOOLBOX_RUNTIME_USER=0:0` 扩大攻击面，capabilities 已收窄至 7 项，
+   仍需配合只读根文件系统与 `no-new-privileges`。
+6. **依赖告警**：`npm audit --omit=dev` 的 `undici`/`yauzl` 告警本阶段未处理。
+
+### Phase 4 准入结论
+
+**具备 Phase 4 开发条件，但附条件**：
+
+- 以 `TOOLBOX_ISOLATE_PLUGINS=1` + `MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY=true`（Node/Python 一致）
+  + `TOOLBOX_CHILD_UID_BASE>0`（root 启动）作为 Phase 4 的推荐部署基线；
+- 独立 UID 分配、降权与产物权限已可复现验证，可作为 SDK/Manifest 的默认假设；
+- **不可信第三方插件**的对外承诺仍需网络出口限制与容器级隔离，不计入本轮完成项；
+- 未完成项：Z-Library 外网验收、UI 浏览器验收、资源压测。
 
 ## Phase 3 验收对照（本阶段收尾）
 
 | # | 验收项 | 状态 | 证据 / 缺口 |
 | --- | --- | --- | --- |
-| 1 | Supervisor 可靠性 | ✅ | 状态文件缺失/损坏/结构非法统一返回 `{}`；`reload()` 捕获全部异常；崩溃自动重启；世代号防 reload/spawn 竞态；并发 ensure 复用同一子进程；Phase 3g 修复“终止失败仍关管道”导致的 supervisor 卡死；Python 39 用例 |
+| 1 | Supervisor 可靠性 | ✅ | 状态文件缺失/损坏/结构非法统一返回 `{}`；`reload()` 捕获全部异常；崩溃自动重启；世代号防 reload/spawn 竞态；并发 ensure 复用同一子进程；Phase 3g 修复“终止失败仍关管道”导致的 supervisor 卡死；Python 62 用例（3g.1 含 UID/降权/权限） |
 | 2 | Runtime Manager 集成 | ✅ | `health/start/stop/invoke/reload/cancel` 经单一 Toolbox 适配器接到 Python 运行时；cancel 复用插件 `cancel` 路由并校验任务归属；安装/启停仍只走 `/api/toolbox/*`，无第二套生命周期 |
 | 3 | 安全隔离 | ◐ | 每插件令牌可作为内部接口唯一凭据（`PLUGIN_AUTH_ONLY`），错误令牌/未知/停用/无授权插件一律 403 不回退；独立 UID 模式下插件读不到 `internal-secret`/`identities.json`/其他插件 `config.json`。仍共享容器、网络与 `/toolbox` 卷，尚非恶意代码沙箱 |
 | 4 | 真实插件测试 | ◐ | Docker 双容器内 zlibrary/md_to_epub 商店安装、严格认证、隔离子进程、md_to_epub 真实转换+入库（`book_id=1`）、运行时重启恢复均通过；Z-Library 外部搜索/下载仍被环境 DNS 阻断，UI 未做浏览器渲染 |
-| 5 | 测试与 CI | ◐ | Node 770/770、Python 本机 38 通过 + 1 跳过、容器内全通过；`check:public`/`check:icons`/`docker compose config` 通过；资源上限压测与网络出口限制未做 |
+| 5 | 测试与 CI | ◐ | Node 770/770、容器内 Python 62 通过 + 1 跳过；`check:public`/`check:icons`/`docker compose config` 通过；`RLIMIT_AS` 已在 Docker 中验证生效，CPU/磁盘/网络出口限制未做 |
 
 ## 真实插件验收（离线可做 vs 未验证）
 
@@ -389,25 +459,28 @@ docker compose up -d
 1. **Legacy 共享密钥**：`MYBOOKS_TOOLBOX_LEGACY_COMPAT` 默认开启；正式隔离部署应同时设置
    `MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY=true` 并在 `grants.json` 中为每个插件显式授权。
    旧 Worker 与宿主同信任域的问题只在关闭 Legacy/开启隔离后消失。
-2. **子进程非完整沙箱**：独立 UID 模式下插件读不到 `internal-secret`、`identities.json` 与其他插件
-   `config.json`，但仍共享容器、网络与 `/toolbox` 卷；可穿透读取被已知路径的其他插件 `work/` 产物，
+2. **子进程非完整沙箱**：独立 UID 模式下插件读不到 `internal-secret`、`identities.json`、
+   其他插件 `config.json` 与 `work/` 产物，但仍共享容器、网络与 `/toolbox` 卷；
    也可能影响同容器进程。仅提供故障/凭据/数据隔离。
 3. **进程级凭据的适用范围**：每插件令牌在“每子进程”模型下等价于每进程凭据；Legacy 共享 Worker
    下仍是每工具令牌，无法阻止同进程插件冒用。`PLUGIN_AUTH_ONLY` 不改变 Legacy 模式的这一事实。
 4. **取消能力受插件协议约束**：取消依赖插件 manifest 声明 `cancel` 路由；无该路由的插件
    返回 409 `CANCEL_UNSUPPORTED`。supervisor 只能停止整个子进程，不能中断单个请求。
-5. **依赖告警**：`npm audit --omit=dev` 仍有 9 项（2 moderate / 5 high / 2 critical，`undici`、`yauzl`），
+5. **资源限制不完整**：`RLIMIT_AS` 已验证生效（384MB），但未覆盖 CPU、磁盘与 cgroup OOM，
+   网络出口仍无限制。
+6. **依赖告警**：`npm audit --omit=dev` 仍有 9 项（2 moderate / 5 high / 2 critical，`undici`、`yauzl`），
    本阶段未处理，需单独评估可利用性。
 
 ## 是否具备进入 Phase 4 的条件
 
-**部分具备，建议先完成下列 1–2 再启动 Phase 4。**
+**具备开发条件（附部署前提）。**
 
-1. 安全隔离已达到“每插件凭据 + 独立 UID + 私有目录”，但仍是共享网络/容器的进程级隔离，
+1. 安全隔离已达到“每插件凭据 + 独立 UID 注册表 + 私有目录 0640”，3g.1 的 UID 碰撞、
+   降权与产物权限问题已修复并有回归测试；仍是共享网络/容器的进程级隔离，
    未达到“完全不可信插件可运行”的门槛（需网络出口限制与容器级隔离）。
 2. Z-Library 外部搜索/下载与真实 UI 仍未验收（受本地 DNS/VPN fake-IP 与浏览器验收缺失影响）。
-3. 每插件内部凭据、独立 UID 已实现；`MYBOOKS_TOOLBOX_LEGACY_COMPAT=false` 与隔离开关的强制联动
-   仍是建议项，未设为默认。
+3. `MYBOOKS_TOOLBOX_LEGACY_COMPAT=false` 与隔离开关仍非默认联动；Phase 4 部署须显式使用
+   推荐隔离配置，Node/Python 的 `PLUGIN_AUTH_ONLY` 不一致时已会拒绝启动子进程。
 
 Phase 4（通用 UI / Manifest / SDK）可以在隔离模型稳定的前提下启动；不建议在未完成真实网络/UI
 验收前把“不可信第三方插件”作为对外承诺。

@@ -295,8 +295,8 @@ test('详情展示优先：评分/系列默认静态，行内编辑保护草稿�
     read('public/shelf.html').indexOf('id="wbLayoutBtn"')
   );
   assert.match(viewBlock, /fill="none"/);
-  assert.match(viewBlock, /lucide-sprite\.svg\?v=1#layout-grid/);
-  assert.match(viewBlock, /lucide-sprite\.svg\?v=1#list/);
+  assert.match(viewBlock, /lucide-sprite\.svg\?v=2#layout-grid/);
+  assert.match(viewBlock, /lucide-sprite\.svg\?v=2#list/);
   assert.equal((viewBlock.match(/<svg class="icon"/g) || []).length, 2);
   assert.equal((viewBlock.match(/stroke="currentColor"/g) || []).length >= 2, true);
   assert.doesNotMatch(viewBlock, /fill="currentColor"/);
@@ -314,7 +314,7 @@ test('双击/选择/键盘路径与资源版本保持接线', () => {
     'css/style.css': '122',
     'css/liquid-glass.css': '6',
     'css/shelf-workbench.css': '49',
-    'js/icon.js': '1',
+    'js/icon.js': '2',
     'js/chrome.js': '40',
     'js/api.js': '2',
     'js/overlay.js': '3',
@@ -328,7 +328,7 @@ test('双击/选择/键盘路径与资源版本保持接线', () => {
     'js/shelf/sidebar.js': '42',
     'js/shelf/inspector.js': '42',
     'js/book-details.js': '7',
-    'vendor/lucide-sprite.svg': '1',
+    'vendor/lucide-sprite.svg': '2',
   };
   pages.forEach((page) => {
     const html = read(page);
@@ -339,7 +339,7 @@ test('双击/选择/键盘路径与资源版本保持接线', () => {
     });
   });
   const sw = read('public/sw.js');
-  assert.match(sw, /CACHE_VERSION = 'v192'/);
+  assert.match(sw, /CACHE_VERSION = 'v193'/);
   Object.entries(versions).forEach(([asset, version]) => {
     assert.match(sw, new RegExp(`'/${asset.replace(/[/.]/g, '\\$&')}\\?v=${version}'`), `sw.js 缺少 ${asset}@${version}`);
   });

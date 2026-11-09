@@ -12,7 +12,7 @@
  * 激活阶段删除旧版本缓存。skipWaiting + clients.claim 让新 SW 立即接管。
  * ============================================================ */
 
-const CACHE_VERSION = 'v192';
+const CACHE_VERSION = 'v193';
 const SHELL_CACHE = `mybooks-shell-${CACHE_VERSION}`;
 const API_CACHE = `mybooks-api-${CACHE_VERSION}`;
 const IMG_CACHE = `mybooks-img-${CACHE_VERSION}`;
@@ -27,8 +27,8 @@ const SHELL_ASSETS = [
   '/css/login.css?v=5',
   '/css/shelf-workbench.css?v=49',
   '/css/liquid-glass.css?v=6',
-  '/vendor/lucide-sprite.svg?v=1',
-  '/js/icon.js?v=1',
+  '/vendor/lucide-sprite.svg?v=2',
+  '/js/icon.js?v=2',
   '/js/chrome.js?v=40',
   '/js/base.js?v=1',
   '/js/api.js?v=2',

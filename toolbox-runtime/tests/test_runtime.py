@@ -245,9 +245,39 @@ class NodeClientTests(unittest.TestCase):
             with self.assertRaises(identity.IdentityUnavailable):
                 identity.token_for("fixture")
 
-    def test_identity_headers(self):
+    def test_identity_absent_file_keeps_legacy(self):
+        """确实没有 identities.json（旧部署）时才允许无身份请求。"""
         from webserver.toolbox import identity
         from webserver.toolbox.node_client import NodeClient
+
+        path = Path(config.STATE_DIR) / "identities.json"
+        path.unlink(missing_ok=True)
+        identity.reset_cache()
+
+        NodeClient.for_tool("fixture").book_ids()
+        headers = _FakeNodeHandler.headers_seen[-1]
+        self.assertIsNone(_header(headers, "x-mybooks-plugin-id"))
+        self.assertIsNone(_header(headers, "x-mybooks-plugin-token"))
+
+    def test_identity_structure_invalid_fails_loud(self):
+        """JSON 可解析但结构错误（tokens 为 null / 版本错误 / 非法令牌）必须显式失败。"""
+        from webserver.toolbox import identity
+
+        path = Path(config.STATE_DIR) / "identities.json"
+        for document in (
+            {"version": 1, "tokens": None},
+            {"version": 2, "tokens": {}},
+            {"version": 1, "tokens": {"fixture": "not-a-token"}},
+            ["not", "an", "object"],
+        ):
+            path.write_text(json.dumps(document), encoding="utf-8")
+            identity.reset_cache()
+            with self.assertRaises(identity.IdentityUnavailable):
+                identity.token_for("fixture")
+
+    def test_identity_headers(self):
+        from webserver.toolbox import identity
+        from webserver.toolbox.node_client import NodeClient, NodeError
 
         token = "a" * 48
         path = Path(config.STATE_DIR) / "identities.json"
@@ -259,10 +289,11 @@ class NodeClientTests(unittest.TestCase):
         self.assertEqual(_header(headers, "x-mybooks-plugin-id"), "fixture")
         self.assertEqual(_header(headers, "x-mybooks-plugin-token"), token)
 
-        NodeClient.for_tool("unknown-tool").book_ids()
-        headers = _FakeNodeHandler.headers_seen[-1]
-        self.assertIsNone(_header(headers, "x-mybooks-plugin-id"))
-        self.assertIsNone(_header(headers, "x-mybooks-plugin-token"))
+        # 文件存在但没有该工具令牌：已安装插件不能悄悄退回 Legacy 协议。
+        with self.assertRaises(NodeError) as raised:
+            NodeClient.for_tool("unknown-tool").book_ids()
+        self.assertEqual(raised.exception.code, "PLUGIN_IDENTITY_UNAVAILABLE")
+        self.assertEqual(raised.exception.status, 403)
 
 
 class _PingHandler(BaseHandler):

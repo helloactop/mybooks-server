@@ -70,6 +70,7 @@ test('GET /api/plugins 需要会话、只读且脱敏，旧工具箱接口不变
     });
 
     assert.equal((await fetch(base + '/api/plugins')).status, 401);
+    assert.equal((await fetch(base + '/api/plugins/runtime')).status, 401);
 
     const login = await fetch(base + '/api/auth/login', {
       method: 'POST',
@@ -98,6 +99,17 @@ test('GET /api/plugins 需要会话、只读且脱敏，旧工具箱接口不变
     assert.equal(raw.includes('plugins/zlibrary'), false, '不能输出 install_path');
     assert.equal(raw.includes('a'.repeat(64)), false, '不能输出 sha256');
     assert.equal(raw.includes('entry_backend'), false, '不能输出 Manifest');
+
+    const runtimeResponse = await fetch(base + '/api/plugins/runtime', { headers });
+    assert.equal(runtimeResponse.status, 200);
+    assert.equal(runtimeResponse.headers.get('cache-control'), 'no-store');
+    const runtimeBody = await runtimeResponse.json();
+    assert.equal(runtimeBody.runtimes.length, 1);
+    const legacyRuntime = runtimeBody.runtimes[0];
+    assert.equal(legacyRuntime.runtimeId, 'legacy-toolbox');
+    assert.equal(legacyRuntime.online, false);
+    assert.equal(typeof legacyRuntime.error, 'string');
+    assert.equal(JSON.stringify(runtimeBody).includes('secret'), false);
 
     const legacyList = await fetch(base + '/api/toolbox/list?include_disabled=1', { headers });
     assert.equal(legacyList.status, 200);

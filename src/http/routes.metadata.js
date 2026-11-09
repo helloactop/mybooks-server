@@ -10,7 +10,7 @@
 
 const express = require('express');
 const { loadCookie } = require('./metadata-sources');
-const { service: metadataService } = require('./plugin-services');
+const { metadata } = require('./plugin-services');
 const { LruCache } = require('./lru');
 
 const router = express.Router();
@@ -65,7 +65,7 @@ async function handleMetadataSearch(req, res) {
   }
 
   try {
-    const { candidates } = await metadataService.search({ query: q });
+    const { candidates } = await metadata.service.search({ query: q });
     const results = candidates.map(toLegacyResult);
     searchCache.set(searchKey, { t: Date.now(), results });
     res.set('X-Cache', 'miss');

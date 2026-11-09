@@ -9,6 +9,7 @@ const express = require('express');
 
 const { db } = require('../db/index');
 const { LegacyToolboxAdapter } = require('../core/plugins/adapters/legacy-toolbox');
+const { runtimes } = require('./plugin-services');
 
 const router = express.Router();
 const legacy = new LegacyToolboxAdapter({ db });
@@ -16,6 +17,15 @@ const legacy = new LegacyToolboxAdapter({ db });
 router.get('/api/plugins', (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json({ plugins: legacy.list() });
+});
+
+router.get('/api/plugins/runtime', async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json({ runtimes: await runtimes.healthAll() });
+  } catch (err) {
+    next(err);
+  }
 });
 
 module.exports = router;

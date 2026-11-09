@@ -7,6 +7,9 @@
  * ============================================================ */
 
 const { createBuiltinMetadataService } = require('../core/plugins/services/metadata');
+const { RuntimeManager } = require('../core/plugins/runtime-manager');
+const { createLegacyRuntimeAdapter } = require('../core/plugins/adapters/legacy-runtime');
+const { runtimeHealth } = require('../core/toolbox/runtime');
 const {
   searchDouban,
   lookupIsbnDouban,
@@ -14,11 +17,14 @@ const {
   searchOpenLibrary,
 } = require('./metadata-sources');
 
-const builtin = createBuiltinMetadataService({
+const metadata = createBuiltinMetadataService({
   providers: {
     douban: { search: searchDouban, lookupIsbn: lookupIsbnDouban },
     openlibrary: { search: searchOpenLibrary, lookupIsbn: lookupIsbnOpenLibrary },
   },
 });
 
-module.exports = builtin;
+const runtimes = new RuntimeManager();
+runtimes.register(createLegacyRuntimeAdapter({ health: runtimeHealth }));
+
+module.exports = { metadata, runtimes };

@@ -1,7 +1,7 @@
 # 插件平台进度（AI 接手）
 
-> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，代码 HEAD `7f825df6`）
-> 最近提交：`cdd410e6` 身份文件校验 · `013300f0` 第三轮文档 · `7f825df6` 隔离子进程 · `fefba089` 隔离文档
+> 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，代码 HEAD `d9052f0e`）
+> 最近提交：`7f825df6` 隔离子进程 · `fefba089` 隔离文档 · `d9052f0e` Phase 3f 收尾（supervisor 加固 + Runtime Adapter）
 > 文档：[架构](mybooks-plugin-architecture.md) · [规范](mybooks-plugin-development-standards.md)
 
 ## 现状
@@ -17,7 +17,8 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 2026-11-09 第二轮修复：损坏策略前置阻断无身份 Legacy 路径、停用插件统一拒绝、错误类型授权不再 fail-open、Python 身份文件仅对 FileNotFoundError 降级。
 2026-11-09 第三轮修复：Python 身份文件严格校验 `version`/`tokens` 结构，文件存在但缺令牌不再降级；Legacy 共享密钥路径与 Docker 共享卷的隔离缺口写为 Phase 3f 强制验收项。
 2026-11-09 隔离运行时（opt-in）：容器内每插件子进程 supervisor（懒启动、容量上限、空闲淘汰、崩溃重启、反向代理）；`TOOLBOX_ISOLATE_PLUGINS=1` 启用。
-未完成：跨容器/恶意代码沙箱、Runtime Manager 的真实 invoke/cancel、`source.*` / `book.*` 能力、UI、SDK。
+2026-11-09 Phase 3f 收尾：supervisor 状态读取/reload 异常/世代竞态/崩溃重试加固；Runtime Manager 接入 start/stop/invoke/health；CI 新增 Python 测试任务。
+未完成：跨容器/恶意代码沙箱、进程级凭据、真实插件（Z-Library / md_to_epub）运行验收、任务取消、`source.*` / `book.*` 能力、UI、SDK。
 旧 Toolbox 路由/Bridge/安装包/迁移保持兼容；仅新增可选身份令牌与策略文件。
 
 ## 已完成
@@ -32,6 +33,7 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 | Permissions | [permissions.js](../../src/core/plugins/permissions.js) | 权限目录、scope、默认拒绝、授予/撤销 | 6.3、6.7 | `7994523e` |
 | Identity | [identity.js](../../src/core/plugins/identity.js) | 不透明令牌 → 实例身份；不信任自报 ID | 6.2 | `7994523e` |
 | Runtime Manager | [runtime-manager.js](../../src/core/plugins/runtime-manager.js) | 适配器注册/健康/超时；未实现操作显式 unsupported | 6.1、架构 7.1 | `e610ef75` |
+| Runtime Adapter | [legacy-runtime.js](../../src/core/plugins/adapters/legacy-runtime.js) + [runtime.js](../../src/core/toolbox/runtime.js) | health/start/stop/invoke/reload 接到 Python 运行时；cancel 旧协议无句柄，显式 501 | 6.1、13.4 | `d9052f0e` |
 | Runtime 状态 API | [legacy-runtime.js](../../src/core/plugins/adapters/legacy-runtime.js) + [routes.plugins.js](../../src/http/routes.plugins.js) | `GET /api/plugins/runtime` 只读健康状态 | 6.1、11.3 | `e610ef75` |
 | Internal Identity | [identities.js](../../src/core/toolbox/identities.js) + [identity.py](../../toolbox-runtime/webserver/toolbox/identity.py) | 每工具令牌；import/export/tasks 校验归属；旧 Worker 兼容；Python 严格校验文件结构与缺令牌 | 6.2 | `2aeb2467` |
 | Scoped Grants | [plugin-grants.js](../../src/core/toolbox/plugin-grants.js) + [routes.toolbox.internal.js](../../src/http/routes.toolbox.internal.js) | `grants.json` 配置即严格；books/files/metadata/jobs 按 scope 校验 | 6.3、13.3 | `10ec6016` |
@@ -49,11 +51,11 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 | Metadata Fallback | [services/metadata.js](../../src/core/plugins/services/metadata.js) | Provider 优先级 + 可配置兜底；显式来源不兜底 | 8.3、8.4 | `f8c4e0ae`、`57ed3576` |
 | Cancellation | [capability-router.js](../../src/core/plugins/capability-router.js) | AbortSignal 传达到 Provider/fetch；超时与取消语义分离 | 9.2–9.4 | `2cc697a4` |
 | Disabled Plugin Guard | [routes.toolbox.internal.js](../../src/http/routes.toolbox.internal.js) | 已安装但停用的插件统一 `TOOL_DISABLED` 403 | 11.3、13.3 | `96e077e7` |
-| Isolation Supervisor | [supervisor.py](../../toolbox-runtime/webserver/supervisor.py) + [runtime.py](../../toolbox-runtime/runtime.py) | 每插件子进程、懒启动、容量上限、空闲淘汰、崩溃重启、反向代理 | 6.1、6.5 | `7f825df6` |
+| Isolation Supervisor | [supervisor.py](../../toolbox-runtime/webserver/supervisor.py) + [runtime.py](../../toolbox-runtime/runtime.py) | 每插件子进程、懒启动、容量上限、空闲淘汰、崩溃重启、反向代理；`/internal/start`、`/internal/stop` | 6.1、6.5 | `7f825df6`、`d9052f0e` |
 | CI / Sprite | [lucide-icons.json](../../scripts/lucide-icons.json) | 补齐 `arrow-left` 并同步 sprite/资源版本 | — | `8b4171bb` |
 
 测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`、
-`test/toolbox-access-policy.test.js`、`test/toolbox-grants.test.js`。整套 `npm test` 762/762。
+`test/toolbox-access-policy.test.js`、`test/toolbox-grants.test.js`。整套 `npm test` 766/766。
 
 ## 目标文件结构（架构 第十五章）
 
@@ -112,7 +114,7 @@ plugin-sdk/ ○                                                        Phase 5
 Phase 2 门禁（规范 13 章 / 架构 17.3）：契约、内置 Provider、旧 API 兼容 ✅；真实豆瓣/OpenLibrary 联网未验收（测试用 fixture）。
 
 Phase 3a：权限与身份绑定内核 ✅。
-Phase 3b：Runtime Manager 与只读状态 ✅（仅 health；Legacy 的 invoke/cancel 显式 unsupported）。
+Phase 3b：Runtime Manager 与只读状态 ✅（health/start/stop/invoke/reload 已接；cancel 显式 unsupported）。
 Phase 3c：内部 import/export/tasks 按工具令牌校验归属 ✅；无令牌旧 Worker 仍兼容。
 Phase 3d：书库/元数据/文件/任务接口按 `grants.json` 裁剪 ✅；未配置工具保持兼容。
 Phase 3e：Capability Router 统一权限/Provider/超时/输出校验 ✅；元数据服务已迁移。
@@ -182,15 +184,16 @@ Phase 3f（部分完成）：容器内每插件子进程（opt-in），故障/�
 ## 测试基线
 
 ```bash
-npm test                                  # 762/762（2026-11-09）
+npm test                                  # 766/766（2026-11-09）
 npm run check:public                      # 通过
 npm run check:icons                       # 通过（lucide-static 1.70.0，23 个图标）
 cd toolbox-runtime
 "C:/Users/11731/.venvs/mybooks-toolbox/Scripts/python.exe" -m unittest discover -s tests -v
-                                          # 20/20（含 supervisor / busy 探活；本机 Python 3.15，镜像 3.12 未跑）
+                                          # 25/25（含 supervisor 崩溃恢复/淘汰/并发；本机 Python 3.15）
 ```
 
-`npm ci --ignore-scripts` 未在本机重复执行（依赖与 lockfile 未变）；CI 会执行。
+CI：`.github/workflows/ci.yml` 新增 `python` job（Python 3.12 + requirements.txt + unittest）。
+本机未执行 GitHub Actions；下一次 push 后按远端结果为准。
 
 ## Phase 3f 隔离运行时
 
@@ -201,21 +204,78 @@ cd toolbox-runtime
 - 懒启动；`TOOLBOX_MAX_CHILDREN`（默认 2）限制并发子进程；
   `TOOLBOX_CHILD_MEMORY_MB`（默认 384，POSIX `ulimit -v`）；
   `TOOLBOX_CHILD_IDLE_SECONDS`（默认 600）空闲淘汰，淘汰前探测 `/internal/busy`；
-- 子进程崩溃只影响自身，下次请求自动重启；`POST /internal/reload` 全量重载；
-- `/healthz` 额外返回 `isolated / children / deferred`，Node 侧 `/tool/{id}/...` 协议不变。
+- `_read_state()` 对缺失/损坏/结构非法状态文件一律返回空 dict；`reload()` 捕获所有异常并
+  返回报告，不再把 Node 的重载调用打挂；
+- 世代号 + `_ensure_lock`：reload 期间启动的子进程会被丢弃并返回 503 让调用方重试；
+  并发 `ensure_child` 只拉起一个进程；子进程崩溃后的请求自动重启并重试一次；
+- `POST /internal/start/{tool}` 预热、`POST /internal/stop/{tool}` 停止；
+  `POST /internal/reload` 全量重载；`/healthz` 返回 `isolated / children / deferred`，
+  Node 侧 `/tool/{id}/...` 协议不变。
 
 明确边界：同一容器、同一 UID、共享 `/toolbox` 与网络 —— 这是**故障/资源隔离**，
-不是恶意代码沙箱。
+不是恶意代码沙箱；子进程仍可读取共享卷中的身份令牌与 internal-secret。
 
 仍未完成：
 
 1. 跨容器隔离或独立 UID + 只读插件数据目录，把身份令牌升级为进程级凭据。
-2. Runtime Manager 的 invoke/cancel/start/stop 接到该 supervisor（当前 Node 仍走兼容路由）。
-3. 真实插件验收（Z-Library、Markdown 转 EPUB）与资源上限压测。
+2. 任务取消：旧任务协议没有取消句柄，Runtime Manager 的 `cancel` 显式 `RUNTIME_UNSUPPORTED`。
+3. 真实插件验收（Z-Library、Markdown 转 EPUB）与资源上限压测，见下方验收表。
 4. **强制验收**：不可信插件不得走 `legacy-compat` 无身份路径；越权、缺令牌、身份文件损坏
    均显式 403 且无降级路径；宿主凭据与插件数据目录分离。
 
 对应规范 3.6、6.1–6.6；架构 7、13、17.4。
+
+## Phase 3 验收对照（本阶段收尾）
+
+| # | 验收项 | 状态 | 证据 / 缺口 |
+| --- | --- | --- | --- |
+| 1 | Supervisor 可靠性 | ✅ | 状态文件缺失/损坏/结构非法统一返回 `{}`；`reload()` 捕获全部异常；崩溃自动重启；世代号防 reload/spawn 竞态；并发 ensure 复用同一子进程；Python 25/25 |
+| 2 | Runtime Manager 集成 | ◐ | `health/start/stop/invoke/reload` 经单一 Toolbox 适配器接到 Python 运行时；`cancel` 无旧协议句柄 → `RUNTIME_UNSUPPORTED` 501；安装/启停仍只走 `/api/toolbox/*`，无第二套生命周期 |
+| 3 | 安全隔离 | ◐ | legacy 共享密钥路径仍在（默认开启）；不可信插件默认不可安装；策略损坏/停用/缺令牌均 403；无独立 UID、进程级凭据、受限 RPC，不能称为恶意代码隔离 |
+| 4 | 真实插件测试 | ◐ | 安装/启用/配置落盘/停用/更新/回滚/任务中断恢复由 `test/toolbox.test.js` 自动化覆盖；Z-Library 与 md_to_epub 的真实后端/UI/下载/入库**未验证** |
+| 5 | 测试与 CI | ◐ | Node 766/766、Python 25/25 本机通过；CI 已加 Python job（远端未执行）；Docker 非 root/卷权限/资源限制未在本机验收 |
+
+## 真实插件验收（离线可做 vs 未验证）
+
+| 项目 | 状态 | 依据 |
+| --- | --- | --- |
+| 安装 / 启用 / 停用 / 更新 / 回滚 / 任务重启恢复 | ✅ 自动化 | `test/toolbox.test.js`（原子落盘、状态文件、回滚记录、中断恢复） |
+| 插件 manifest / 路由白名单 / ZIP 安全 | ✅ 自动化 | 同上（路径穿越、符号链接、压缩炸弹、7z 拒绝） |
+| Z-Library 打开 UI、搜索、下载、入库、任务进度 | ✖ 未验证 | 仓库无插件包，需联网商店安装；不能离线伪造 |
+| Markdown → EPUB 转换、下载、入库 | ✖ 未验证 | 同上（multipart 上传 + 二进制下载 + 入库链路） |
+
+手动验收步骤（可复现，需真实网络）：
+
+1. `docker compose up -d --build`，确认两个容器 UID 均为 1000；设置 `MYBOOKS_TOOLBOX_ISOLATE_PLUGINS=1`
+   与 `MYBOOKS_TOOLBOX_ALLOW_UNREVIEWED=false`。
+2. 商店安装 `zlibrary@0.1.0`（SHA-256 必须命中 `src/core/toolbox/allowlist.js`），在工具箱页打开 UI。
+3. 搜索并下载一本 EPUB/TXT：确认任务中心出现进度 → `POST /internal/toolbox/import` 入库 →
+   书架可见 → 文件可下载。
+4. 安装 `md_to_epub`，上传 Markdown + 图片 → 转换 → 下载 EPUB → 选择入库。
+5. 停用/启用、更新/回滚、重启 `toolbox-runtime`：确认 `/api/plugins/runtime` 的 `children/deferred`
+   与实际进程一致，运行中任务在重启后标记失败而非卡死。
+
+## 残留安全风险
+
+1. **Legacy 共享密钥**：`MYBOOKS_TOOLBOX_LEGACY_COMPAT` 默认开启，无身份头调用不受单插件
+   `grants.json` 约束；旧 Worker 内插件代码与宿主同信任域。只有人工审查通过的插件可安装
+   （`ALLOW_UNREVIEWED=false`），开启 `ALLOW_UNREVIEWED=true` 时启动日志会额外警告。
+2. **子进程非沙箱**：supervisor 与子进程同容器、同 UID、共享 `/toolbox` 与网络；插件可读
+   `state/identities.json`、`internal-secret`，也可能影响其他插件进程。仅提供故障/资源隔离。
+3. **进程级凭据缺失**：身份令牌是“每工具”而非“每进程”，共享 Worker 下无法阻止同进程插件冒用。
+4. **取消能力缺失**：旧任务协议无取消句柄，`RUNTIME_UNSUPPORTED` 是显式能力缺口而非成功。
+5. **依赖告警**：`npm audit --omit=dev` 仍有 9 项（2 moderate / 5 high / 2 critical，`undici`、`yauzl`），
+   本阶段未处理，需单独评估可利用性。
+
+## 是否具备进入 Phase 4 的条件
+
+**尚不具备。** 阻塞项：
+
+1. 真实插件运行验收未完成（Z-Library、md_to_epub）。
+2. 安全隔离仍是“共享信任域 + 故障隔离”，未达到“不可信插件可运行”的门槛。
+3. 任务取消、进程级凭据、跨容器/独立 UID 未实现。
+
+Phase 4（通用 UI / Manifest / SDK）应在上述 1–3 至少完成“真实插件验收 + 隔离模型落地”后启动。
 
 ## 硬约束
 
@@ -227,7 +287,8 @@ cd toolbox-runtime
 - 权限策略：`state/grants.json`；某工具一旦配置数组即严格模式，未配置保持旧行为。格式 `["books.read:library:*", "files.read:book:*", "jobs.create"]`。
 - 策略损坏/不可读时用 `state/grants.last-good.json` 快照；无快照则全局拒绝，禁止扩权。
 - 未知/未安装的新运行时没有策略时默认拒绝；不得为它提供无身份兼容回退。
-- 共享 Python 进程仍不是强隔离；身份令牌与 grants 只做归属/授权校验，不得宣称已实现跨插件隔离。
+- 共享 Python 进程与 supervisor 子进程都不是强隔离；身份令牌与 grants 只做归属/授权校验，
+  不得宣称已实现跨插件隔离或恶意代码沙箱。
 - 新代码 CommonJS，不新增依赖。
 - 不把未运行/未验证写成“已通过”。
 

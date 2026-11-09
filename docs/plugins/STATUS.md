@@ -2,7 +2,7 @@
 
 > 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，Phase 3g.1 提交见 `git log --oneline -5`）
 > 最近提交：Phase 3g.1 安全补强（UID 注册表 / Popen 降权 / 严格配置校验）· `4f7f6718` Phase 3g 文档 · `238aad33` 子进程凭据隔离 · `a45c920d` 任务取消 + 崩溃管道回收
-> 文档：[架构](mybooks-plugin-architecture.md) · [规范](mybooks-plugin-development-standards.md) · [隔离设计](isolation-design.md)
+> 文档：[架构](mybooks-plugin-architecture.md) · [规范](mybooks-plugin-development-standards.md) · [隔离设计](isolation-design.md) · [Phase 4 规划](phase4/README.md)
 
 ## 现状
 

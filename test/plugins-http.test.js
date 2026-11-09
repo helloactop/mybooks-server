@@ -111,6 +111,49 @@ test('GET /api/plugins 需要会话、只读且脱敏，旧工具箱接口不变
     assert.equal(typeof legacyRuntime.error, 'string');
     assert.equal(JSON.stringify(runtimeBody).includes('secret'), false);
 
+    const internalSecret = fs.readFileSync(path.join(root, 'toolbox', 'state', 'internal-secret'), 'utf8').trim();
+    const tokens = JSON.parse(
+      fs.readFileSync(path.join(root, 'toolbox', 'state', 'identities.json'), 'utf8'),
+    ).tokens;
+    const internalHeaders = { 'X-Toolbox-Internal-Secret': internalSecret };
+    const identityHeaders = {
+      ...internalHeaders,
+      'X-Mybooks-Plugin-Id': 'zlibrary',
+      'X-Mybooks-Plugin-Token': tokens.zlibrary,
+    };
+
+    assert.equal(
+      (await fetch(base + '/internal/toolbox/library/ids', { headers: internalHeaders })).status,
+      200,
+      '旧 Worker 不带身份头仍兼容',
+    );
+    assert.equal(
+      (await fetch(base + '/internal/toolbox/library/ids', {
+        headers: { ...internalHeaders, 'X-Mybooks-Plugin-Id': 'zlibrary', 'X-Mybooks-Plugin-Token': 'b'.repeat(48) },
+      })).status,
+      403,
+      '错误令牌必须拒绝',
+    );
+    assert.equal(
+      (await fetch(base + '/internal/toolbox/library/ids', { headers: identityHeaders })).status,
+      200,
+      '匹配令牌放行',
+    );
+
+    const mismatch = await fetch(base + '/internal/toolbox/tasks', {
+      method: 'POST',
+      headers: { ...identityHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool_id: 'md_to_epub' }),
+    });
+    assert.equal(mismatch.status, 403, '身份与 body tool_id 不一致必须拒绝');
+
+    const created = await fetch(base + '/internal/toolbox/tasks', {
+      method: 'POST',
+      headers: { ...identityHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool_id: 'zlibrary' }),
+    });
+    assert.equal(created.status, 201);
+
     const legacyList = await fetch(base + '/api/toolbox/list?include_disabled=1', { headers });
     assert.equal(legacyList.status, 200);
     const legacyBody = await legacyList.json();

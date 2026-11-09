@@ -34,7 +34,7 @@ class CalibreAPI(object):
         self._format_cache = {}
 
     def _client(self):
-        return NodeClient()
+        return NodeClient.for_tool(self._owner.tool_id())
 
     # -- 入库/删除 -------------------------------------------------------------
 
@@ -210,7 +210,7 @@ class AppDBAPI(object):
 
     def create_item(self, book_id, collector_id):
         try:
-            return NodeClient().create_item(book_id, collector_id)
+            return NodeClient.for_tool(self._owner.tool_id()).create_item(book_id, collector_id)
         except NodeError as err:
             raise RuntimeError(err.message or err.code) from err
 
@@ -233,7 +233,7 @@ class MessagesAPI(object):
         task_id = self._owner.api.tasks.current_task_id()
         if task_id:
             try:
-                NodeClient().task_message(task_id, str(msg))
+                NodeClient.for_tool(self._owner.tool_id()).task_message(task_id, str(msg))
             except NodeError as err:
                 logging.warning("[messages] task message failed: %s", err.code)
         else:

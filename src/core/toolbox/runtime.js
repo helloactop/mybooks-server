@@ -15,6 +15,7 @@ const path = require('node:path');
 
 const { TOOLBOX_DIR } = require('../paths');
 const { ToolboxError, ensureSecretFile, timingSafeEqualString } = require('./security');
+const { ensureIdentityTokens } = require('./identities');
 
 const RUNTIME_URL = (process.env.MYBOOKS_TOOLBOX_RUNTIME_URL || 'http://127.0.0.1:8765').replace(/\/+$/, '');
 
@@ -70,6 +71,7 @@ function writeRuntimeState(tools) {
   fs.writeFileSync(tmp, JSON.stringify(payload, null, 2) + '\n', { mode: 0o644 });
   fs.renameSync(tmp, target);
   try { fs.chmodSync(target, 0o644); } catch { /* Windows */ }
+  ensureIdentityTokens(tools);
   return payload;
 }
 

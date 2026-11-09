@@ -12,15 +12,31 @@ const toolboxRepo = require('../db/toolbox');
 const { TOOL_ID_RE } = require('../core/toolbox/manifest');
 const { ToolboxError, timingSafeEqualString } = require('../core/toolbox/security');
 const { internalSecret } = require('../core/toolbox/runtime');
+const { verifyIdentity } = require('../core/toolbox/identities');
 const { importToolFile, getBookMetadata } = require('../core/toolbox/import');
 const library = require('../core/toolbox/library');
 
 const router = express.Router();
 
+function readRequestIdentity(req) {
+  const toolId = String(req.get('x-mybooks-plugin-id') || '').trim();
+  const token = String(req.get('x-mybooks-plugin-token') || '').trim();
+  if (!toolId && !token) return null; // 旧 Worker：保持兼容
+  if (!toolId || !token || !verifyIdentity(toolId, token)) {
+    throw new ToolboxError('PLUGIN_IDENTITY_INVALID', '插件身份无效', 403);
+  }
+  return Object.freeze({ toolId });
+}
+
 function requireInternal(req, res, next) {
   const provided = req.get('x-toolbox-internal-secret') || '';
   if (!timingSafeEqualString(provided, internalSecret())) {
     return res.status(403).json({ error: '禁止访问', code: 'INTERNAL_FORBIDDEN' });
+  }
+  try {
+    req.pluginIdentity = readRequestIdentity(req);
+  } catch (err) {
+    return fail(res, err);
   }
   return next();
 }
@@ -42,6 +58,19 @@ function safeToolId(raw) {
   return value;
 }
 
+function toolIdForRequest(req, rawToolId) {
+  const bodyId = rawToolId ? safeToolId(rawToolId) : '';
+  const identity = req.pluginIdentity;
+  if (identity) {
+    if (bodyId && bodyId !== identity.toolId) {
+      throw new ToolboxError('PLUGIN_IDENTITY_MISMATCH', '插件身份与 tool_id 不一致', 403);
+    }
+    return identity.toolId;
+  }
+  if (!bodyId) throw new ToolboxError('TOOL_ID_REQUIRED', '缺少 tool_id');
+  return bodyId;
+}
+
 function taskForTool(taskId, toolId) {
   const id = Number(taskId);
   if (!Number.isSafeInteger(id) || id < 1) throw new ToolboxError('TASK_INVALID', '任务 ID 不合法');
@@ -51,14 +80,25 @@ function taskForTool(taskId, toolId) {
   return task;
 }
 
+function taskForRequest(req, taskId) {
+  const task = taskForTool(taskId);
+  if (req.pluginIdentity && task.tool_id !== req.pluginIdentity.toolId) {
+    throw new ToolboxError('TASK_TOOL_MISMATCH', '任务不属于该插件', 403);
+  }
+  return task;
+}
+
 router.post('/internal/toolbox/import', async (req, res) => {
   try {
     const body = req.body || {};
-    const toolId = safeToolId(body.tool_id);
+    const toolId = toolIdForRequest(req, body.tool_id);
     const tool = toolboxRepo.getTool(db, toolId);
     if (!tool) throw new ToolboxError('TOOL_NOT_INSTALLED', '工具尚未安装', 404);
     if (!tool.enabled) throw new ToolboxError('TOOL_DISABLED', '工具未启用', 403);
-    if (body.task_id) taskForTool(body.task_id, toolId);
+    if (body.task_id) {
+      const task = taskForRequest(req, body.task_id);
+      if (task.tool_id !== toolId) throw new ToolboxError('TASK_TOOL_MISMATCH', '任务不属于该工具', 403);
+    }
     const result = await importToolFile({
       toolId,
       filePath: body.file_path,
@@ -146,7 +186,7 @@ router.get('/internal/toolbox/library/cover/:id', (req, res) => {
 router.post('/internal/toolbox/library/export', async (req, res) => {
   try {
     const body = req.body || {};
-    const toolId = safeToolId(body.tool_id);
+    const toolId = toolIdForRequest(req, body.tool_id);
     const tool = toolboxRepo.getTool(db, toolId);
     if (!tool) throw new ToolboxError('TOOL_NOT_INSTALLED', '工具尚未安装', 404);
     if (!tool.enabled) throw new ToolboxError('TOOL_DISABLED', '工具未启用', 403);
@@ -194,7 +234,7 @@ router.post('/internal/toolbox/library/items', (req, res) => {
 router.post('/internal/toolbox/tasks', (req, res) => {
   try {
     const body = req.body || {};
-    const toolId = safeToolId(body.tool_id);
+    const toolId = toolIdForRequest(req, body.tool_id);
     const tool = toolboxRepo.getTool(db, toolId);
     if (!tool) throw new ToolboxError('TOOL_NOT_INSTALLED', '工具尚未安装', 404);
     if (!tool.enabled) throw new ToolboxError('TOOL_DISABLED', '工具未启用', 403);
@@ -212,7 +252,7 @@ router.post('/internal/toolbox/tasks', (req, res) => {
 
 router.patch('/internal/toolbox/tasks/:id', (req, res) => {
   try {
-    const task = taskForTool(req.params.id);
+    const task = taskForRequest(req, req.params.id);
     const body = req.body || {};
     const patch = {};
     for (const key of ['stage', 'progress', 'error', 'message', 'details']) {
@@ -240,7 +280,7 @@ router.patch('/internal/toolbox/tasks/:id', (req, res) => {
 
 router.post('/internal/toolbox/tasks/:id/message', (req, res) => {
   try {
-    const task = taskForTool(req.params.id);
+    const task = taskForRequest(req, req.params.id);
     const message = String((req.body && req.body.message) || '').slice(0, 1000);
     res.json({ ok: true, task: toolboxRepo.updateTask(db, task.id, { message }) });
   } catch (err) {

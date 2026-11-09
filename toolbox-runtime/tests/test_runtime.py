@@ -152,9 +152,11 @@ class PluginHostTests(unittest.TestCase):
 
 class _FakeNodeHandler(BaseHTTPRequestHandler):
     calls = []
+    headers_seen = []
 
     def do_GET(self):
         self.calls.append(("GET", self.path))
+        self.headers_seen.append(dict(self.headers))
         if self.path.startswith("/internal/toolbox/library/ids"):
             payload = {"ok": True, "ids": [3, 1]}
         elif self.path.startswith("/internal/toolbox/library/books"):
@@ -167,6 +169,7 @@ class _FakeNodeHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("content-length") or 0)
         body = json.loads(self.rfile.read(length) or b"{}")
         self.calls.append(("POST", self.path, body))
+        self.headers_seen.append(dict(self.headers))
         if self.path.endswith("/export"):
             payload = {"ok": True, "file": {"path": "C:/tmp/book.epub", "size": 1, "sha256": "x"}}
         elif self.path.endswith("/metadata"):
@@ -185,6 +188,13 @@ class _FakeNodeHandler(BaseHTTPRequestHandler):
 
     def log_message(self, *_args):
         return
+
+
+def _header(headers, name):
+    for key, value in headers.items():
+        if key.lower() == name:
+            return value
+    return None
 
 
 class NodeClientTests(unittest.TestCase):
@@ -210,6 +220,25 @@ class NodeClientTests(unittest.TestCase):
         self.assertEqual(self.client.book_ids(), [3, 1])
         self.assertEqual(self.client.books([1])[0]["title"], "T")
         self.assertEqual(self.client.export_file("fixture", 1, "EPUB")["path"], "C:/tmp/book.epub")
+
+    def test_identity_headers(self):
+        from webserver.toolbox import identity
+        from webserver.toolbox.node_client import NodeClient
+
+        token = "a" * 48
+        path = Path(config.STATE_DIR) / "identities.json"
+        path.write_text(json.dumps({"version": 1, "tokens": {"fixture": token}}), encoding="utf-8")
+        identity.reset_cache()
+
+        NodeClient.for_tool("fixture").book_ids()
+        headers = _FakeNodeHandler.headers_seen[-1]
+        self.assertEqual(_header(headers, "x-mybooks-plugin-id"), "fixture")
+        self.assertEqual(_header(headers, "x-mybooks-plugin-token"), token)
+
+        NodeClient.for_tool("unknown-tool").book_ids()
+        headers = _FakeNodeHandler.headers_seen[-1]
+        self.assertIsNone(_header(headers, "x-mybooks-plugin-id"))
+        self.assertIsNone(_header(headers, "x-mybooks-plugin-token"))
 
 
 class _PingHandler(BaseHandler):

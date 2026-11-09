@@ -11,7 +11,7 @@ import threading
 
 import requests
 
-from . import config
+from . import config, identity
 
 
 class NodeError(RuntimeError):
@@ -26,9 +26,14 @@ class NodeClient(object):
     _lock = threading.Lock()
     _secret = None
 
-    def __init__(self):
+    def __init__(self, tool_id=""):
+        self.tool_id = str(tool_id or "")
         self.session = requests.Session()
         self.session.trust_env = False
+
+    @classmethod
+    def for_tool(cls, tool_id):
+        return cls(tool_id)
 
     @classmethod
     def secret(cls):
@@ -51,6 +56,11 @@ class NodeClient(object):
     def _request(self, method, path, payload=None, timeout=20):
         url = config.NODE_URL + path
         headers = {"X-Toolbox-Internal-Secret": self.secret()}
+        if self.tool_id:
+            token = identity.token_for(self.tool_id)
+            if token:
+                headers["X-Mybooks-Plugin-Id"] = self.tool_id
+                headers["X-Mybooks-Plugin-Token"] = token
         try:
             if payload is None:
                 response = self.session.request(method, url, headers=headers, timeout=timeout)

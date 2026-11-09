@@ -34,7 +34,7 @@ class TasksAPI(object):
 
     def create_task(self, progress_data=None):
         tool_id = self._owner.tool_id()
-        task_id = NodeClient().create_task(
+        task_id = NodeClient.for_tool(tool_id).create_task(
             tool_id, operation="download", details=progress_data or {})
         _state().task_ids[tool_id] = int(task_id)
         _state().last_book_ids.pop(tool_id, None)
@@ -56,7 +56,7 @@ class TasksAPI(object):
         except Exception:
             logging.debug("[tasks] background progress mirror failed", exc_info=True)
         try:
-            return NodeClient().update_task(task_id, patch)
+            return NodeClient.for_tool(self._owner.tool_id()).update_task(task_id, patch)
         except NodeError as err:
             logging.warning("[tasks] update failed: %s", err.code)
             return None
@@ -79,7 +79,7 @@ class TasksAPI(object):
         except Exception:
             logging.debug("[tasks] background complete mirror failed", exc_info=True)
         try:
-            NodeClient().complete_task(task_id, status, error=error,
+            NodeClient.for_tool(tool_id).complete_task(task_id, status, error=error,
                                        message="", result_book_id=book_id)
         except NodeError as err:
             logging.warning("[tasks] complete failed: %s", err.code)

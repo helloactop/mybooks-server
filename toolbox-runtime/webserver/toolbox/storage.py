@@ -99,8 +99,12 @@ def tool_root(tool_id):
         raise StorageError("tool_id 不合法")
     root = os.path.join(config.DATA_ROOT, tool_id)
     os.makedirs(root, exist_ok=True)
-    # 0711：只允许穿透不允许列举。Node（uid 1000）需要读取 work/ 产物完成入库与下载，
-    # 但 config.json 仍是 0600，其他插件无法列出或读取本插件的私有文件。
+    if config.private_data():
+        # 独立 UID：属主/属组/setgid 由 supervisor 统一设置。插件进程不在宿主属组里，
+        # 也没有 CAP_FSETID，任何 chmod 都会把 setgid 位清掉，导致后续产物落到插件组。
+        return root
+    # 旧部署（0711）：Node（uid 1000）需要穿透读取 work/ 产物，其他插件可穿透但
+    # 仍无法读取 0600 的 config.json。
     try:
         os.chmod(root, 0o711)
     except OSError:
@@ -150,13 +154,17 @@ def get_work_dir(tool_id, unique_key=None):
         path = os.path.join(root, key_hash)
     else:
         path = root
-    os.makedirs(path, exist_ok=True)
-    if unique_key:
-        # 产物目录对宿主 Node 可读（0755），私有配置仍在 root 下保持 0600。
-        try:
-            os.chmod(path, 0o755)
-        except OSError:
-            pass
+    if unique_key and config.private_data():
+        # 独立 UID：靠父目录的 setgid 继承宿主属组；创建时直接带 2750，
+        # 不能事后 chmod（插件进程没有 CAP_FSETID，会清掉 setgid 位）。
+        os.makedirs(path, mode=0o2750, exist_ok=True)
+    else:
+        os.makedirs(path, exist_ok=True)
+        if unique_key:
+            try:
+                os.chmod(path, 0o755)
+            except OSError:
+                pass
     return path
 
 

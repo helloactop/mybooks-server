@@ -41,6 +41,10 @@ services:
       TOOLBOX_CHILD_MEMORY_MB: "${TOOLBOX_CHILD_MEMORY_MB:-384}"
       # 0 = 关闭（默认）；>0 时每个插件以独立 UID 运行，需容器以 root 启动。
       TOOLBOX_CHILD_UID_BASE: "${TOOLBOX_CHILD_UID_BASE:-0}"
+      # 持久化 UID 池大小（state/uid-map.json）；卸载后数据未清理的 UID 不会被复用。
+      TOOLBOX_CHILD_UID_COUNT: "${TOOLBOX_CHILD_UID_COUNT:-200}"
+      # 宿主 Node 的属组 GID：独立 UID 下 work/ 产物 0640/2750 只对该组可读。
+      TOOLBOX_HOST_GID: "${TOOLBOX_HOST_GID:-1000}"
       MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY: "${MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY:-false}"
     volumes:
       - toolbox-data:/toolbox
@@ -53,12 +57,15 @@ services:
       - ALL
     # 独立 UID 模式（TOOLBOX_CHILD_UID_BASE>0）需要 root 通过 setuid/setgid 降权，
     # 读取 0600 的 state/ 凭据并生成 config.key（DAC_OVERRIDE），把私有数据目录
-    # chown 给对应 UID，并向不同 UID 的子进程发送信号（KILL）。
+    # chown 给对应 UID（CHOWN），chown 之后继续收紧权限位（FOWNER/FSETID），
+    # 并向不同 UID 的子进程发送信号（KILL）。
     # 只有 TOOLBOX_RUNTIME_USER=0:0 时才实际生效，默认的 1000:1000 用不到这些能力。
     cap_add:
       - SETUID
       - SETGID
       - CHOWN
+      - FOWNER
+      - FSETID
       - DAC_OVERRIDE
       - KILL
     mem_limit: 1g

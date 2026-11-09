@@ -171,6 +171,10 @@ class SupervisorHealthHandler(tornado.web.RequestHandler):
             "plugins": [child["tool_id"] for child in children if child.get("online")],
             "children": children,
             "deferred": self._supervisor.deferred(),
+            # 两侧配置与真实生效的隔离能力，便于部署核对（不含任何密钥）。
+            "plugin_auth_only": config.plugin_auth_only(),
+            "node_plugin_auth_only": config.node_runtime_mode(),
+            "uid_isolation": self._supervisor.isolation_status(),
         })
 
 
@@ -197,7 +201,8 @@ class SupervisorStartHandler(tornado.web.RequestHandler):
         self._supervisor = supervisor
 
     async def post(self, tool_id):
-        from webserver.supervisor import CapacityError, ChildNotFound, ReloadingError
+        from webserver.supervisor import (
+            CapacityError, ChildNotFound, IsolationError, ModeMismatchError, ReloadingError)
 
         if not runtime_authorized(self):
             return json_response(self, 403, {"ok": False, "error": "forbidden"})
@@ -205,7 +210,7 @@ class SupervisorStartHandler(tornado.web.RequestHandler):
             child = await self._supervisor.ensure_child(tool_id)
         except ChildNotFound as err:
             return json_response(self, 404, {"ok": False, "err": "tool.disabled", "msg": str(err)})
-        except (CapacityError, ReloadingError) as err:
+        except (CapacityError, ReloadingError, IsolationError, ModeMismatchError) as err:
             return json_response(self, 503, {"ok": False, "err": err.code, "msg": str(err)})
         except Exception:
             LOGGER.exception("[supervisor] start %s failed", tool_id)
@@ -247,14 +252,15 @@ class SupervisorToolHandler(tornado.web.RequestHandler):
         await self._dispatch()
 
     async def _dispatch(self):
-        from webserver.supervisor import CapacityError, ChildNotFound, ReloadingError
+        from webserver.supervisor import (
+            CapacityError, ChildNotFound, IsolationError, ModeMismatchError, ReloadingError)
 
         tool_id = self.path_args[0]
         try:
             response = await self._supervisor.proxy(tool_id, self.request)
         except ChildNotFound as err:
             return json_response(self, 404, {"err": "tool.disabled", "msg": str(err)})
-        except (CapacityError, ReloadingError) as err:
+        except (CapacityError, ReloadingError, IsolationError, ModeMismatchError) as err:
             return json_response(self, 503, {"err": err.code, "msg": str(err)})
         except Exception:
             LOGGER.exception("[supervisor] proxy %s failed", tool_id)
@@ -303,9 +309,14 @@ def main():
     supervisor = None
     if os.environ.get("TOOLBOX_ISOLATE_PLUGINS", "0") == "1":
         # 容器内每插件子进程：supervisor 只代理，不在本进程加载插件代码。
-        from webserver.supervisor import PluginSupervisor
+        from webserver.supervisor import IsolationError, PluginSupervisor
 
-        supervisor = PluginSupervisor()
+        try:
+            supervisor = PluginSupervisor()
+        except IsolationError as err:
+            # 显式启用隔离但环境不满足：直接失败，绝不退回共享 UID 继续对外服务。
+            LOGGER.error("[supervisor] 隔离配置不可用，拒绝启动：%s", err)
+            raise SystemExit(2)
         supervisor.reload()
         app = make_supervisor_app(supervisor)
         LOGGER.info("Toolbox supervisor listening on %s:%d, children=%s", address, port,

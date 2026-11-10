@@ -1,4 +1,4 @@
-# 插件平台进度（AI 接手）
+﻿# 插件平台进度（AI 接手）
 
 > 2026-11-09 · 分支 `codex/plugin-platform`（基于 `main`，Phase 4A 提交见 `git log --oneline -5`）
 > 最近提交：Phase 4A Manifest v1 与统一 Descriptor · Phase 3g.1 安全补强（UID 注册表 / Popen 降权 / 严格配置校验）· `4f7f6718` Phase 3g 文档 · `238aad33` 子进程凭据隔离 · `a45c920d` 任务取消 + 崩溃管道回收
@@ -25,7 +25,10 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 2026-11-09 Phase 4B：统一宿主能力接口 + Python SDK 1.0.0 + 前端 `/static/plugin-sdk/v1.js`。新增 `toolbox_artifacts`（migrate v28）、books create/PATCH/reading、artifacts publish/get/delete、tasks get/result/cancel、config validate、metadata search；Artifact 使用 `files.write:artifact:*` / `files.read:artifact:*`。`Plugin`/`route` 装饰器明确不实施。设计见 [phase4/SDK-SPEC.md](phase4/SDK-SPEC.md)。
 2026-11-10 Phase 4B-R 修复与重新验收：Python SDK 统一 dict/位置参数契约（`jobs.progress(job_id, value)`、`jobs.complete(status=...)`、`files.publish/import_file` dict、非法字段显式报错）；`compat.from_tool` 改用真实 `webserver.toolbox.*` 并复用 `sdk_for`；任务终态禁改、进度不可回退；卸载触发 Worker 重载；本地已审查包正确显示 `reviewed`；Runtime healthz 上报 `toolbox_dir` 并做路径自检；启动恢复区分 Runtime 在线/插件加载；共享 Worker 未审查插件风险显式告警。回归：Node 807/807、Python SDK 35/35、Runtime 73/73（10 skipped）；真实 SDK→宿主链路、md_to_epub 转换入库、zlibrary 加载均通过。结论 **CONDITIONAL PASS**，详见 [4B/verification.md](phase4/4B/verification.md)。
 2026-11-10 Phase 4C.2：Plugin Center 只读管理 API。新增 `core/plugins/center.js`、`routes.plugins.admin.js`、`core/toolbox/audit.js`；`store.peekIndex()` 只读缓存；任务支持 `tool_id/status/limit/offset` 与计数；`GET /api/plugins/{overview,store/index,store/:id,installed,tasks,tasks/:id,security}`、详情/权限/配置/版本/日志；`/api/plugins/runtime` 追加 `toolbox/security`；Runtime 新增只读 `GET /internal/tool/:id/config`。审计接入安装/更新/回滚/启停/卸载/重启；权限与配置写入仍留 4C.4，商店/安装写入口仍只有 `/api/toolbox/*`。回归：Node 825/825、Runtime 75/75（10 skipped）。设计见 [4C/API-SPEC.md](phase4/4C/API-SPEC.md)。
-未完成：Z-Library 0.1.1 上架前需修复 `entry_url` 保存校验与下载重定向限制（P3-5/P3-6，后者按 P2 处理）；`Plugin`/`route` 装饰器、Bridge v2、4D UI Slot、事件订阅、`source.*` / `book.*` 能力、Phase 4C.3–4F（权限/配置写入、前端、集成验收）。UI 浏览器验收与独立 UID 默认启用仍未完成。
+2026-11-10 Phase 4C.3：Plugin Center Web UI。新增 `/plugins` 与 `/plugins/:id` 页面（总览/商店/已安装/任务/设置、概览/权限/配置/版本/日志），全部接 4C.2 只读 API；安装/更新/启停/回滚/卸载仍委托 `/api/toolbox/*`；未审查插件不提供绕过安装的按钮；权限与配置页只读，无假保存按钮。同步补导航“插件”、管理页登录守卫与 `overlay.js`（修复顶栏搜索/移动端菜单按钮无响应）。回归：Node 846/846、Python SDK 35/35、Runtime 75/75（10 skipped）；真实登录浏览器验收通过，390px 断点未实测。设计见 [4C/tasks.md](phase4/4C/tasks.md)、[4C/UI-SPEC.md](phase4/4C/UI-SPEC.md)。
+2026-11-10 Phase 4C.4：权限管理、配置管理与审计。新增 `core/toolbox/grants-admin.js`（Manifest 声明校验、scope 校验、原子写 `grants.json`、`if_version` 409、last-good 刷新、审计）与 `core/toolbox/plugin-config.js`（Schema 部分校验、字段级合并、敏感字段掩码/保留/显式清除、版本冲突）；新增 `PUT /api/plugins/:id/permissions`、`PUT /api/plugins/:id/config`；Runtime `InternalConfigHandler` 增加 PUT（进程内锁 + 版本号 + 加密落盘），GET 返回 `version`；详情页权限/配置升级为可保存，日志支持时间范围与操作人/结果。回归：Node 890/890、Python SDK 35/35、Runtime 79 项 OK（10 skipped）、Docker 镜像内 Runtime 79 项 OK（1 skipped）；浏览器真实登录完成授权与配置保存。设计见 [4C/API-SPEC.md](phase4/4C/API-SPEC.md) §15。
+未完成：Z-Library 0.1.1 上架前需修复 `entry_url` 保存校验与下载重定向限制（P3-5/P3-6，后者按 P2 处理）；`Plugin`/`route` 装饰器、Bridge v2、4D UI Slot、事件订阅、`source.*` / `book.*` 能力、Phase 4C.5–4F（集成验收）。独立 UID 默认启用、配置历史 diff、Runtime stdout 采集仍未完成。
+4C.3 与 4C.4 改动**尚未提交**（工作区变更，见 `git status`）。
 旧 Toolbox 路由/Bridge/安装包/迁移保持兼容；仅新增可选身份令牌与策略文件。
 
 ## 已完成
@@ -64,18 +67,29 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 | Phase 4B Internal APIs | [routes.toolbox.internal.js](../../src/http/routes.toolbox.internal.js) + [config-schema.js](../../src/core/toolbox/config-schema.js) | books/artifacts/tasks/config/metadata；复用现有认证与 `requirePermission` | 4B | 未提交 |
 | Phase 4B Python SDK | [plugin-sdk/python](../../plugin-sdk/python) + [sdk.py](../../toolbox-runtime/webserver/toolbox/sdk.py) + [node_client.py](../../toolbox-runtime/webserver/toolbox/node_client.py) | `sdk.books/files/jobs/config/metadata`、`PluginError`、`compat.from_tool`；`CoreAPI.sdk` | 4B | 未提交 |
 | Phase 4B Frontend SDK | [plugin-sdk/v1.js](../../public/static/plugin-sdk/v1.js) + [routes.toolbox.ui.js](../../src/http/routes.toolbox.ui.js) | Bridge 薄封装、可停止的任务监听、CSP 精确放行 | 4B | 未提交 |
-| Phase 4C.2 Center | [center.js](../../src/core/plugins/center.js) | 商店/已安装/详情/权限/配置/版本/任务/日志/安全聚合；只读，不建第二套状态库 | 4C.2 | 未提交 |
-| Phase 4C.2 Admin API | [routes.plugins.admin.js](../../src/http/routes.plugins.admin.js) + [server.js](../../server.js) | 固定段先于 `:id`；统一错误；沿用会话认证；旧 `/api/plugins/*` 契约不变 | 4C.2 | 未提交 |
-| Phase 4C.2 Audit | [audit.js](../../src/core/toolbox/audit.js) + [routes.toolbox.js](../../src/http/routes.toolbox.js) | JSONL 追加、串行写、1MB 轮转、脱敏；生命周期写操作接入 | 4C.2 | 未提交 |
-| Phase 4C.2 Store Cache | [store.js](../../src/core/toolbox/store.js) | `peekIndex()` 只读缓存；总览不触发商店网络 | 4C.2 | 未提交 |
-| Phase 4C.2 Task Query | [toolbox.js](../../src/db/toolbox.js) | `toolId/offset/maxLimit` 过滤、`countTasks`、`taskCounts` GROUP BY | 4C.2 | 未提交 |
-| Phase 4C.2 Config Bridge | [runtime.py](../../toolbox-runtime/runtime.py) | 只读 `GET /internal/tool/:id/config`；runtime-secret；Node 掩码 | 4C.2 | 未提交 |
+| Phase 4C.2 Center | [center.js](../../src/core/plugins/center.js) | 商店/已安装/详情/权限/配置/版本/任务/日志/安全聚合；只读，不建第二套状态库 | 4C.2 | `c9acc439` |
+| Phase 4C.2 Admin API | [routes.plugins.admin.js](../../src/http/routes.plugins.admin.js) + [server.js](../../server.js) | 固定段先于 `:id`；统一错误；沿用会话认证；旧 `/api/plugins/*` 契约不变 | 4C.2 | `c9acc439` |
+| Phase 4C.2 Audit | [audit.js](../../src/core/toolbox/audit.js) + [routes.toolbox.js](../../src/http/routes.toolbox.js) | JSONL 追加、串行写、1MB 轮转、脱敏；生命周期写操作接入 | 4C.2 | `c9acc439` |
+| Phase 4C.2 Store Cache | [store.js](../../src/core/toolbox/store.js) | `peekIndex()` 只读缓存；总览不触发商店网络 | 4C.2 | `c9acc439` |
+| Phase 4C.2 Task Query | [toolbox.js](../../src/db/toolbox.js) | `toolId/offset/maxLimit` 过滤、`countTasks`、`taskCounts` GROUP BY | 4C.2 | `c9acc439` |
+| Phase 4C.2 Config Bridge | [runtime.py](../../toolbox-runtime/runtime.py) | 只读 `GET /internal/tool/:id/config`；runtime-secret；Node 掩码 | 4C.2 | `c9acc439` |
+| Phase 4C.3 Pages | [plugins.html](../../public/plugins.html) · [plugin-detail.html](../../public/plugin-detail.html) · [routes.toolbox.ui.js](../../src/http/routes.toolbox.ui.js) | `/plugins`、`/plugins/:id` 页面路由；非法 ID 回列表；登录守卫覆盖静态页；旧 `/toolbox` 不变 | 4C.3 | 未提交 |
+| Phase 4C.3 Center UI | [page-plugins.js](../../public/js/page-plugins.js) · [plugin-center.js](../../public/js/plugin-center.js) | 总览/商店/已安装/任务/设置；防抖搜索、安装门禁、可见性感知轮询；未审查不提供绕过安装 | 4C.3 | 未提交 |
+| Phase 4C.3 Detail UI | [page-plugin-detail.js](../../public/js/page-plugin-detail.js) | 概览/权限/配置/版本/日志；未安装回落商店详情；权限与配置只读（4C.4 已升级为可写） | 4C.3 | 未提交 |
+| Phase 4C.3 Shell | [chrome.js](../../public/js/chrome.js) · [overlay.js](../../public/js/overlay.js) · [plugins.css](../../public/css/plugins.css) | 导航“插件”与详情高亮；修复顶栏搜索/菜单按钮无响应；只补 `.pc-*` 布局 | 4C.3 | 未提交 |
+| Phase 4C.4 Grants Admin | [grants-admin.js](../../src/core/toolbox/grants-admin.js) + [plugin-grants.js](../../src/core/toolbox/plugin-grants.js) | Manifest 声明校验、scope 校验、串行原子写、`if_version` 409、last-good、缓存失效；不改 Kernel GrantStore | 4C.4 | 未提交 |
+| Phase 4C.4 Config Admin | [plugin-config.js](../../src/core/toolbox/plugin-config.js) + [config-schema.js](../../src/core/toolbox/config-schema.js) | Schema 部分校验、字段级合并、掩码/保留/显式清除、版本冲突；配置只经 Runtime | 4C.4 | 未提交 |
+| Phase 4C.4 Config Bridge | [runtime.py](../../toolbox-runtime/runtime.py) + [storage.py](../../toolbox-runtime/webserver/toolbox/storage.py) | `PUT /internal/tool/:id/config`；进程内锁、版本号、AES-256-GCM 原子落盘 | 4C.4 | 未提交 |
+| Phase 4C.4 Config Form | [plugin-config-form.js](../../public/js/plugin-config-form.js) | Schema → 字段模型、类型/范围/枚举校验、保存状态与清除语义 | 4C.4 | 未提交 |
 
 测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`、
 `test/toolbox-access-policy.test.js`、`test/toolbox-grants.test.js`、`test/plugin-descriptor.test.js`、
 `test/plugins-sdk-contract.test.js`、`test/plugins-center.test.js`、`test/plugins-audit.test.js`、
-`test/plugins-admin-api.test.js`。整套 `npm test` 825/825。
-Python：`plugin-sdk/python/tests` 13 项、`toolbox-runtime/tests` 75 项（10 skipped，含配置桥 2 项）；Docker 镜像内导入与测试通过。
+`test/plugins-admin-api.test.js`、`test/plugins-ui-routes.test.js`、`test/plugins-center-ui.test.js`、
+`test/plugins-permissions-admin.test.js`、`test/plugins-config-admin.test.js`、
+`test/plugins-audit-integration.test.js`、`test/plugins-detail-ui.test.js`、
+`test/plugins-admin-write-api.test.js`。整套 `npm test` 890/890。
+Python：`plugin-sdk/python/tests` 35 项、`toolbox-runtime/tests` 79 项（10 skipped，含配置读写 4 项）；Docker 镜像内 79 项 OK（1 skipped）。
 
 ## 目标文件结构（架构 第十五章）
 

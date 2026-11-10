@@ -9,7 +9,6 @@
  * /api/toolbox/*，4C.4 再补权限与配置写入。
  * ============================================================ */
 
-const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -23,10 +22,11 @@ const grants = require('../toolbox/plugin-grants');
 const {
   runtimeHealth, runtimePathStatus, callRuntime,
 } = require('../toolbox/runtime');
+const grantsAdmin = require('../toolbox/grants-admin');
+const { createConfigService } = require('../toolbox/plugin-config');
 const { compareSemver, TOOL_ID_RE } = require('../toolbox/manifest');
 const { allowUnreviewed } = require('../toolbox/allowlist');
 const { legacyCompatEnabled, pluginAuthOnlyEnabled } = require('../toolbox/access-policy');
-const { maskSensitive, sensitiveFields, validateConfig } = require('../toolbox/config-schema');
 const audit = require('../toolbox/audit');
 
 const { UNENFORCED_PERMISSIONS } = descriptorApi;
@@ -203,6 +203,13 @@ function createCenter(deps = {}) {
   const healthOf = deps.runtimeHealth || runtimeHealth;
   const callRuntimeOf = deps.callRuntime || callRuntime;
   const auditLog = deps.audit || audit;
+  // 配置读写复用同一组依赖，保证测试可注入假 Runtime。
+  const configService = deps.configService || createConfigService({
+    db: getDb(),
+    runtimeHealth: healthOf,
+    callRuntime: callRuntimeOf,
+    audit: auditLog,
+  });
 
   function requireTool(id) {
     if (!TOOL_ID_RE.test(String(id || ''))) {
@@ -446,15 +453,6 @@ function createCenter(deps = {}) {
     };
   }
 
-  function policyVersion() {
-    try {
-      const target = grants.policyPath();
-      return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex')}`;
-    } catch {
-      return '';
-    }
-  }
-
   async function permissions(id) {
     requireTool(id);
     const descriptor = descriptorOf(id);
@@ -486,7 +484,7 @@ function createCenter(deps = {}) {
       policy_state: policy.state,
       configured: !!policy.configured,
       strict,
-      version: policyVersion(),
+      version: grantsAdmin.policyVersion(),
       requested,
       granted,
       effective,
@@ -497,64 +495,16 @@ function createCenter(deps = {}) {
         .filter((item) => UNENFORCED_PERMISSIONS.has(item.name))
         .map((item) => item.name),
       warnings,
-      // 本轮只读；4C.4 才提供写入。
-      can_modify: policy.state === 'ok',
-      write_supported: false,
+      // 只有未损坏、且不是“仅剩历史快照”时允许写入；4C.4 起支持。
+      can_modify: policy.state === 'ok' || policy.state === 'absent',
+      write_supported: true,
+      catalog: grantsAdmin.catalog(),
     };
   }
 
-  async function config(id) {
-    const descriptor = descriptorOf(id);
-    const schema = descriptor.configuration && descriptor.configuration.schema;
-    if (!schema) {
-      throw new CenterError('CONFIG_SCHEMA_MISSING', '该插件没有声明式配置 Schema', 404);
-    }
-    const health = await healthOf({ timeoutMs: 2000 });
-    if (!health || !health.online) {
-      throw new CenterError('RUNTIME_UNAVAILABLE', '插件运行时离线，无法读取配置', 503);
-    }
-    let result;
-    try {
-      result = await callRuntimeOf(`/internal/tool/${encodeURIComponent(id)}/config`, {
-        method: 'GET', timeoutMs: 5000,
-      });
-    } catch (err) {
-      throw new CenterError(
-        err && err.code === 'RUNTIME_TIMEOUT' ? 'RUNTIME_TIMEOUT' : 'RUNTIME_UNAVAILABLE',
-        '插件运行时离线，无法读取配置',
-        503,
-      );
-    }
-    if (!result || !result.ok) {
-      const code = result && result.json && result.json.code;
-      throw new CenterError(
-        code === 'CONFIG_DECRYPT_FAILED' ? 'CONFIG_UNAVAILABLE' : 'CONFIG_UNAVAILABLE',
-        code === 'CONFIG_DECRYPT_FAILED'
-          ? '插件配置解密失败；配置密钥可能已变化'
-          : '插件配置读取失败',
-        502,
-      );
-    }
-    const raw = result.json && typeof result.json.config === 'object' && result.json.config
-      ? result.json.config : {};
-    const fields = sensitiveFields(schema);
-    const sensitive = {};
-    for (const field of fields) {
-      sensitive[field] = raw[field] !== undefined && raw[field] !== null && raw[field] !== '';
-    }
-    const declared = {};
-    for (const key of Object.keys((schema && schema.properties) || {})) {
-      if (raw[key] !== undefined) declared[key] = raw[key];
-    }
-    return {
-      schema,
-      values: maskSensitive(declared, fields),
-      sensitive,
-      has_custom_ui: !!(descriptor.frontend.entry || (descriptor.ui.pages || []).length),
-      runtime_online: true,
-      configured: Object.keys(raw).length > 0,
-      validation: validateConfig(schema, declared),
-    };
+  function config(id) {
+    // 配置读写统一经 plugin-config：Runtime 加密落盘，Node 只做 Schema 校验与掩码。
+    return configService.read(id);
   }
 
   async function versions(id) {
@@ -627,10 +577,11 @@ function createCenter(deps = {}) {
     };
   }
 
-  async function logs(id, { type = 'errors', limit = 50, offset = 0 } = {}) {
+  async function logs(id, { type = 'errors', limit = 50, offset = 0, since = '' } = {}) {
     requireTool(id);
     const capped = Math.max(1, Math.min(Number(limit) || 50, 200));
     const skip = Math.max(0, Number(offset) || 0);
+    const sinceAt = String(since || '').trim().slice(0, 40);
     if (!['errors', 'tasks', 'audit', 'stdout'].includes(type)) {
       throw new CenterError('INVALID_QUERY', '日志类型不合法', 400);
     }
@@ -647,7 +598,7 @@ function createCenter(deps = {}) {
       };
     }
     if (type === 'audit') {
-      const result = await auditLog.list({ toolId: id, limit: capped, offset: skip });
+      const result = await auditLog.list({ toolId: id, limit: capped, offset: skip, since: sinceAt });
       return {
         available: true,
         type,
@@ -655,13 +606,18 @@ function createCenter(deps = {}) {
           at: item.at,
           level: item.result === 'success' ? 'info' : 'error',
           source: 'audit',
+          actor: item.actor || 'admin',
+          result: item.result,
           tool_id: id,
           code: item.action,
-          message: `${item.action} ${item.result}${item.error_code ? ` (${item.error_code})` : ''}`,
+          message: `${item.action} ${item.result}${item.error_code ? ` (${item.error_code})` : ''}`
+            + (item.detail && Array.isArray(item.detail.changed_fields) && item.detail.changed_fields.length
+              ? `：${item.detail.changed_fields.join(', ')}` : ''),
         })),
         total: result.total,
         limit: result.limit,
         offset: result.offset,
+        since: sinceAt || null,
         note: '来自 state/audit.jsonl 的管理操作审计',
       };
     }

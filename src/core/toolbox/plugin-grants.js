@@ -201,4 +201,27 @@ function policyState() {
   return loadGrants().state;
 }
 
-module.exports = { policyPath, lastGoodPath, loadGrants, pluginGrantsFor, policyState };
+// 管理端原子写入后立即失效缓存，保证下一次内部调用读到新策略。
+function invalidateCache() {
+  cache = { mtimeMs: -1, size: -1, state: cache.state, configured: new Set(), store: new GrantStore() };
+}
+
+// 管理端写入前读取原始文档；结构不合法或不可读时返回 null。
+function readPolicyDocument() {
+  try {
+    return JSON.parse(fs.readFileSync(policyPath(), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+module.exports = {
+  POLICY_VERSION,
+  policyPath,
+  lastGoodPath,
+  loadGrants,
+  pluginGrantsFor,
+  policyState,
+  invalidateCache,
+  readPolicyDocument,
+};

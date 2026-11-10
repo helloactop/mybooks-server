@@ -234,7 +234,10 @@ test('permissions：absent 明确降级，broken 只读拒绝', async () => {
   assert.equal(absent.policy_state, 'absent');
   assert.equal(absent.strict, false);
   assert.equal(absent.configured, false);
-  assert.equal(absent.can_modify, false);
+  // 4C.4 起允许在 absent 状态下首次建立严格策略。
+  assert.equal(absent.can_modify, true);
+  assert.equal(absent.write_supported, true);
+  assert.ok(Array.isArray(absent.catalog) && absent.catalog.length > 0);
   assert.ok(absent.warnings[0].includes('grants.json'));
   assert.equal(absent.requested[0].name, 'books.read');
   assert.equal(absent.requested[0].resource_scoped, true);

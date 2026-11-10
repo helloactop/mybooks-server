@@ -124,6 +124,32 @@
 - 不引入新框架/图标库；只使用 `style.css`/`toolbox.css` token 与 Lucide sprite。
 - 所有按钮无“假动作”；未实现 tab 显示明确占位，不展示假数据。
 
+### 实施结果（4C.3，2026-11-10）
+
+新增：
+
+- `public/plugins.html`、`public/plugin-detail.html`：中心五个 tab 与详情五个 tab，均带加载/空/错误/离线态。
+- `public/js/plugin-center.js`：共享转义、URL 白名单、状态映射、安装门禁、确认弹窗、请求封装；浏览器挂 `window.MyBooksPlugins`，Node 下导出同名对象供单测。
+- `public/js/page-plugins.js`：总览（指标/Runtime/安全/最近错误）、商店（250ms 防抖搜索、三种排序、刷新）、已安装（5 种筛选与生命周期操作）、任务（工具/状态筛选、分页、详情弹窗、可见性感知轮询）、设置（只读部署信息 + 复制建议）。
+- `public/js/page-plugin-detail.js`：概览/权限/配置/版本/日志；未安装插件回落到商店详情。
+- `public/css/plugins.css`：只补 `.pc-*` 布局与两点响应式（1080/820/640），视觉 token 复用既有体系。
+- `test/plugins-ui-routes.test.js`（9 项）、`test/plugins-center-ui.test.js`（12 项）。
+
+修改：
+
+- `src/http/routes.toolbox.ui.js`：`GET /plugins`、`GET /plugins/:id`（非法 ID 回列表）。
+- `server.js`：`/plugins`、`/plugins.html`、`/plugin-detail.html` 纳入管理页面登录守卫。
+- `public/js/chrome.js`：导航新增“插件”，`plugin-detail` 映射到 `plugins` 高亮；插件页不渲染“添加书籍”。
+- `public/js/overlay.js`：`#addBtn` 绑定加空值保护。
+
+数据来源：全部来自 4C.2 只读 API；写操作只调用既有 `/api/toolbox/*`，未新增写入口。
+
+浏览器验收：真实登录后完成总览、四个 tab 切换、`/plugins/zlibrary` 未安装回落、顶栏搜索/移动端菜单；控制台无报错。390px 视口未能调整（工具限制），该断点仅做 CSS 静态核对，标记为未验证。
+
+测试：`npm test` 846/846；Python SDK 35/35；Runtime 75 OK（10 skipped）。
+
+已知未完成：权限与配置保存（4C.4）、完整 Schema 表单、日志 stdout（接口不提供）、旧 `/toolbox` 顶栏同款按钮问题未修。
+
 ---
 
 ## 4C.4 权限、配置、日志与审计
@@ -182,6 +208,48 @@ Runtime 离线 503；无 Schema 404；不执行插件代码。
 - 权限/配置/日志三个 tab 全部由真实 API 驱动，无本地伪造。
 - 权限保存立即影响内部接口；配置保存后插件读取到新值且密文落盘。
 - 所有管理写操作可在审计中追溯（actor=admin、action、tool_id、result）。
+
+### 实施结果（4C.4，2026-11-10）
+
+新增：
+
+- `src/core/toolbox/grants-admin.js`：权限目录（含风险等级）、请求归一化、Manifest 声明校验、
+  scope 校验、差异计算、串行队列、原子写入、`if_version`、last-good 刷新、审计。
+- `src/core/toolbox/plugin-config.js`：配置读写桥（掩码、字段级合并、必填完整性与版本检查），
+  支持依赖注入假 Runtime 以做单测。
+- `public/js/plugin-config-form.js`：Schema → 字段模型、类型/范围/枚举校验、提交内容计算。
+- 测试：`test/plugins-permissions-admin.test.js`（11）、`test/plugins-config-admin.test.js`（10）、
+  `test/plugins-audit-integration.test.js`（6）、`test/plugins-detail-ui.test.js`（10）、
+  `test/plugins-admin-write-api.test.js`（1 个集成用例含 6 个子断言组）。
+
+修改：
+
+- `src/core/toolbox/plugin-grants.js`：新增 `POLICY_VERSION`、`invalidateCache()`、`readPolicyDocument()`。
+- `src/core/toolbox/config-schema.js`：`validateConfig(..., { partial })`，规则不变，仅跳过 required。
+- `src/core/toolbox/audit.js`：`list()` 支持 `since` 时间过滤。
+- `src/core/plugins/center.js`：权限视图追加 `catalog`/`write_supported`/`can_modify`；
+  配置视图改由 `plugin-config` 提供（仍复用注入的 Runtime 依赖）；审计日志追加 `actor`/`result` 与 `since`。
+- `src/http/routes.plugins.admin.js`：新增两个 PUT；`fail()` 支持带 `details` 的 4xx 业务错误。
+- `toolbox-runtime/runtime.py`：`InternalConfigHandler` 增加 PUT（进程内锁 + 版本校验 + 字段合并）；
+  GET 返回 `version`。
+- `toolbox-runtime/webserver/toolbox/storage.py`：新增 `config_version()`（键排序 JSON 的 SHA-256）。
+- `public/plugin-detail.html`、`public/js/page-plugin-detail.js`、`public/css/plugins.css`：
+  权限开关/scope/保存条、Schema 表单、清除敏感字段、日志时间范围与操作人展示。
+
+与规划的差异：
+
+1. 请求体使用 `permissions: [{name, scope}]` 而非 `grants: ["name:scope"]`，避免前端自行拼接与解析。
+2. 错误码统一为 `PERMISSION_NOT_DECLARED` / `POLICY_VERSION_CONFLICT` / `POLICY_BROKEN` /
+   `POLICY_NOT_WRITABLE` / `CONFIG_VALIDATION_FAILED` / `CONFIG_VERSION_CONFLICT`，
+   与 4C.1 草案不同，API-SPEC 已按实际实现更新。
+3. 配置写入采用 Runtime 侧 PUT（字段级合并）而不是 POST 整份覆盖；Node 不做 AES-GCM。
+4. `last-good` 状态明确禁止写入（避免把不可信快照当成可覆盖的基线），需人工修复文件。
+
+实测：`npm test` 890/890；Python SDK 35/35；Runtime 79 项 OK（10 skipped）；
+Docker 镜像内 Runtime 79 项 OK（1 skipped），并真实调用容器 `PUT/GET /internal/tool/:id/config` 验证哈希一致；
+浏览器真实登录完成权限授予与配置保存、审计查看。
+
+未完成：配置历史/diff 视图；运行时 stdout 采集；`network.*` 等未强制权限仍只做展示。
 
 ---
 

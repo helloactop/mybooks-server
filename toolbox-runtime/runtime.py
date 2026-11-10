@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import signal
+import threading
 from urllib.parse import unquote
 
 import tornado.ioloop
@@ -30,6 +31,10 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 LOGGER = logging.getLogger("toolbox.runtime")
+
+# 配置写入锁：保证“读取 → 版本校验 → 合并 → 落盘”在进程内串行，
+# 多个管理端并发保存不会互相覆盖。
+_CONFIG_WRITE_LOCK = threading.Lock()
 
 
 def json_response(handler, status, payload):
@@ -93,10 +98,11 @@ class BusyHandler(tornado.web.RequestHandler):
 
 
 class InternalConfigHandler(tornado.web.RequestHandler):
-    """Node 读取插件配置的唯一入口（只读）。
+    """Node 读写插件配置的唯一入口。
 
-    不执行插件代码；只调用 storage.get_config。返回原始配置，
-    敏感字段由 Node 按 Manifest schema 掩码后再下发给浏览器。
+    不执行插件代码；只调用 storage.get_config / set_config。
+    返回原始配置，敏感字段由 Node 按 Manifest schema 掩码后再下发给浏览器。
+    写入支持版本校验与字段级合并，避免管理端并发修改互相覆盖。
     """
 
     def initialize(self, storage_module):
@@ -122,7 +128,86 @@ class InternalConfigHandler(tornado.web.RequestHandler):
             return json_response(self, 500, {
                 "ok": False, "code": "CONFIG_READ_FAILED", "error": "配置读取失败",
             })
-        return json_response(self, 200, {"ok": True, "tool_id": tool_id, "config": data})
+        return json_response(self, 200, {
+            "ok": True,
+            "tool_id": tool_id,
+            "config": data,
+            "version": self._storage.config_version(data),
+        })
+
+    def put(self, tool_id):
+        """字段级合并写入：values 覆盖指定字段，clear 删除敏感字段。
+
+        整个“读取 → 版本校验 → 合并 → 落盘”在同一把锁内完成，
+        版本不一致返回 409，绝不静默覆盖其他管理操作。
+        """
+        if not runtime_authorized(self):
+            return json_response(self, 403, {"ok": False, "error": "forbidden"})
+        try:
+            body = json.loads(self.request.body.decode("utf-8") or "{}")
+        except (ValueError, UnicodeDecodeError):
+            return json_response(self, 400, {
+                "ok": False, "code": "CONFIG_INVALID", "error": "请求体必须是 JSON",
+            })
+        if not isinstance(body, dict):
+            return json_response(self, 400, {
+                "ok": False, "code": "CONFIG_INVALID", "error": "请求体必须是对象",
+            })
+        values = body.get("values", {})
+        clear = body.get("clear", [])
+        if not isinstance(values, dict):
+            return json_response(self, 400, {
+                "ok": False, "code": "CONFIG_INVALID", "error": "values 必须是对象",
+            })
+        if not isinstance(clear, list) or any(not isinstance(item, str) for item in clear):
+            return json_response(self, 400, {
+                "ok": False, "code": "CONFIG_INVALID", "error": "clear 必须是字符串数组",
+            })
+        if len(values) > 64 or len(clear) > 32:
+            return json_response(self, 400, {
+                "ok": False, "code": "CONFIG_INVALID", "error": "一次提交的字段过多",
+            })
+
+        with _CONFIG_WRITE_LOCK:
+            try:
+                current = self._storage.get_config(tool_id)
+            except self._storage.StorageError as err:
+                LOGGER.warning("[config] write read failed tool=%s: %s", tool_id, err)
+                return json_response(self, 500, {
+                    "ok": False, "code": "CONFIG_DECRYPT_FAILED", "error": str(err),
+                })
+            current_version = self._storage.config_version(current)
+            expected = body.get("version")
+            if expected is not None and str(expected) != current_version:
+                return json_response(self, 409, {
+                    "ok": False,
+                    "code": "CONFIG_VERSION_CONFLICT",
+                    "error": "配置已被其他操作修改",
+                    "version": current_version,
+                })
+            merged = dict(current)
+            merged.update(values)
+            for field in clear:
+                merged.pop(field, None)
+            try:
+                self._storage.set_config(tool_id, merged)
+            except self._storage.StorageError as err:
+                LOGGER.warning("[config] write failed tool=%s: %s", tool_id, err)
+                return json_response(self, 500, {
+                    "ok": False, "code": "CONFIG_WRITE_FAILED", "error": "配置写入失败",
+                })
+            except Exception:
+                LOGGER.exception("[config] unexpected write failure tool=%s", tool_id)
+                return json_response(self, 500, {
+                    "ok": False, "code": "CONFIG_WRITE_FAILED", "error": "配置写入失败",
+                })
+            return json_response(self, 200, {
+                "ok": True,
+                "tool_id": tool_id,
+                "version": self._storage.config_version(merged),
+                "changed_fields": sorted(values.keys()),
+                "cleared": sorted(set(clear)),
+            })
 
 
 class ToolDispatchHandler(BaseHandler):

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>插件详情 · My books</title>
+  <link rel="icon" type="image/png" href="/logo.png?v=2">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="My books">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="stylesheet" href="/css/style.css?v=122">
+  <link rel="stylesheet" href="/css/toolbox.css?v=4">
+  <link rel="stylesheet" href="/css/plugins.css?v=1">
+</head>
+<body data-page="plugin-detail">
+  <main class="tb-page pc-page pc-detail">
+    <a class="pc-back" href="/plugins" id="pdBack">← 返回插件中心</a>
+
+    <div class="tb-note is-error hidden" id="pdPageError" role="alert"></div>
+
+    <header class="pc-detail-head" id="pdHead" aria-busy="true">
+      <div class="pc-detail-title">
+        <span class="pc-detail-icon" id="pdIcon"></span>
+        <div class="pc-detail-meta">
+          <h1 id="pdName">插件详情</h1>
+          <p class="pc-detail-sub" id="pdSub">正在读取插件信息…</p>
+          <div class="pc-badges" id="pdBadges"></div>
+        </div>
+      </div>
+      <div class="pc-detail-actions" id="pdActions"></div>
+    </header>
+
+    <nav class="tb-tabs pc-tabs" role="tablist" aria-label="插件详情分区" id="pdTabs">
+      <button type="button" role="tab" id="pdTabOverview" data-tab="overview" aria-selected="true" aria-controls="pdPanelOverview">概览</button>
+      <button type="button" role="tab" id="pdTabPermissions" data-tab="permissions" aria-selected="false" aria-controls="pdPanelPermissions">权限</button>
+      <button type="button" role="tab" id="pdTabConfig" data-tab="config" aria-selected="false" aria-controls="pdPanelConfig">配置</button>
+      <button type="button" role="tab" id="pdTabVersions" data-tab="versions" aria-selected="false" aria-controls="pdPanelVersions">版本</button>
+      <button type="button" role="tab" id="pdTabLogs" data-tab="logs" aria-selected="false" aria-controls="pdPanelLogs">日志</button>
+    </nav>
+
+    <section class="tb-panel" id="pdPanelOverview" role="tabpanel" aria-labelledby="pdTabOverview" aria-busy="true">
+      <dl class="pc-kv" id="pdOverviewBody"></dl>
+      <div class="pc-block" id="pdOverviewExtra" hidden>
+        <div class="pc-block-head"><h2>插件描述</h2></div>
+        <div class="pc-prose" id="pdDescription"></div>
+      </div>
+    </section>
+
+    <section class="tb-panel hidden" id="pdPanelPermissions" role="tabpanel" aria-labelledby="pdTabPermissions" aria-busy="false">
+      <div class="tb-note" id="pdPermNote" role="status" hidden></div>
+      <dl class="pc-kv" id="pdPermSummary"></dl>
+      <div class="pc-block">
+        <div class="pc-block-head">
+          <h2>权限明细</h2>
+          <span class="tb-muted">Manifest 声明 ≠ 已授权 ≠ 实际生效</span>
+        </div>
+        <div class="pc-list" id="pdPermList"></div>
+      </div>
+      <div class="pc-savebar" id="pdPermBar">
+        <span class="pc-save-status" id="pdPermStatus" role="status">未修改</span>
+        <div class="pc-save-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="pdPermReset" disabled>放弃修改</button>
+          <button type="button" class="btn btn-primary btn-sm" id="pdPermSave" disabled>保存权限变更</button>
+        </div>
+      </div>
+      <p class="tb-muted">保存会为当前插件建立严格的权限策略；未列出的权限立即失效。</p>
+    </section>
+
+    <section class="tb-panel hidden" id="pdPanelConfig" role="tabpanel" aria-labelledby="pdTabConfig" aria-busy="false">
+      <div class="tb-note" id="pdConfigNote" role="status" hidden></div>
+      <div id="pdConfigBody"></div>
+      <div class="pc-savebar" id="pdConfigBar">
+        <span class="pc-save-status" id="pdConfigStatus" role="status">未修改</span>
+        <div class="pc-save-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="pdConfigReset" disabled>放弃修改</button>
+          <button type="button" class="btn btn-primary btn-sm" id="pdConfigSave" disabled>保存配置</button>
+        </div>
+      </div>
+      <p class="tb-muted">配置由 Python 运行时加密保存；敏感字段留空表示保持原值。</p>
+    </section>
+
+    <section class="tb-panel hidden" id="pdPanelVersions" role="tabpanel" aria-labelledby="pdTabVersions" aria-busy="false">
+      <div class="tb-note" id="pdVersionNote" role="status" hidden></div>
+      <dl class="pc-kv" id="pdVersionBody"></dl>
+      <div id="pdVersionHistory"></div>
+    </section>
+
+    <section class="tb-panel hidden" id="pdPanelLogs" role="tabpanel" aria-labelledby="pdTabLogs" aria-busy="false">
+      <div class="pc-toolbar">
+        <div class="pc-chips" role="group" aria-label="日志类型">
+          <button type="button" class="pc-chip is-active" data-log-type="errors" aria-pressed="true">错误</button>
+          <button type="button" class="pc-chip" data-log-type="tasks" aria-pressed="false">任务消息</button>
+          <button type="button" class="pc-chip" data-log-type="audit" aria-pressed="false">管理审计</button>
+        </div>
+        <label class="pc-select">
+          <span>时间范围</span>
+          <select id="pdLogSince" class="tb-select">
+            <option value="">全部</option>
+            <option value="24h">最近 24 小时</option>
+            <option value="7d">最近 7 天</option>
+          </select>
+        </label>
+        <button type="button" class="btn btn-ghost btn-sm" id="pdLogRefresh">刷新</button>
+      </div>
+      <p class="tb-muted">Runtime stdout 不在日志接口能力内；需要查看请使用容器日志。日志文本已转义并以纯文本展示。</p>
+      <div class="tb-note" id="pdLogNote" role="status" hidden></div>
+      <div class="pc-list pc-log-list" id="pdLogList"></div>
+      <div class="tb-empty hidden" id="pdLogEmpty">没有日志记录。</div>
+      <div class="pc-pager">
+        <button type="button" class="btn btn-ghost btn-sm" id="pdLogPrev">上一页</button>
+        <span class="tb-muted" id="pdLogPageInfo">—</span>
+        <button type="button" class="btn btn-ghost btn-sm" id="pdLogNext">下一页</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="/js/icon.js?v=2"></script>
+  <script src="/js/chrome.js?v=42"></script>
+  <script src="/js/base.js?v=1"></script>
+  <script src="/js/api.js?v=1"></script>
+  <script src="/js/modal.js?v=1"></script>
+  <script src="/js/overlay.js?v=4"></script>
+  <script src="/js/plugin-center.js?v=2"></script>
+  <script src="/js/plugin-config-form.js?v=1"></script>
+  <script src="/js/page-plugin-detail.js?v=2"></script>
+</body>
+</html>

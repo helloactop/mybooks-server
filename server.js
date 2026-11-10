@@ -71,13 +71,14 @@ app.use(routesToolboxInternal);
 
 // 管理页面在静态目录之前拦截：未登录时跳登录页并保留原始路径；API 仍返回 401 JSON。
 const MANAGEMENT_PAGES = new Set(['/shelf', '/shelf.html', '/tags', '/tags.html', '/notes', '/notes.html',
-  '/toolbox', '/toolbox.html']);
+  '/toolbox', '/toolbox.html', '/plugins', '/plugins.html', '/plugin-detail.html']);
 app.use((req, res, next) => {
   if (!['GET', 'HEAD'].includes(req.method)) return next();
   const normal = String(req.path || '/').toLowerCase().replace(/\/+$/, '') || '/';
   const management = MANAGEMENT_PAGES.has(normal)
     || normal === '/notes' || normal.startsWith('/notes/')
-    || normal === '/toolbox' || normal.startsWith('/toolbox/');
+    || normal === '/toolbox' || normal.startsWith('/toolbox/')
+    || normal === '/plugins' || normal.startsWith('/plugins/');
   if (!management) return next();
   if (auth.authenticate(req)) return next();
   res.set('Cache-Control', 'no-store');

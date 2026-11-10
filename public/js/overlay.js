@@ -562,7 +562,9 @@ window.addEventListener('resize', () => {
 if (canManageSavedSearches) loadSavedSearches();
 else renderSaved();
 
-$('#addBtn').addEventListener('click', () => openBookModal(null));
+/* 插件管理页不渲染「添加书籍」，按钮缺失时跳过绑定。 */
+const addBookBtn = $('#addBtn');
+if (addBookBtn) addBookBtn.addEventListener('click', () => openBookModal(null));
 
 /* ============ 竖屏侧滑返回 ============
  * 从左边缘向右滑 → 返回上一级。多页后层级更简单:

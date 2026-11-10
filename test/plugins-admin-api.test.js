@@ -245,7 +245,9 @@ test('Plugin Center 只读 API：认证、路由、脱敏与兼容', async () =>
     const permissions = await call('/api/plugins/md_to_epub/permissions');
     assert.equal(permissions.status, 200);
     assert.equal(permissions.data.policy_state, 'absent');
-    assert.equal(permissions.data.can_modify, false);
+    // 4C.4：absent 允许建立严格策略，broken 才禁止写入。
+    assert.equal(permissions.data.can_modify, true);
+    assert.equal(permissions.data.write_supported, true);
     assert.equal(permissions.data.requested[0].name, 'jobs.create');
 
     fs.mkdirSync(path.join(toolboxRoot, 'state'), { recursive: true });

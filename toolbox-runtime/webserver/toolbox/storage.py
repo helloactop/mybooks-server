@@ -147,6 +147,18 @@ def set_config(tool_id, data):
     os.replace(tmp, path)
 
 
+def config_version(data):
+    """配置内容的稳定版本号：键排序后取 SHA-256。
+
+    Node 侧用相同算法兜底，用于管理端“读取 → 校验 → 写入”的乐观并发控制。
+    只暴露哈希，不泄露配置内容。
+    """
+    if not isinstance(data, dict):
+        data = {}
+    canonical = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def get_work_dir(tool_id, unique_key=None):
     root = tool_root(tool_id)
     if unique_key:

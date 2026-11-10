@@ -814,6 +814,78 @@ class ConfigBridgeTests(AsyncHTTPTestCase):
         self.assertEqual(missing.code, 404)
         self.assertEqual(json.loads(missing.body)["code"], "CONFIG_NOT_FOUND")
 
+    def test_config_version_is_stable_for_same_content(self):
+        self.assertEqual(
+            storage.config_version({"a": 1, "b": [1, 2]}),
+            storage.config_version({"b": [1, 2], "a": 1}),
+        )
+        self.assertTrue(storage.config_version({}).startswith("sha256:"))
+
+    def test_config_put_merges_fields_and_keeps_other_values(self):
+        storage.set_config("config_probe", {"api_token": "secret-value", "font_size": 14})
+        headers = {"X-Mybooks-Runtime-Secret": "unit-test-secret"}
+        current = json.loads(self.fetch("/internal/tool/config_probe/config", headers=headers).body)
+
+        response = self.fetch(
+            "/internal/tool/config_probe/config",
+            method="PUT",
+            headers=headers,
+            body=json.dumps({"version": current["version"], "values": {"font_size": 20}}),
+        )
+        self.assertEqual(response.code, 200)
+        payload = json.loads(response.body)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["changed_fields"], ["font_size"])
+
+        saved = storage.get_config("config_probe")
+        self.assertEqual(saved["font_size"], 20)
+        self.assertEqual(saved["api_token"], "secret-value")
+
+    def test_config_put_rejects_stale_version_without_writing(self):
+        storage.set_config("config_probe", {"api_token": "secret-value", "font_size": 14})
+        headers = {"X-Mybooks-Runtime-Secret": "unit-test-secret"}
+
+        response = self.fetch(
+            "/internal/tool/config_probe/config",
+            method="PUT",
+            headers=headers,
+            body=json.dumps({"version": "sha256:stale", "values": {"font_size": 30}}),
+        )
+        self.assertEqual(response.code, 409)
+        payload = json.loads(response.body)
+        self.assertEqual(payload["code"], "CONFIG_VERSION_CONFLICT")
+        self.assertEqual(storage.get_config("config_probe")["font_size"], 14)
+
+    def test_config_put_clears_explicit_fields_and_validates_input(self):
+        storage.set_config("config_probe", {"api_token": "secret-value", "font_size": 14})
+        headers = {"X-Mybooks-Runtime-Secret": "unit-test-secret"}
+        current = json.loads(self.fetch("/internal/tool/config_probe/config", headers=headers).body)
+
+        cleared = self.fetch(
+            "/internal/tool/config_probe/config",
+            method="PUT",
+            headers=headers,
+            body=json.dumps({"version": current["version"], "values": {}, "clear": ["api_token"]}),
+        )
+        self.assertEqual(cleared.code, 200)
+        self.assertNotIn("api_token", storage.get_config("config_probe"))
+
+        bad = self.fetch(
+            "/internal/tool/config_probe/config",
+            method="PUT",
+            headers=headers,
+            body=json.dumps({"values": ["not", "an", "object"]}),
+        )
+        self.assertEqual(bad.code, 400)
+        self.assertEqual(json.loads(bad.body)["code"], "CONFIG_INVALID")
+
+        forbidden = self.fetch(
+            "/internal/tool/config_probe/config",
+            method="PUT",
+            body=json.dumps({"values": {"a": 1}}),
+        )
+        self.assertEqual(forbidden.code, 403)
+
 
 class SupervisorAppTests(_SupervisorFixture, AsyncHTTPTestCase):
     def setUp(self):

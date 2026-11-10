@@ -57,7 +57,12 @@ function validateNode(node, value, field, errors) {
   }
 }
 
-function validateConfig(schema, values) {
+/**
+ * 校验配置。
+ * partial=true 时只校验本次提交的字段（不做 required 检查），
+ * 供管理端“字段级合并更新”使用；规则与整份校验完全一致。
+ */
+function validateConfig(schema, values, { partial = false } = {}) {
   const errors = [];
   if (!isPlainObject(schema) || schema.type !== 'object') {
     return { ok: false, errors: [{ field: '', code: 'CONFIG_SCHEMA_INVALID', message: '配置 Schema 无效' }] };
@@ -68,9 +73,11 @@ function validateConfig(schema, values) {
   }
   const properties = isPlainObject(schema.properties) ? schema.properties : {};
   const required = Array.isArray(schema.required) ? schema.required : [];
-  for (const key of required) {
-    if (input[key] === undefined || input[key] === null || input[key] === '') {
-      errors.push({ field: key, code: 'CONFIG_REQUIRED', message: `缺少必填配置 ${key}` });
+  if (!partial) {
+    for (const key of required) {
+      if (input[key] === undefined || input[key] === null || input[key] === '') {
+        errors.push({ field: key, code: 'CONFIG_REQUIRED', message: `缺少必填配置 ${key}` });
+      }
     }
   }
   for (const [key, node] of Object.entries(properties)) {

@@ -9,6 +9,8 @@
 const express = require('express');
 
 const { center, CenterError } = require('../core/plugins/center');
+const grantsAdmin = require('../core/toolbox/grants-admin');
+const { config: configService } = require('../core/toolbox/plugin-config');
 const { TOOL_ID_RE } = require('../core/toolbox/manifest');
 
 const router = express.Router();
@@ -18,12 +20,25 @@ function noStore(res) {
 }
 
 function fail(res, err) {
-  const known = err instanceof CenterError;
+  // 4xx 且带明确错误码的业务错误可以直接回传；其余一律按内部错误脱敏。
+  const known = err instanceof CenterError
+    || (err && typeof err.code === 'string' && Number.isSafeInteger(err.status)
+      && err.status >= 400 && err.status < 500);
   if (!known) console.error('[plugins-admin]', err && (err.stack || err));
   const status = known ? err.status : 500;
   const code = known ? err.code : 'INTERNAL_ERROR';
   const message = known ? err.message : '插件管理请求失败';
-  return res.status(status).json({ error: { code, message }, code, message });
+  const body = { error: { code, message }, code, message };
+  if (known && err.details !== undefined) body.details = err.details;
+  return res.status(status).json(body);
+}
+
+function bodyOf(req) {
+  const body = req.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new CenterError('INVALID_BODY', '请求体必须是 JSON 对象', 400);
+  }
+  return body;
 }
 
 function pluginId(raw) {
@@ -161,10 +176,45 @@ router.get('/api/plugins/:id/logs', async (req, res) => {
     noStore(res);
     res.json(await center.logs(pluginId(req.params.id), {
       type,
+      since: String(req.query.since || '').trim(),
       limit: limitParam(req.query.limit, 50, 200),
       offset: offsetParam(req.query.offset),
     }));
   } catch (err) {
+    fail(res, err);
+  }
+});
+
+// 权限写入：只改 grants.json 中当前插件那一段，原子替换 + 版本冲突检测。
+router.put('/api/plugins/:id/permissions', async (req, res) => {
+  const id = String(req.params.id || '').trim();
+  try {
+    noStore(res);
+    const body = bodyOf(req);
+    const result = await grantsAdmin.updatePermissions(id, {
+      permissions: body.permissions,
+      ifVersion: body.if_version,
+    });
+    res.json({ ...result, permissions: await center.permissions(id) });
+  } catch (err) {
+    await grantsAdmin.recordFailure(id, 'permission.update', err && err.code);
+    fail(res, err);
+  }
+});
+
+// 配置写入：Node 校验 Schema 后交给 Runtime 合并落盘，敏感字段由 Runtime 加密保存。
+router.put('/api/plugins/:id/config', async (req, res) => {
+  const id = String(req.params.id || '').trim();
+  try {
+    noStore(res);
+    const body = bodyOf(req);
+    res.json(await configService.save(id, {
+      values: body.values,
+      clearSensitive: body.clear_sensitive,
+      ifVersion: body.if_version,
+    }));
+  } catch (err) {
+    await configService.recordFailure(id, 'config.update', err && err.code);
     fail(res, err);
   }
 });

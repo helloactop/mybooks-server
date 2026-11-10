@@ -50,6 +50,14 @@ router.get('/toolbox/tool/:id', (req, res) => {
   page(res, 'toolbox-tool.html');
 });
 
+// 插件管理中心：页面本身不含数据，全部由 /api/plugins/* 提供。
+// 非法 ID 直接回到列表，避免动态段吞掉静态资源或产生路径穿越。
+router.get('/plugins', (req, res) => page(res, 'plugins.html'));
+router.get('/plugins/:id', (req, res) => {
+  if (!TOOL_ID_RE.test(String(req.params.id))) return res.redirect('/plugins');
+  page(res, 'plugin-detail.html');
+});
+
 router.get('/book/:id(\\d+)', (req, res) => {
   res.redirect(302, `/shelf?book=${req.params.id}`);
 });

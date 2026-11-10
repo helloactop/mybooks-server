@@ -149,7 +149,7 @@ function record(event = {}) {
   return writeQueue;
 }
 
-function parseLines(text, { toolId = '', before = '' } = {}) {
+function parseLines(text, { toolId = '', before = '', since = '' } = {}) {
   const entries = [];
   let skipped = 0;
   for (const raw of text.split('\n')) {
@@ -168,6 +168,7 @@ function parseLines(text, { toolId = '', before = '' } = {}) {
     }
     if (toolId && item.tool_id !== toolId) continue;
     if (before && item.ts >= before) continue;
+    if (since && item.ts < since) continue;
     entries.push({
       at: item.ts,
       actor: 'admin',
@@ -186,7 +187,7 @@ function parseLines(text, { toolId = '', before = '' } = {}) {
 /**
  * 分页读取审计日志。只读当前文件；历史轮转文件保留给运维排查。
  */
-async function list({ toolId = '', limit = 50, offset = 0, before = '' } = {}) {
+async function list({ toolId = '', limit = 50, offset = 0, before = '', since = '' } = {}) {
   const max = Math.max(1, Math.min(Number(limit) || 50, MAX_LIMIT));
   const skip = Math.max(0, Number(offset) || 0);
   let text = '';
@@ -198,7 +199,7 @@ async function list({ toolId = '', limit = 50, offset = 0, before = '' } = {}) {
     }
     throw new Error(`审计日志不可读：${err.message}`);
   }
-  const parsed = parseLines(text, { toolId, before });
+  const parsed = parseLines(text, { toolId, before, since });
   return {
     entries: parsed.entries.slice(skip, skip + max),
     total: parsed.entries.length,

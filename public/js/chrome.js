@@ -34,10 +34,18 @@ const NAV_ITEMS = [
   { id: 'account', label: '账号', href: '/login' },
   { id: 'home', label: '首页', href: '/' },
   { id: 'shelf', label: '书架', href: '/shelf' },
+  { id: 'plugins', label: '插件', href: '/plugins' },
   { id: 'rank', label: '榜单', href: '/rank' },
   { id: 'stats', label: '统计', href: '/stats' },
   { id: 'tags', label: '分类', href: '/tags' },
 ];
+
+/* 插件详情 /plugins/:id 属于「插件」一级项,高亮跟着父级走。 */
+const NAV_ALIASES = { 'plugin-detail': 'plugins' };
+
+function navIsActive(navId, current) {
+  return navId === (NAV_ALIASES[current] || current);
+}
 
 /* 桌面端悬停下拉不再给「书架」:书架页左侧已有完整筛选栏,
    悬停弹一次只是重复入口;触屏点开的二级菜单仍保留。 */
@@ -114,7 +122,7 @@ function dropCaretSvg(cls) {
 
 function navHtml(current) {
   return NAV_ITEMS.map((n) => {
-    const on = n.id === current;
+    const on = navIsActive(n.id, current);
     const menu = n.id in NAV_MENUS && !NO_DESKTOP_FLYOUT.has(n.id);
     const attrs = [
       on ? 'class="active"' : '',
@@ -131,7 +139,7 @@ function navHtml(current) {
  * 一级列表不带箭头 —— 实测 apple.com 移动端菜单也没有);没有分组的就是普通链接。 */
 function mobileNavHtml(current) {
   return NAV_ITEMS.map((n, i) => {
-    const on = n.id === current;
+    const on = navIsActive(n.id, current);
     const menu = n.id in NAV_MENUS;
     if (!menu) {
       return `<a href="${n.href}"${on ? ' class="active" aria-current="page"' : ''} style="--mm-i:${i}">${n.label}</a>`;
@@ -243,6 +251,9 @@ function loadNavLists() {
   });
 }
 
+/* 插件管理页不提供「添加书籍」，页面也没有加载书籍表单相关脚本。 */
+const HEADER_ADD_HIDDEN = new Set(['plugins', 'plugin-detail']);
+
 function headerHtml(current) {
   return `
   <header class="topbar" data-glass="bar">
@@ -258,9 +269,9 @@ function headerHtml(current) {
         <button type="button" id="searchBtn" class="icon-btn" title="搜索" aria-label="搜索">
           ${icon('search', 18, 2.4)}
         </button>
-        <button type="button" id="addBtn" class="icon-btn" title="添加书籍" aria-label="添加书籍">
+        ${HEADER_ADD_HIDDEN.has(current) ? '' : `<button type="button" id="addBtn" class="icon-btn" title="添加书籍" aria-label="添加书籍">
           ${icon('square-plus', 18, 2.4)}
-        </button>
+        </button>`}
       </div>
       <button type="button" id="menuBtn" class="mobile-menu-btn" aria-label="打开菜单" aria-expanded="false" aria-controls="mobileMenu">
         <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">

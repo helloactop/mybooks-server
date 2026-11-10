@@ -3,6 +3,11 @@
 > 技术基线：原生 JS（IIFE）+ 现有 `style.css` / `toolbox.css` token + Lucide sprite。
 > 不引入 React/Vue、第二套 CSS 设计系统、第二套图标库。
 > 页面入口：`/plugins`、`/plugins/:id`；旧 `/toolbox` 保留。
+>
+> **实施状态（4C.3 + 4C.4，2026-11-10）**：本文档描述的页面与交互已实现，代码见
+> `public/plugins.html`、`public/plugin-detail.html`、`public/js/page-plugins.js`、
+> `public/js/page-plugin-detail.js`、`public/js/plugin-center.js`、`public/js/plugin-config-form.js`、
+> `public/css/plugins.css`。权限与配置已从只读升级为可保存；与实际实现的差异见 §14。
 
 ## 1. 导航与入口
 
@@ -313,3 +318,24 @@ public/css/plugins.css           .pc-* 布局；不覆盖 .tb-* 视觉
 - 不提供 Runtime 环境变量在线开关。
 - 不实现 Bridge v2、UI Slot、Plugin/route 装饰器。
 - 不重写 `toolbox-tool.html` / `page-toolbox-tool.js`（4D 范围）。
+
+## 14. 实施状态与差异（4C.4）
+
+已实现（与本文档的差异按实际行为为准）：
+
+| 区域 | 实际行为 |
+| --- | --- |
+| 权限开关 | `role="switch"` 按钮 + `aria-checked`；未勾选默认关闭；只展示 Manifest 声明的权限 |
+| 风险说明 | 每项权限显示“低/中/高风险”徽章与中文语义（`grants-admin` 的 `catalog`），高风险的 `network.private`、`books.delete` 需二次确认才保存 |
+| scope | 资源型权限提供输入框，默认取 Manifest 声明或 `library:all`；非资源型禁用并归一化为 `*` |
+| 撤销确认 | 保存时若会撤销已授予权限，先弹确认框列出被撤销项（撤销立即生效） |
+| 策略状态 | `absent` 提示“首次保存建立严格策略”；`broken` / `last-good` 全部控件禁用、保存按钮禁用 |
+| 未声明授权 | 已授予但 Manifest 未声明的权限单列警告，保存后会被撤销 |
+| 配置控件 | `string` / `enum`（select）/ `integer` / `number` / `boolean`（checkbox）；不支持的类型不在本轮渲染 |
+| 敏感字段 | 不回填原值，输入框为空并提示“已配置，留空保持原值”；勾选“清除”才会删除；掩码值永不提交 |
+| 保存状态 | 未修改 / 有未保存修改 / 正在保存 / 保存成功 / 校验失败 / 版本冲突，均以服务端结果为准 |
+| 冲突处理 | 409 时提示“已被其他操作修改”，自动重新加载服务端状态，不保留本地草稿 |
+| 日志 | 类型（错误/任务消息/管理审计）+ 时间范围（全部/24 小时/7 天）+ 分页；审计行显示操作人与结果 |
+| 运行时离线 | 配置区只读并提示 `RUNTIME_UNAVAILABLE`，不提供保存 |
+
+未实现：配置历史/diff 视图、数组/对象类型的可视化编辑（提示改用插件界面）、Runtime stdout 采集。

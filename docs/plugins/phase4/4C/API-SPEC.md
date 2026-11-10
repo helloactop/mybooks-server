@@ -205,33 +205,49 @@
 
 ### PUT /api/plugins/:id/permissions
 
+> 实施状态：4C.4 已实现（`src/core/toolbox/grants-admin.js`）。以下为实际契约。
+
 请求：
 
 ```json
 {
-  "grants": ["books.read:library:all", "jobs.create"],
-  "if_version": "sha256:…"
+  "if_version": "sha256:…",
+  "permissions": [
+    { "name": "books.read", "scope": "library:all" },
+    { "name": "jobs.create" }
+  ]
 }
 ```
 
 规则：
 
-1. `grants` 必须是数组，≤200 条，元素格式 `permission[:scope]`。
-2. 权限名必须在 `permissions.js` 目录中；scope 通过 `assertScope`。
-3. 只允许授予该插件 Manifest 声明过的权限（`PERMISSION_NOT_REQUESTED`）。
-4. 资源型权限（`RESOURCE_SCOPED`）必须带 scope，不允许裸权限。
-5. `if_version` 不匹配 → `409 GRANTS_CONFLICT`（并发修改）。
-6. 原子写 `state/grants.json`（tmp + rename + 0600），并更新 `grants.last-good.json`。
-7. 写入审计（before/after 权限列表，不含配置值）。
+1. `permissions` 必须是数组，≤64 条；`name` 必须同时存在于权限目录和该插件 Manifest 声明中。
+2. 未知权限 → `400 PERMISSION_INVALID`；未声明 → `400 PERMISSION_NOT_DECLARED`。
+3. 资源型权限（`RESOURCE_SCOPED`）必须带 scope → 否则 `400 PERMISSION_SCOPE_REQUIRED`；
+   scope 通过 `assertScope` → 否则 `400 PERMISSION_SCOPE_INVALID`。
+4. 非资源型权限的 scope 归一化为 `*`。
+5. `if_version` 必须等于当前 `grants.json` 的 SHA-256；不匹配 → `409 POLICY_VERSION_CONFLICT`
+   （`details.current_version` 返回最新版本）。写入串行化，并发请求只有一个成功。
+6. `policy_state=broken` → `409 POLICY_BROKEN`；`last-good`（文件不可读）→ `409 POLICY_NOT_WRITABLE`；
+   两种状态都不修改原文件。
+7. 原子替换 `state/grants.json`（tmp + rename + 0600），保留其他插件条目，
+   写入后刷新 `grants.last-good.json` 与内存缓存；空数组表示“已配置但全部拒绝”，不会退回 Legacy。
+8. 审计：`permission.grant` / `permission.revoke` / `permission.scope.update`，
+   `detail.changed_fields` 只包含权限标识，不记录配置值。
 
 响应：
 
 ```json
-{ "ok": true, "policy_state": "ok", "version": "sha256:…", "granted": ["jobs.create"] }
+{
+  "ok": true,
+  "version": "sha256:…",
+  "policy_state": "ok",
+  "changed": { "granted": ["jobs.create"], "revoked": [], "scope_updated": [], "total": 1 },
+  "permissions": { "policy_state": "ok", "effective": [], "catalog": [] }
+}
 ```
 
-错误：`PERMISSION_INVALID`(400)、`PERMISSION_NOT_REQUESTED`(400)、
-`GRANTS_CONFLICT`(409)、`GRANTS_WRITE_FAILED`(500)。
+`permissions` 为写入后的最新只读视图（与 GET 同结构）。
 
 ## 7. 配置
 
@@ -241,32 +257,50 @@
 {
   "schema": { "type": "object", "properties": { "api_token": { "type": "string", "x-sensitive": true } }, "required": ["api_token"] },
   "values": { "api_token": "******", "font_size": 14 },
+  "sensitive": { "api_token": true },
+  "version": "sha256:…",
   "has_custom_ui": true,
-  "runtime_online": true
+  "runtime_online": true,
+  "configured": true,
+  "validation": { "ok": true, "errors": [] }
 }
 ```
 
 - 无 `config.schema` → `404 CONFIG_SCHEMA_MISSING`；前端显示“该插件无声明式配置”。
 - 运行时离线 → `503 RUNTIME_UNAVAILABLE`；前端降级为“打开插件界面配置”。
-- 敏感字段一律 `******`；不得返回明文。
+- 敏感字段一律 `******`；`sensitive[field]` 表示是否已配置，不暴露原文。
+- `version` 由 Runtime 对配置内容（键排序 JSON）取 SHA-256，用于乐观并发控制。
 
 ### PUT /api/plugins/:id/config
+
+> 实施状态：4C.4 已实现（`src/core/toolbox/plugin-config.js` + Runtime `PUT /internal/tool/:id/config`）。
 
 请求：
 
 ```json
-{ "values": { "api_token": "******", "font_size": 16 } }
+{
+  "if_version": "sha256:…",
+  "values": { "font_size": 16, "api_token": "new-secret" },
+  "clear_sensitive": ["webhook_secret"]
+}
 ```
 
 规则：
 
-1. Node 先用 `validateConfig(schema, values)` 校验；失败 `400 CONFIG_INVALID` + `errors[]`（只含字段名/规则）。
-2. 服务端读取现有完整配置，仅合并 Schema 声明字段；未声明字段（如 `accounts`）原样保留。
-3. 值为 `******` 的敏感字段保持原值，不写入掩码字符串。
-4. 通过 `POST /internal/tool/{id}/config` 交给 Python `storage.set_config`（AES-256-GCM）。
-5. 写审计（字段名列表，不写值）。
+1. `values` / `clear_sensitive` 必须是对象 / 字符串数组；只提交发生变化的字段。
+2. 未知字段或类型/枚举/范围/长度不符 → `400 CONFIG_VALIDATION_FAILED`，`details.errors[]` 只含字段名与规则。
+3. 值为 `******` 的敏感字段视为“保持原值”，不会被写入；留空同样保持原值。
+4. 只有出现在 `clear_sensitive` 且 Schema 标记 `x-sensitive` 的字段才会被删除；
+   同一字段不能同时出现在 `values` 与 `clear_sensitive`。
+5. 必填字段按“当前已配置状态 + 本次提交”判断，缺一即失败（敏感字段只看是否已配置，不读明文）。
+6. Node 通过 `PUT /internal/tool/{id}/config` 交给 Runtime：Runtime 在进程内加锁完成
+   “读取 → 版本校验 → 字段合并 → AES-256-GCM 落盘（tmp + rename）”。
+7. `if_version` 不匹配 → `409 CONFIG_VERSION_CONFLICT`（`details.current_version`）。
+8. Runtime 不可用 → `503 RUNTIME_UNAVAILABLE`，不会退回 Node 直接读写加密文件。
+9. 审计：`config.update`（字段名列表）、`config.secret.clear`（被清除的字段名）。
 
-响应：`{ "ok": true, "values": { "...": "******" }, "saved_at": "..." }`
+响应：`{ "schema": …, "values": { "api_token": "******" }, "sensitive": {…}, "version": "sha256:…",
+"changed": { "fields": ["font_size"], "cleared": [] } }`
 
 ## 8. 版本
 
@@ -442,3 +476,37 @@ X-Mybooks-Runtime-Secret: <runtime-secret>
 - `core/toolbox/audit.js` 追加 JSONL，单行 ≤8KB，文件 >1MB 轮转，保留 3 份；
 - 已接入 install/update/rollback/enable/disable/uninstall/runtime.restart；
 - 不记录 Cookie、令牌、配置值与绝对路径。
+
+---
+
+## 15. Phase 4C.4 实施状态（2026-11-10）
+
+新增写入能力（全部基于既有模块，没有第二套权限库或加密实现）：
+
+| 接口 | 实现 | 关键约束 |
+| --- | --- | --- |
+| `PUT /api/plugins/:id/permissions` | `core/toolbox/grants-admin.js` | 仅 Manifest 声明权限；scope 走 `assertScope`；序列化写入 + `if_version` 409；broken/last-good 拒写；原子替换 + last-good + 缓存失效 |
+| `PUT /api/plugins/:id/config` | `core/toolbox/plugin-config.js` → Runtime `PUT /internal/tool/:id/config` | 字段级合并；敏感字段掩码/留空保持、显式清除；版本冲突 409；Runtime 离线 503 |
+| `GET /api/plugins/:id/permissions` | 追加 `catalog`、`write_supported=true`、`can_modify`（`ok` / `absent` 可写） | 只读视图不变，仅加法字段 |
+| `GET /api/plugins/:id/config` | 追加 `version`、`sensitive`、`configured`、`validation` | 仍不返回敏感原文 |
+| `GET /api/plugins/:id/logs?type=audit&since=` | `audit.list({ since })` | 审计条目追加 `actor`、`result`；`since` 由服务端过滤 |
+
+内部桥（Runtime → Node 的配置通道）：
+
+```http
+PUT /internal/tool/:id/config
+X-Mybooks-Runtime-Secret: <runtime-secret>
+{ "version": "sha256:…", "values": {...}, "clear": ["secret_field"] }
+→ { ok: true, tool_id, version, changed_fields, cleared }
+```
+
+- Runtime 内 `threading.Lock` 串行完成“读取 → 版本校验 → 合并 → `storage.set_config`（AES-256-GCM，tmp + replace）”。
+- 版本号算法两侧一致：`sha256` over 键排序、无空格的 JSON；
+  Node 兜底实现（旧 Runtime 无 `version` 字段）与 Python 实测哈希完全一致。
+- 不执行插件代码；`CONFIG_VERSION_CONFLICT`(409)、`CONFIG_INVALID`(400)、`CONFIG_WRITE_FAILED`(500)。
+
+未实现/边界：
+
+- 配置历史版本与 diff 视图；插件自定义配置界面仍走 `/toolbox/tool/:id`。
+- Runtime stdout 仍不提供逐插件捕获。
+- 权限写入不修改 Kernel `GrantStore`（仅 Toolbox `state/grants.json`）。

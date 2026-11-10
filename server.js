@@ -212,12 +212,59 @@ function runTrashMaintenance() {
 runTrashMaintenance();
 setInterval(runTrashMaintenance, TRASH_MAINTENANCE_INTERVAL_MS).unref();
 
-// 工具箱启动恢复：上次进程中断时仍在 running 的任务标记失败；
-// 把数据库里的启用清单写回共享卷，Python runtime 启动时即可读取。
+// 工具箱启动恢复：
+//   1. 把数据库里的启用清单写回共享卷，Python runtime 启动时即可读取；
+//   2. 区分三种中断场景，避免把仍在执行的任务误判为失败：
+//      · Runtime 完全离线 → 所有 running 任务都是中断的；
+//      · Runtime 在线但插件未加载 → 该插件的任务已中断；
+//      · Runtime 在线且插件已加载 → 保留 running，仅回收长时间无进展的僵死任务。
 try {
-  const recovered = toolboxRepo.recoverRunningTasks(db);
-  if (recovered) console.log(`[toolbox] 已标记 ${recovered} 个中断任务为失败`);
   const tools = toolboxInstaller.syncInstalledState(db);
+  const unreviewed = tools.filter((tool) => !(tool.compatibility && tool.compatibility.reviewed));
+  if (unreviewed.length) {
+    console.warn(
+      '[toolbox] 警告：未审查插件 %s 与宿主同进程运行（共享 Worker 不是安全边界，'
+      + '插件可读取同卷其它插件配置）。只应安装已审查插件；需要运行未审查代码时请启用 '
+      + 'TOOLBOX_ISOLATE_PLUGINS=1 并使用独立 UID 模式。',
+      unreviewed.map((tool) => tool.tool_id).join(', '));
+  }
+  const runtime = require('./src/core/toolbox/runtime');
+  const TASK_STALE_MS = 6 * 3600 * 1000;
+  const bootAt = new Date().toISOString();
+  runtime.runtimeHealth({ timeoutMs: 3000 }).then((health) => {
+    try {
+      let recovered = 0;
+      if (!health.online) {
+        recovered = toolboxRepo.recoverRunningTasks(db, '插件运行时离线，任务已中断', {
+          createdBefore: bootAt,
+        });
+        console.log('[toolbox] 运行时离线，已标记 %d 个任务为失败', recovered);
+      } else {
+        const loaded = new Set(((health.info && health.info.plugins) || []).map(String));
+        recovered = toolboxRepo.recoverRunningTasks(
+          db,
+          '插件未加载或任务长时间无进展，已标记失败',
+          {
+            excludeToolIds: [...loaded],
+            staleBefore: new Date(Date.now() - TASK_STALE_MS).toISOString(),
+            createdBefore: bootAt,
+          },
+        );
+        if (recovered) console.log('[toolbox] 已回收 %d 个中断/僵死任务', recovered);
+        const pathStatus = runtime.runtimePathStatus(health.info);
+        if (pathStatus.checked && pathStatus.mismatch) {
+          console.error(
+            '[toolbox] 部署路径不一致：Node=%s Runtime=%s；'
+            + '请让两个进程挂载同一个 MYBOOKS_TOOLBOX_DIR，否则插件产物无法入库',
+            pathStatus.node, pathStatus.runtime);
+        }
+      }
+    } catch (err) {
+      console.error('[toolbox] 任务恢复失败:', err.stack || err);
+    }
+  }).catch((err) => {
+    console.error('[toolbox] 运行时健康检查失败:', err && (err.stack || err));
+  });
   if (tools.length) {
     // 这是“服务启动加载”，不是安装时执行：Python Worker 可能比 Node 晚几秒启动，
     // 因此短暂重试；加载报告会写回 pending_restart/last_error。

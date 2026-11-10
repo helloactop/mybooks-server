@@ -47,7 +47,16 @@ def runtime_authorized(handler):
 
 class HealthHandler(tornado.web.RequestHandler):
     def get(self):
-        json_response(self, 200, {"status": "ok", "plugins": [item["tool_id"] for item in host.summary()]})
+        json_response(self, 200, {
+            "status": "ok",
+            "isolated": False,
+            "isolation_mode": "shared",
+            "plugins": [item["tool_id"] for item in host.summary()],
+            # 部署自检：Node 与本 Runtime 必须指向同一个共享卷路径。
+            "toolbox_dir": config.TOOLBOX_ROOT,
+            "data_dir": config.DATA_ROOT,
+            "plugin_auth_only": config.plugin_auth_only(),
+        })
 
 
 class ReloadHandler(tornado.web.RequestHandler):
@@ -168,10 +177,13 @@ class SupervisorHealthHandler(tornado.web.RequestHandler):
         json_response(self, 200, {
             "status": "ok",
             "isolated": True,
+            "isolation_mode": "uid" if self._supervisor.isolation_status().get("uid_enabled") else "process",
             "plugins": [child["tool_id"] for child in children if child.get("online")],
             "children": children,
             "deferred": self._supervisor.deferred(),
             # 两侧配置与真实生效的隔离能力，便于部署核对（不含任何密钥）。
+            "toolbox_dir": config.TOOLBOX_ROOT,
+            "data_dir": config.DATA_ROOT,
             "plugin_auth_only": config.plugin_auth_only(),
             "node_plugin_auth_only": config.node_runtime_mode(),
             "uid_isolation": self._supervisor.isolation_status(),

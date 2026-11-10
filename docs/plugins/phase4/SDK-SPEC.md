@@ -123,6 +123,34 @@ SDK 的兼容层只是把 `self.api` 的命名空间映射为 `sdk.*`，行为�
 
 ### 4.3 SDK 模式（4B 新增）
 
+> 状态：**以下 `Plugin` / `route` 装饰器写法是 4C+ 设计稿，当前宿主未实现**，
+> 不能直接运行。4B 已实现的是“旧 `BaseTool` + `sdk` 属性”的装配方式：
+
+```python
+from mybooks_plugin_sdk import compat
+
+class MdToEpubTool(BaseTool):
+    def tool_id(self):
+        return "md_to_epub"
+
+    async def convert(self, handler):
+        sdk = compat.from_tool(self)   # 复用 Runtime 的 sdk_for 缓存
+        task = await sdk.jobs.create({"operation": "convert", "details": {"title": "示例"}})
+        work = self.api.storage.get_work_dir(unique_key=task["job_id"])
+        # ...生成 work/out.epub...
+        artifact = await sdk.files.publish({
+            "job_id": task["job_id"],
+            "path": "work/out.epub",
+            "format": "epub",
+            "max_bytes": 80 * 1024 * 1024,
+        })
+        await sdk.jobs.progress(task["job_id"], 100)
+        await sdk.jobs.complete(task["job_id"], status="completed")
+        return {"err": "ok", "data": {"artifact_id": artifact["artifact_id"]}}
+```
+
+未来装饰器形态（未实现，仅设计参考）：
+
 ```python
 from mybooks_plugin_sdk import Plugin, route, Response, errors
 
@@ -131,53 +159,73 @@ class MdToEpubTool(Plugin):
 
     @route("convert", methods=["POST"], timeout_ms=300000)
     async def convert(self, req):
-        title = req.form.get("title") or "Untitled"
-        task = await self.sdk.jobs.create({"operation": "convert", "details": {"title": title}})
-
-        work = self.sdk.files.work_dir(unique_key=task["job_id"])
-        epub = await self.build_epub(req.files["markdown"], work, title)
-
-        artifact = await self.sdk.files.publish({
-            "job_id": task["job_id"],
-            "path": epub,
-            "format": "epub",
-            "max_bytes": 80 * 1024 * 1024,
-        })
-        await self.sdk.jobs.progress(task["job_id"], 100)
-        await self.sdk.jobs.complete(task["job_id"], status="done")
-        return Response.json({"err": "ok", "artifact_id": artifact["artifact_id"]})
+        ...
 ```
 
 约束：
 
 - `req.form` / `req.files` 只包含本次请求数据，最大 body 由 Manifest 与宿主上限共同约束。
 - 插件返回统一 `{"err": "ok", "data": ...}`；异常抛 `errors.PluginError(code, message)`，宿主映射为稳定错误码。
-- 任务失败必须调用 `jobs.complete(status="failed")`；进程崩溃由宿主标记失败。
+- 任务失败必须调用 `jobs.complete(status="failed", error="...")`；进程崩溃由宿主标记失败。
+- `compat.from_tool()` 与 `CoreAPI.sdk` 返回同一个实例（同一 `tool_id` 共享缓存），不会出现两套配置。
 
 ### 4.4 能力调用签名（节选）
 
+所有方法同时支持**结构化 dict**（推荐，文档示例即回归测试）与位置参数；
+dict 中未知字段、缺失必填字段、query 与 isbn 同时出现都会抛 `PluginError`，
+不会把 dict 隐式 `str()` 成查询条件或路径。
+
 ```python
+# books
 await sdk.books.search({"q": "三体", "limit": 20})
-await sdk.books.get(book_id=1)
+await sdk.books.search("三体", 20)                 # 旧位置参数仍可用
+await sdk.books.get({"book_id": 1})
 await sdk.books.create({"title": "三体", "authors": ["刘慈欣"]})
-await sdk.books.update(book_id=1, fields={"title": "三体（新版）"})
-await sdk.books.reading_status(book_id=1)
+await sdk.books.update({"book_id": 1, "fields": {"title": "三体（新版）"}})
+await sdk.books.reading_status({"book_id": 1})
 
-await sdk.files.publish({"job_id": 12, "path": "out.epub", "format": "epub"})
-await sdk.files.import_file({"job_id": 12, "path": "out.epub", "title": "三体"})
-await sdk.files.metadata(artifact_id="art_...")
+# files
+await sdk.files.publish({"job_id": 12, "path": "work/out.epub", "format": "epub"})
+await sdk.files.import_file({"job_id": 12, "path": "work/out.epub", "title": "三体"})
+await sdk.files.metadata({"artifact_id": "art_..."})
+await sdk.files.delete({"artifact_id": "art_..."})
 
-task = await sdk.jobs.create({"operation": "download"})
-await sdk.jobs.progress(task["job_id"], 42)
-await sdk.jobs.complete(task["job_id"], status="done")
+# jobs
+task = await sdk.jobs.create({"operation": "download", "details": {}})
+await sdk.jobs.progress(task["job_id"])            # 只读
+await sdk.jobs.progress(task["job_id"], 42)        # 更新，0..100
+await sdk.jobs.get(task["job_id"])
+await sdk.jobs.complete(task["job_id"], status="completed")  # done → completed
+await sdk.jobs.complete(task["job_id"], status="failed", error="网络错误")
+await sdk.jobs.complete(task["job_id"], status="cancelled")
 await sdk.jobs.cancel(task["job_id"])
 
+# config / metadata
 cfg = await sdk.config.get()          # 敏感字段为 "******"
 await sdk.config.set({"cookie": "..."})
 await sdk.config.validate({"title": "x"})
-
 await sdk.metadata.search({"isbn": "9787020002207"})
+await sdk.metadata.search({"query": "三体", "limit": 5})
 ```
+
+字段约束：
+
+| 方法 | dict 允许字段 | 说明 |
+| --- | --- | --- |
+| `books.search` | `q` / `query` / `limit` | 两者不能同时出现；`limit` 1..500 |
+| `books.get` / `reading_status` | `book_id` / `id` | — |
+| `books.update` | `book_id` / `id` / `fields` | `fields` 走字段白名单 |
+| `files.publish` | `path` / `file_path`、`job_id` / `task_id`、`format` / `fmt`、`title`、`sha256`、`max_bytes` | 路径/任务归属/SHA/大小仍由宿主校验 |
+| `files.import_file` | `job_id` / `task_id`、`path` / `file_path`、`title`、`authors` | 相对路径按插件数据目录解析；`format/sha256/max_bytes` 显式报错 |
+| `jobs.create` | `operation`、`details` | `operation` 必填且 ≤ 40 字符 |
+| `jobs.progress` | `job_id` / `task_id`、`progress` / `value` | 0..100 |
+| `jobs.complete` | `job_id` / `task_id`、`status`、`error`、`message`、`result_book_id` | 只接受 `completed` / `failed` / `cancelled`；`done` 映射为 `completed` |
+
+任务语义：
+
+- 终态只允许 `completed` / `failed` / `cancelled`；终态任务再次更新会被宿主以 `TASK_ALREADY_FINISHED`（409）拒绝。
+- 进度必须单调递增（相同值可幂等重试），回退返回 `TASK_PROGRESS_REGRESSION`（409），越界返回 `TASK_PROGRESS_INVALID`（400）。
+- 旧写法 `complete(job_id, error_text)` 不再支持；错误文本请用 `error=`。
 
 所有方法默认 60 秒超时；`jobs.*` 与 `files.*` 的长操作按能力建议值（见能力目录）。取消使用 `asyncio.CancelledError` 或宿主 `abort` 信号。
 
@@ -217,37 +265,43 @@ Python SDK 将 HTTP 错误映射为 `PluginError(code, message, status, retryabl
 - `plugin-sdk/v1.js` 是新增的薄封装，不替代 Bridge。
 - 资源由宿主提供并带 CSP 白名单；插件不得自行加载 CDN 脚本（默认 `default-src 'none'`）。
 
-### 5.2 API
+### 5.2 API（v1 已实现）
 
 ```js
-MyBooksUI.ready({ protocol: 2 }).then((caps) => {
-  // caps: { protocol: 2, bridge: 2, slots: [...], schema: true }
-});
+const caps = await MyBooksUI.ready();
+// caps: { protocol: 1, sdk: '1.0.0', bridge: 'v1', toolId: 'md_to_epub' }
 
-// 能力调用（等价 bridge.fetch）
-const data = await MyBooksUI.bridge.fetch('search?q=三体');
-const res = await MyBooksUI.bridge.fetch('convert', {
+// 能力调用：路由 + query/body，内部转给 MyBooksToolBridge.fetch
+const data = await MyBooksUI.call('search', { query: { q: '三体' } });
+const res = await MyBooksUI.call('convert', {
   method: 'POST',
-  body: JSON.stringify({ title: '三体' }),
+  body: { title: '三体' },           // 对象会自动 JSON 序列化；FormData 原样传递
 });
 
-// 任务轮询（4B）
-const stop = MyBooksUI.jobs.watch(jobId, {
+// 任务轮询（可停止；最小间隔 500ms，pagehide 自动释放）
+const watcher = MyBooksUI.jobs.watch(jobId, {
+  route: 'progress',
   intervalMs: 1500,
   onUpdate(job) { /* status/progress */ },
   onDone(job) { /* result */ },
+  onError(err) { /* WATCH_TIMEOUT / HOST_ERROR */ },
 });
+watcher.stop();
 
-// 配置表单（4D，Schema UI）
-MyBooksUI.config.render(document.querySelector('#config'), schema, {
-  values: await MyBooksUI.config.get(),
-  onSave: (values) => MyBooksUI.config.save(values),
-});
+// 配置（插件自己的 config 路由）
+const values = await MyBooksUI.config.get();
+await MyBooksUI.config.save(values);
 
-// 主题/语言
+// 主题/语言（转发 Bridge 回调，宿主未提供时返回空函数）
 MyBooksUI.onThemeChange((theme) => {});
 MyBooksUI.onLocaleChange((locale) => {});
 ```
+
+未实现（不得标记为已完成）：
+
+- `MyBooksUI.bridge.fetch` 命名空间（请用 `MyBooksUI.call`；直接调用仍可用 `MyBooksToolBridge.fetch`）。
+- `MyBooksUI.ready({ protocol: 2 })` 协商（当前固定返回 `protocol: 1`）。
+- `MyBooksUI.config.render(...)` 的 4D Schema 表单渲染。
 
 ### 5.3 消息协议（v2）
 
@@ -305,3 +359,18 @@ MyBooksUI.onLocaleChange((locale) => {});
 - 事件订阅（`book.created` 等）与 4D UI Slot。
 - `files.download@1` 的独立 Artifact 下载端点（现有书库下载路由保持不变）。
 - 真实插件数据包本轮未重新下载；旧插件兼容由现有 `plugin-*.test.js` / `toolbox.test.js` 回归覆盖。
+
+## 9. Phase 4B-R 修复结果（2026-11-10）
+
+| 项目 | 结果 |
+| --- | --- |
+| SDK dict 契约 | `books/files/jobs/metadata` 全部支持文档中的 dict 与旧位置参数；未知字段/缺参抛 `PLUGIN_ARGUMENT_INVALID` |
+| `jobs.progress` | `progress(job_id)` 读、`progress(job_id, 42)` 写；0..100 |
+| `jobs.complete` | 只接受 `completed/failed/cancelled`；`done` 映射为 `completed`；`error=` 派生 `failed` |
+| 任务状态机 | 终态禁改（`TASK_ALREADY_FINISHED`）；进度不可回退（`TASK_PROGRESS_REGRESSION`） |
+| `compat.from_tool` | 真实镜像可用，复用 `sdk_for` 缓存；导入失败抛 `CompatSetupError` 并保留原因 |
+| 文件路径 | `files.import_file` 相对路径按插件数据目录解析；`files.publish` 仍由宿主做路径/归属/SHA/大小校验 |
+| 回归测试 | `test_contract_dict.py` 22 项、`test_compat_runtime.py` 7 项、Node 4B-R 7 项；镜像内 dict 调用与 compat 装配均通过 |
+
+仍未实现：`Plugin`/`route` 装饰器、Bridge v2 协商、4D Schema 表单、事件订阅。
+以上均不得在 4C 中按“已实现”消费。

@@ -41,16 +41,16 @@ function normalizeSource(source) {
 
 /**
  * 信任级别由宿主赋值。
- *   1. 本地来源 → local
- *   2. allowlist 命中且 SHA-256 一致 → reviewed
- *   3. 声明了 publisher.key_id（但未验签）→ community
- *   4. 其他 → unreviewed
+ *   0. allowlist 命中且 SHA-256 一致 → reviewed（与来源无关：本地安装同包同哈希也算）
+ *   1. 本地来源（未命中 allowlist）→ local
+ *   2. 声明了 publisher.key_id（但未验签）→ community
+ *   3. 其他 → unreviewed
  * official 需要可信公钥验签，本阶段未实现，因此不会返回。
  */
 function trustOf({ toolId, revision, sha256, source, raw }) {
-  if (normalizeSource(source) === 'local') return 'local';
   const review = getReview(toolId, revision);
   if (review && (!sha256 || shaMatches(review, sha256))) return 'reviewed';
+  if (normalizeSource(source) === 'local') return 'local';
   if (raw && raw.publisher && raw.publisher.key_id) return 'community';
   return 'unreviewed';
 }

@@ -318,10 +318,30 @@ router.post('/internal/toolbox/tasks', (req, res) => {
   }
 });
 
+const TERMINAL_TASK_STATUSES = Object.freeze(['completed', 'failed', 'cancelled']);
+
 router.patch('/internal/toolbox/tasks/:id', (req, res) => {
   try {
     const task = taskForRequest(req, req.params.id);
+    // 终态任务不可再改：状态机只允许 running → completed/failed/cancelled。
+    if (TERMINAL_TASK_STATUSES.includes(task.status)) {
+      throw new ToolboxError('TASK_ALREADY_FINISHED', '任务已结束，不能再修改', 409);
+    }
     const body = req.body || {};
+    if ('progress' in body) {
+      const next = Number(body.progress);
+      if (!Number.isFinite(next) || next < 0 || next > 100) {
+        throw new ToolboxError('TASK_PROGRESS_INVALID', '进度必须是 0..100 的数字', 400);
+      }
+      // 并发更新不能让进度回退；相同值允许（幂等重试）。
+      if (next < (Number(task.progress) || 0)) {
+        throw new ToolboxError(
+          'TASK_PROGRESS_REGRESSION',
+          `任务进度不能回退（当前 ${Number(task.progress) || 0}，收到 ${next}）`,
+          409,
+        );
+      }
+    }
     const patch = {};
     for (const key of ['stage', 'progress', 'error', 'message', 'details']) {
       if (key in body) patch[key] = body[key];
@@ -329,7 +349,7 @@ router.patch('/internal/toolbox/tasks/:id', (req, res) => {
     if (body.result_book_id != null) patch.result_book_id = body.result_book_id;
     const status = String(body.status || '');
     if (status) {
-      if (!['completed', 'failed', 'cancelled'].includes(status)) {
+      if (!TERMINAL_TASK_STATUSES.includes(status)) {
         throw new ToolboxError('TASK_STATUS_INVALID', '任务状态不合法');
       }
       toolboxRepo.finishTask(db, task.id, {

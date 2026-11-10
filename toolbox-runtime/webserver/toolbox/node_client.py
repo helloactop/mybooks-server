@@ -122,7 +122,7 @@ class NodeClient(object):
     def update_task(self, task_id, patch):
         if not task_id:
             return None
-        return self._request("PATCH", "/internal/toolbox/tasks/%d" % int(task_id), patch, timeout=15)
+        return self._request("PATCH", "/internal/toolbox/tasks/%d" % int(task_id), patch, timeout=15)["task"]
 
     def complete_task(self, task_id, status, error="", message="", result_book_id=None):
         return self.update_task(task_id, {

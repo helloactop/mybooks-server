@@ -164,13 +164,46 @@ function finishTask(db, id, { status, error = '', message = '', resultBookId = n
   });
 }
 
-function recoverRunningTasks(db, reason = '服务重启，任务已中断') {
+/**
+ * 中断任务恢复。
+ *
+ * 默认（不带选项）把所有 running 任务标记失败，用于“运行时完全离线”的崩溃场景。
+ * 宿主重启但 Worker 仍在运行时，调用方应传入 excludeToolIds（Worker 已加载的插件）
+ * 与 staleBefore（长时间无进展的任务），避免把仍在执行的任务误判为失败。
+ */
+function recoverRunningTasks(db, reason = '服务重启，任务已中断', {
+  excludeToolIds = [], staleBefore = '', createdBefore = '',
+} = {}) {
   const ts = new Date().toISOString();
+  const clauses = ["status = 'running'"];
+  const params = { ts, reason };
+  // 只回收“本次启动之前”创建的任务，避免误伤启动后刚创建的新任务。
+  if (createdBefore) {
+    clauses.push('created_at < @created_before');
+    params.created_before = createdBefore;
+  }
+  const ids = (excludeToolIds || []).map(String).filter(Boolean);
+  if (ids.length) {
+    const placeholders = ids.map((id, index) => {
+      const key = `tool${index}`;
+      params[key] = id;
+      return `@${key}`;
+    }).join(', ');
+    if (staleBefore) {
+      clauses.push(`(tool_id NOT IN (${placeholders}) OR created_at < @stale_before)`);
+      params.stale_before = staleBefore;
+    } else {
+      clauses.push(`tool_id NOT IN (${placeholders})`);
+    }
+  } else if (staleBefore) {
+    clauses.push('created_at < @stale_before');
+    params.stale_before = staleBefore;
+  }
   return db.prepare(`
     UPDATE toolbox_tasks SET status = 'failed', stage = 'done', progress = 100,
-      finished_at = ?, error = ?
-    WHERE status = 'running'
-  `).run(ts, reason).changes;
+      finished_at = @ts, error = @reason
+    WHERE ${clauses.join(' AND ')}
+  `).run(params).changes;
 }
 
 // -- Artifact 登记 ---------------------------------------------------------

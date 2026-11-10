@@ -23,7 +23,8 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 2026-11-09 Phase 3g 内部认证 + 独立 UID：Node 内部接口接受每插件令牌（`MYBOOKS_TOOLBOX_PLUGIN_AUTH_ONLY` 下只认令牌，共享 `internal-secret` 被拒），Python `NodeClient` 隔离模式不再读取宿主共享密钥；`TOOLBOX_CHILD_UID_BASE` 让每个插件以独立 UID 运行，插件数据目录 0711 / 产物 0755 / `config.json` 0600，`state/config.key` 由 supervisor 生成并注入。Docker 双容器内完成负向认证、越权、身份冒用、真实插件转换入库与进程重启验证。
 2026-11-09 Phase 4A：Manifest v1（`manifest_version: 1`）+ 统一 `PluginDescriptor`；Legacy 与 v1 同结构输出，权限/配置/UI/依赖/事件只声明不授权；新增只读 `/api/plugins/descriptors`。设计见 [phase4/MANIFEST-V1.md](phase4/MANIFEST-V1.md)。
 2026-11-09 Phase 4B：统一宿主能力接口 + Python SDK 1.0.0 + 前端 `/static/plugin-sdk/v1.js`。新增 `toolbox_artifacts`（migrate v28）、books create/PATCH/reading、artifacts publish/get/delete、tasks get/result/cancel、config validate、metadata search；Artifact 使用 `files.write:artifact:*` / `files.read:artifact:*`。`Plugin`/`route` 装饰器明确不实施。设计见 [phase4/SDK-SPEC.md](phase4/SDK-SPEC.md)。
-未完成：Z-Library 外部网络（本机/容器 DNS 被 VPN fake-IP 命中 SSRF 防护）、UI 浏览器验收、`source.*` / `book.*` 能力、事件订阅、Phase 4C–4F。
+2026-11-10 Phase 4B-R 修复与重新验收：Python SDK 统一 dict/位置参数契约（`jobs.progress(job_id, value)`、`jobs.complete(status=...)`、`files.publish/import_file` dict、非法字段显式报错）；`compat.from_tool` 改用真实 `webserver.toolbox.*` 并复用 `sdk_for`；任务终态禁改、进度不可回退；卸载触发 Worker 重载；本地已审查包正确显示 `reviewed`；Runtime healthz 上报 `toolbox_dir` 并做路径自检；启动恢复区分 Runtime 在线/插件加载；共享 Worker 未审查插件风险显式告警。回归：Node 807/807、Python SDK 35/35、Runtime 73/73（10 skipped）；真实 SDK→宿主链路、md_to_epub 转换入库、zlibrary 加载均通过。结论 **CONDITIONAL PASS**，详见 [4B/verification.md](phase4/4B/verification.md)。
+未完成：Z-Library 0.1.1 上架前需修复 `entry_url` 保存校验与下载重定向限制（P3-5/P3-6，后者按 P2 处理）；`Plugin`/`route` 装饰器、Bridge v2、4D UI Slot、事件订阅、`source.*` / `book.*` 能力、Phase 4C–4F。UI 浏览器验收与独立 UID 默认启用仍未完成。
 旧 Toolbox 路由/Bridge/安装包/迁移保持兼容；仅新增可选身份令牌与策略文件。
 
 ## 已完成

@@ -162,6 +162,26 @@ async function runtimeHealth({ timeoutMs = 3000 } = {}) {
   }
 }
 
+function comparablePath(value) {
+  if (!value) return '';
+  const resolved = path.resolve(String(value));
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+/**
+ * 部署自检：Node 与 Runtime 必须看到同一个 toolbox 卷。
+ * 不一致时插件产物会落在 Runtime 路径，而 Node 按自己的路径读取，导致
+ * “插件文件不存在”或数据分裂；这里只报告，不改变任何行为。
+ */
+function runtimePathStatus(info) {
+  const runtimeDir = info && info.toolbox_dir ? String(info.toolbox_dir) : '';
+  if (!runtimeDir) {
+    return { checked: false, node: TOOLBOX_DIR, runtime: '', mismatch: false, reason: 'Runtime 未报告 toolbox_dir' };
+  }
+  const mismatch = comparablePath(runtimeDir) !== comparablePath(TOOLBOX_DIR);
+  return { checked: true, node: TOOLBOX_DIR, runtime: runtimeDir, mismatch };
+}
+
 async function proxyTool(toolId, route, {
   method = 'GET', body = null, rawBody = null, contentType = '', timeoutMs = 30_000,
   userId = '', query = '', rawResponse = false,
@@ -201,6 +221,7 @@ module.exports = {
   callRuntime,
   reloadRuntime,
   runtimeHealth,
+  runtimePathStatus,
   proxyTool,
   startTool,
   stopTool,

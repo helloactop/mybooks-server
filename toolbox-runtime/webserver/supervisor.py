@@ -569,6 +569,8 @@ class PluginSupervisor(object):
             except IsolationError as err:
                 registry = {"error": str(err)}
         return {
+            # process = 独立子进程但共享 UID；uid = 每插件独立 UID（需要 root 降权能力）。
+            "mode": "uid" if self.child_uid_base > 0 else "process",
             "uid_enabled": self.child_uid_base > 0,
             "uid_base": self.child_uid_base,
             "uid_count": self.child_uid_count,

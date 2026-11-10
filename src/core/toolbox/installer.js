@@ -314,7 +314,11 @@ function uninstall(toolId, { purgeData = false, handleDb = defaultDb } = {}) {
     throw new ToolboxError('UNINSTALL_FAILED', `卸载记录失败：${err.message}`, 500);
   }
   writeRuntimeState(toolboxRepo.listTools(handleDb));
-  return { ok: true, tool: existing, runtime: { pending: true } };
+  // 卸载必须真正从 Worker 卸载：Node 侧记录已删除，这里再触发一次重载，
+  // 停掉仍在内存里的模块与后台任务。重载失败不回滚卸载（记录已不可用），
+  // 下一次“重启生效”或服务启动还会再次尝试。
+  reloadRuntime({ timeoutMs: 15_000 }).catch(() => { /* 运行时离线时保持已卸载状态 */ });
+  return { ok: true, tool: existing, runtime: { pending: false, reloading: true } };
 }
 
 function rollback(toolId, handleDb = defaultDb) {

@@ -17,7 +17,7 @@ const { TOOL_ID_RE, findRoute } = require('../core/toolbox/manifest');
 const { ToolboxError, assertInside } = require('../core/toolbox/security');
 const store = require('../core/toolbox/store');
 const installer = require('../core/toolbox/installer');
-const { runtimeHealth, proxyTool } = require('../core/toolbox/runtime');
+const { runtimeHealth, runtimePathStatus, proxyTool } = require('../core/toolbox/runtime');
 const { cancelTask } = require('../core/toolbox/tasks');
 
 const router = express.Router();
@@ -234,7 +234,24 @@ router.delete('/api/toolbox/:id', (req, res) => {
 
 router.get('/api/toolbox/runtime', async (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json(await runtimeHealth());
+  const health = await runtimeHealth();
+  if (health.online) {
+    // 部署自检：Node 与 Runtime 的 toolbox 路径必须一致，否则入库会“文件不存在”。
+    health.toolbox_path = runtimePathStatus(health.info);
+    const installed = toolboxRepo.listTools(db);
+    const unreviewed = installed.filter((tool) => !(tool.compatibility && tool.compatibility.reviewed));
+    const sharedWorker = !(health.info && health.info.isolated);
+    // 共享 Worker 不是安全边界：未审查插件与其它插件同进程，可读同卷文件。
+    health.isolation = {
+      shared_worker: sharedWorker,
+      unreviewed_plugins: unreviewed.map((tool) => tool.tool_id),
+      risk: sharedWorker && unreviewed.length ? 'high' : 'normal',
+      note: sharedWorker && unreviewed.length
+        ? '共享 Worker 内未审查插件与其它插件同进程；只应安装已审查插件，或启用 TOOLBOX_ISOLATE_PLUGINS'
+        : '',
+    };
+  }
+  res.json(health);
 });
 
 // 独立 Worker 重启：不重启 Node 主服务，重新执行 importlib load_all 并清 pending_restart。

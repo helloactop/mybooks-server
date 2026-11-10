@@ -133,6 +133,21 @@ async function getIndex({ force = false } = {}) {
   return indexPromise;
 }
 
+/**
+ * 只读缓存快照：不触发网络请求。
+ * 供总览页/已安装页计算更新数使用，避免普通页面刷新反复下载商店索引。
+ * fetchedAt=0 表示本进程还没成功取过索引；error 非空时仍可能保留上一次成功数据。
+ */
+function peekIndex() {
+  return {
+    tools: indexCache.tools,
+    fetchedAt: indexCache.fetchedAt,
+    error: indexCache.error || '',
+    cached: indexCache.fetchedAt > 0,
+    loaded: indexCache.tools.length > 0,
+  };
+}
+
 function annotate(tools, installedTools = []) {
   const installed = new Map(installedTools.map((tool) => [tool.tool_id, tool]));
   return tools.map((entry) => {
@@ -200,6 +215,7 @@ module.exports = {
   STORE_URL,
   STORE_HOSTS,
   getIndex,
+  peekIndex,
   annotate,
   findEntry,
   downloadArchive,

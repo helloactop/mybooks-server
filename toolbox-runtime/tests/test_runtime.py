@@ -788,6 +788,33 @@ class BusyHandlerTests(AsyncHTTPTestCase):
         self.assertFalse(self._busy()["busy"])
 
 
+class ConfigBridgeTests(AsyncHTTPTestCase):
+    """Node → Runtime 配置读取桥（只读，不执行插件代码）。"""
+
+    def get_app(self):
+        import runtime
+        return runtime.make_app()
+
+    def test_config_requires_runtime_secret(self):
+        response = self.fetch("/internal/tool/config_probe/config")
+        self.assertEqual(response.code, 403)
+
+    def test_config_returns_plain_config_and_rejects_unknown_tool(self):
+        storage.set_config("config_probe", {"api_token": "secret-value", "font_size": 14})
+        headers = {"X-Mybooks-Runtime-Secret": "unit-test-secret"}
+
+        response = self.fetch("/internal/tool/config_probe/config", headers=headers)
+        self.assertEqual(response.code, 200)
+        payload = json.loads(response.body)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["config"]["api_token"], "secret-value")
+        self.assertEqual(payload["config"]["font_size"], 14)
+
+        missing = self.fetch("/internal/tool/no_such_tool/config", headers=headers)
+        self.assertEqual(missing.code, 404)
+        self.assertEqual(json.loads(missing.body)["code"], "CONFIG_NOT_FOUND")
+
+
 class SupervisorAppTests(_SupervisorFixture, AsyncHTTPTestCase):
     def setUp(self):
         self._setup_supervisor("supervisor-app", [

@@ -28,6 +28,7 @@ const routesToolbox = require('./src/http/routes.toolbox');
 const routesToolboxInternal = require('./src/http/routes.toolbox.internal');
 const routesToolboxUi = require('./src/http/routes.toolbox.ui');
 const routesPlugins = require('./src/http/routes.plugins');
+const routesPluginsAdmin = require('./src/http/routes.plugins.admin');
 const pluginServices = require('./src/http/plugin-services');
 const { modeNotice } = require('./src/core/toolbox/access-policy');
 const { auth, requireSession } = require('./src/http/middleware.auth');
@@ -127,6 +128,8 @@ app.use('/api', attachVlScope);
 app.use(routesToolbox);
 // 统一插件只读视图：在 /api 会话守卫之后，不改旧工具箱行为。
 app.use(routesPlugins);
+// Plugin Center 管理 API（只读）：固定段先于 /:id，旧的 /api/plugins/* 契约保持不变。
+app.use(routesPluginsAdmin);
 
 // 电子书文件路由(multipart 上传/列表/删除/下载登记)
 app.use(routesFiles);

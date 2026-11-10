@@ -19,6 +19,7 @@ const store = require('../core/toolbox/store');
 const installer = require('../core/toolbox/installer');
 const { runtimeHealth, runtimePathStatus, proxyTool } = require('../core/toolbox/runtime');
 const { cancelTask } = require('../core/toolbox/tasks');
+const audit = require('../core/toolbox/audit');
 
 const router = express.Router();
 const upload = multer({
@@ -62,6 +63,23 @@ function installedOrThrow(id) {
   const tool = toolboxRepo.getTool(db, id);
   if (!tool) throw new ToolboxError('NOT_INSTALLED', '工具尚未安装', 404);
   return tool;
+}
+
+// 管理操作审计：成功/失败都记录，但审计写入失败不影响原操作。
+async function audited(action, toolIdValue, run) {
+  try {
+    const result = await run();
+    await audit.record({ action, tool_id: toolIdValue || '', result: 'success' });
+    return result;
+  } catch (err) {
+    await audit.record({
+      action,
+      tool_id: toolIdValue || '',
+      result: 'error',
+      error_code: (err && err.code) || 'INTERNAL_ERROR',
+    });
+    throw err;
+  }
 }
 
 router.get('/api/toolbox/store/index', async (req, res) => {
@@ -146,7 +164,7 @@ router.get('/api/toolbox/list', (req, res) => {
 router.post('/api/toolbox/install', async (req, res) => {
   try {
     const id = toolId(req.body && req.body.tool_id);
-    const result = await installer.installFromStore(id, db);
+    const result = await audited('plugin.install', id, () => installer.installFromStore(id, db));
     res.status(201).json(result);
   } catch (err) {
     fail(res, err);
@@ -158,9 +176,10 @@ router.post('/api/toolbox/:id/install', async (req, res) => {
   try {
     const id = toolId(req.params.id);
     const existing = toolboxRepo.getTool(db, id);
-    const result = existing
-      ? await installer.updateFromStore(id, db)
-      : await installer.installFromStore(id, db);
+    const action = existing ? 'plugin.update' : 'plugin.install';
+    const result = await audited(action, id, () => (existing
+      ? installer.updateFromStore(id, db)
+      : installer.installFromStore(id, db)));
     res.status(existing ? 200 : 201).json(result);
   } catch (err) {
     fail(res, err);
@@ -172,9 +191,9 @@ function devUpload(req, res) {
     if (!req.file) throw new ToolboxError('UPLOAD_MISSING', '没有收到安装包', 400);
     const archive = req.file.path;
     const expected = req.params.id ? toolId(req.params.id) : '';
-    installer.installFromLocalArchive(archive, {
+    audited('plugin.install', expected, () => installer.installFromLocalArchive(archive, {
       expectedToolId: expected, source: 'dev', handleDb: db,
-    }).then((result) => {
+    })).then((result) => {
       try { fs.unlinkSync(archive); } catch { /* ignore */ }
       res.status(201).json(result);
     }).catch((err) => {
@@ -189,17 +208,19 @@ function devUpload(req, res) {
 router.post('/api/toolbox/install/upload', upload.single('file'), devUpload);
 router.post('/api/toolbox/:id/update/upload', upload.single('file'), devUpload);
 
-router.post('/api/toolbox/:id/enable', (req, res) => {
+router.post('/api/toolbox/:id/enable', async (req, res) => {
   try {
-    res.json(installer.setEnabled(toolId(req.params.id), true, db));
+    const id = toolId(req.params.id);
+    res.json(await audited('plugin.enable', id, () => installer.setEnabled(id, true, db)));
   } catch (err) {
     fail(res, err);
   }
 });
 
-router.post('/api/toolbox/:id/disable', (req, res) => {
+router.post('/api/toolbox/:id/disable', async (req, res) => {
   try {
-    res.json(installer.setEnabled(toolId(req.params.id), false, db));
+    const id = toolId(req.params.id);
+    res.json(await audited('plugin.disable', id, () => installer.setEnabled(id, false, db)));
   } catch (err) {
     fail(res, err);
   }
@@ -207,26 +228,29 @@ router.post('/api/toolbox/:id/disable', (req, res) => {
 
 router.post('/api/toolbox/:id/update', async (req, res) => {
   try {
-    res.json(await installer.updateFromStore(toolId(req.params.id), db));
+    const id = toolId(req.params.id);
+    res.json(await audited('plugin.update', id, () => installer.updateFromStore(id, db)));
   } catch (err) {
     fail(res, err);
   }
 });
 
-router.post('/api/toolbox/:id/rollback', (req, res) => {
+router.post('/api/toolbox/:id/rollback', async (req, res) => {
   try {
-    res.json(installer.rollback(toolId(req.params.id), db));
+    const id = toolId(req.params.id);
+    res.json(await audited('plugin.rollback', id, () => installer.rollback(id, db)));
   } catch (err) {
     fail(res, err);
   }
 });
 
-router.delete('/api/toolbox/:id', (req, res) => {
+router.delete('/api/toolbox/:id', async (req, res) => {
   try {
-    res.json(installer.uninstall(toolId(req.params.id), {
+    const id = toolId(req.params.id);
+    res.json(await audited('plugin.uninstall', id, () => installer.uninstall(id, {
       purgeData: req.query.purge_data === '1',
       handleDb: db,
-    }));
+    })));
   } catch (err) {
     fail(res, err);
   }
@@ -258,6 +282,11 @@ router.get('/api/toolbox/runtime', async (req, res) => {
 router.post('/api/toolbox/runtime/restart', async (req, res) => {
   try {
     const result = await installer.reloadAndSync(db);
+    await audit.record({
+      action: 'runtime.restart',
+      result: result.ok ? 'success' : 'error',
+      error_code: result.ok ? '' : 'RUNTIME_UNAVAILABLE',
+    });
     res.status(result.ok ? 200 : 503).json(result);
   } catch (err) {
     fail(res, err);

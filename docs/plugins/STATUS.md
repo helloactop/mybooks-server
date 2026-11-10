@@ -24,7 +24,8 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 2026-11-09 Phase 4A：Manifest v1（`manifest_version: 1`）+ 统一 `PluginDescriptor`；Legacy 与 v1 同结构输出，权限/配置/UI/依赖/事件只声明不授权；新增只读 `/api/plugins/descriptors`。设计见 [phase4/MANIFEST-V1.md](phase4/MANIFEST-V1.md)。
 2026-11-09 Phase 4B：统一宿主能力接口 + Python SDK 1.0.0 + 前端 `/static/plugin-sdk/v1.js`。新增 `toolbox_artifacts`（migrate v28）、books create/PATCH/reading、artifacts publish/get/delete、tasks get/result/cancel、config validate、metadata search；Artifact 使用 `files.write:artifact:*` / `files.read:artifact:*`。`Plugin`/`route` 装饰器明确不实施。设计见 [phase4/SDK-SPEC.md](phase4/SDK-SPEC.md)。
 2026-11-10 Phase 4B-R 修复与重新验收：Python SDK 统一 dict/位置参数契约（`jobs.progress(job_id, value)`、`jobs.complete(status=...)`、`files.publish/import_file` dict、非法字段显式报错）；`compat.from_tool` 改用真实 `webserver.toolbox.*` 并复用 `sdk_for`；任务终态禁改、进度不可回退；卸载触发 Worker 重载；本地已审查包正确显示 `reviewed`；Runtime healthz 上报 `toolbox_dir` 并做路径自检；启动恢复区分 Runtime 在线/插件加载；共享 Worker 未审查插件风险显式告警。回归：Node 807/807、Python SDK 35/35、Runtime 73/73（10 skipped）；真实 SDK→宿主链路、md_to_epub 转换入库、zlibrary 加载均通过。结论 **CONDITIONAL PASS**，详见 [4B/verification.md](phase4/4B/verification.md)。
-未完成：Z-Library 0.1.1 上架前需修复 `entry_url` 保存校验与下载重定向限制（P3-5/P3-6，后者按 P2 处理）；`Plugin`/`route` 装饰器、Bridge v2、4D UI Slot、事件订阅、`source.*` / `book.*` 能力、Phase 4C–4F。UI 浏览器验收与独立 UID 默认启用仍未完成。
+2026-11-10 Phase 4C.2：Plugin Center 只读管理 API。新增 `core/plugins/center.js`、`routes.plugins.admin.js`、`core/toolbox/audit.js`；`store.peekIndex()` 只读缓存；任务支持 `tool_id/status/limit/offset` 与计数；`GET /api/plugins/{overview,store/index,store/:id,installed,tasks,tasks/:id,security}`、详情/权限/配置/版本/日志；`/api/plugins/runtime` 追加 `toolbox/security`；Runtime 新增只读 `GET /internal/tool/:id/config`。审计接入安装/更新/回滚/启停/卸载/重启；权限与配置写入仍留 4C.4，商店/安装写入口仍只有 `/api/toolbox/*`。回归：Node 825/825、Runtime 75/75（10 skipped）。设计见 [4C/API-SPEC.md](phase4/4C/API-SPEC.md)。
+未完成：Z-Library 0.1.1 上架前需修复 `entry_url` 保存校验与下载重定向限制（P3-5/P3-6，后者按 P2 处理）；`Plugin`/`route` 装饰器、Bridge v2、4D UI Slot、事件订阅、`source.*` / `book.*` 能力、Phase 4C.3–4F（权限/配置写入、前端、集成验收）。UI 浏览器验收与独立 UID 默认启用仍未完成。
 旧 Toolbox 路由/Bridge/安装包/迁移保持兼容；仅新增可选身份令牌与策略文件。
 
 ## 已完成
@@ -63,11 +64,18 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 | Phase 4B Internal APIs | [routes.toolbox.internal.js](../../src/http/routes.toolbox.internal.js) + [config-schema.js](../../src/core/toolbox/config-schema.js) | books/artifacts/tasks/config/metadata；复用现有认证与 `requirePermission` | 4B | 未提交 |
 | Phase 4B Python SDK | [plugin-sdk/python](../../plugin-sdk/python) + [sdk.py](../../toolbox-runtime/webserver/toolbox/sdk.py) + [node_client.py](../../toolbox-runtime/webserver/toolbox/node_client.py) | `sdk.books/files/jobs/config/metadata`、`PluginError`、`compat.from_tool`；`CoreAPI.sdk` | 4B | 未提交 |
 | Phase 4B Frontend SDK | [plugin-sdk/v1.js](../../public/static/plugin-sdk/v1.js) + [routes.toolbox.ui.js](../../src/http/routes.toolbox.ui.js) | Bridge 薄封装、可停止的任务监听、CSP 精确放行 | 4B | 未提交 |
+| Phase 4C.2 Center | [center.js](../../src/core/plugins/center.js) | 商店/已安装/详情/权限/配置/版本/任务/日志/安全聚合；只读，不建第二套状态库 | 4C.2 | 未提交 |
+| Phase 4C.2 Admin API | [routes.plugins.admin.js](../../src/http/routes.plugins.admin.js) + [server.js](../../server.js) | 固定段先于 `:id`；统一错误；沿用会话认证；旧 `/api/plugins/*` 契约不变 | 4C.2 | 未提交 |
+| Phase 4C.2 Audit | [audit.js](../../src/core/toolbox/audit.js) + [routes.toolbox.js](../../src/http/routes.toolbox.js) | JSONL 追加、串行写、1MB 轮转、脱敏；生命周期写操作接入 | 4C.2 | 未提交 |
+| Phase 4C.2 Store Cache | [store.js](../../src/core/toolbox/store.js) | `peekIndex()` 只读缓存；总览不触发商店网络 | 4C.2 | 未提交 |
+| Phase 4C.2 Task Query | [toolbox.js](../../src/db/toolbox.js) | `toolId/offset/maxLimit` 过滤、`countTasks`、`taskCounts` GROUP BY | 4C.2 | 未提交 |
+| Phase 4C.2 Config Bridge | [runtime.py](../../toolbox-runtime/runtime.py) | 只读 `GET /internal/tool/:id/config`；runtime-secret；Node 掩码 | 4C.2 | 未提交 |
 
 测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`、
 `test/toolbox-access-policy.test.js`、`test/toolbox-grants.test.js`、`test/plugin-descriptor.test.js`、
-`test/plugins-sdk-contract.test.js`。整套 `npm test` 800/800。
-Python：`plugin-sdk/python/tests` 13 项、`toolbox-runtime/tests/test_sdk.py` 4 项；Docker 镜像内导入与测试通过。
+`test/plugins-sdk-contract.test.js`、`test/plugins-center.test.js`、`test/plugins-audit.test.js`、
+`test/plugins-admin-api.test.js`。整套 `npm test` 825/825。
+Python：`plugin-sdk/python/tests` 13 项、`toolbox-runtime/tests` 75 项（10 skipped，含配置桥 2 项）；Docker 镜像内导入与测试通过。
 
 ## 目标文件结构（架构 第十五章）
 

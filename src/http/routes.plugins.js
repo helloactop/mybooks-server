@@ -15,6 +15,7 @@ const {
 const { modeFromEnv } = require('../core/toolbox/manifest-v1');
 const { TOOL_ID_RE } = require('../core/toolbox/manifest');
 const { runtimes, kernel } = require('./plugin-services');
+const { center } = require('../core/plugins/center');
 
 const router = express.Router();
 const legacy = new LegacyToolboxAdapter({ db });
@@ -47,12 +48,19 @@ router.get('/api/plugins/:id/descriptor', (req, res) => {
   return res.json({ manifest_mode: modeFromEnv(), plugin: toPublicDescriptor(descriptor) });
 });
 
+// 保留原有 runtimes/builtinInstances 字段，追加 toolbox 与 security 只读视图。
 router.get('/api/plugins/runtime', async (req, res, next) => {
   try {
+    const [healthList, runtimeSecurity] = await Promise.all([
+      runtimes.healthAll(),
+      center.runtimeAndSecurity(),
+    ]);
     res.set('Cache-Control', 'no-store');
     res.json({
-      runtimes: await runtimes.healthAll(),
+      runtimes: healthList,
       builtinInstances: kernel.registry ? kernel.registry.instances() : [],
+      toolbox: runtimeSecurity.toolbox,
+      security: runtimeSecurity.security,
     });
   } catch (err) {
     next(err);

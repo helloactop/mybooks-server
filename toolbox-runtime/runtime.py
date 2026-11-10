@@ -22,7 +22,7 @@ import tornado.web
 from webserver.handlers.base import BaseHandler, runtime_secret
 from webserver.services import AsyncService
 from webserver.services.background_service import BackgroundService
-from webserver.toolbox import config
+from webserver.toolbox import config, storage
 from webserver.toolbox.plugin_host import host
 
 logging.basicConfig(
@@ -90,6 +90,39 @@ class BusyHandler(tornado.web.RequestHandler):
             "background_running": background,
             "async_pending": pending,
         })
+
+
+class InternalConfigHandler(tornado.web.RequestHandler):
+    """Node 读取插件配置的唯一入口（只读）。
+
+    不执行插件代码；只调用 storage.get_config。返回原始配置，
+    敏感字段由 Node 按 Manifest schema 掩码后再下发给浏览器。
+    """
+
+    def initialize(self, storage_module):
+        self._storage = storage_module
+
+    def get(self, tool_id):
+        if not runtime_authorized(self):
+            return json_response(self, 403, {"ok": False, "error": "forbidden"})
+        data_dir = os.path.join(config.DATA_ROOT, tool_id)
+        if not os.path.isdir(data_dir):
+            return json_response(self, 404, {
+                "ok": False, "code": "CONFIG_NOT_FOUND", "error": "插件配置目录不存在",
+            })
+        try:
+            data = self._storage.get_config(tool_id)
+        except self._storage.StorageError as err:
+            LOGGER.warning("[config] read failed tool=%s: %s", tool_id, err)
+            return json_response(self, 500, {
+                "ok": False, "code": "CONFIG_DECRYPT_FAILED", "error": str(err),
+            })
+        except Exception:
+            LOGGER.exception("[config] unexpected failure tool=%s", tool_id)
+            return json_response(self, 500, {
+                "ok": False, "code": "CONFIG_READ_FAILED", "error": "配置读取失败",
+            })
+        return json_response(self, 200, {"ok": True, "tool_id": tool_id, "config": data})
 
 
 class ToolDispatchHandler(BaseHandler):
@@ -292,6 +325,8 @@ def make_app():
             (r"/healthz", HealthHandler),
             (r"/internal/reload", ReloadHandler),
             (r"/internal/busy", BusyHandler),
+            (r"/internal/tool/([a-z0-9_]+)/config", InternalConfigHandler,
+             {"storage_module": storage}),
             (r"/tool/([a-z0-9_]+)/(.*)", ToolDispatchHandler),
         ],
         compress_response=True,
@@ -307,6 +342,8 @@ def make_supervisor_app(supervisor):
             (r"/internal/reload", SupervisorReloadHandler, {"supervisor": supervisor}),
             (r"/internal/start/([a-z0-9_]+)", SupervisorStartHandler, {"supervisor": supervisor}),
             (r"/internal/stop/([a-z0-9_]+)", SupervisorStopHandler, {"supervisor": supervisor}),
+            (r"/internal/tool/([a-z0-9_]+)/config", InternalConfigHandler,
+             {"storage_module": storage}),
             (r"/tool/([a-z0-9_]+)/(.*)", SupervisorToolHandler, {"supervisor": supervisor}),
         ],
         compress_response=True,

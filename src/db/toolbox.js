@@ -120,14 +120,53 @@ function getTask(db, id) {
   return decodeTask(db.prepare(`SELECT ${TASK_COLUMNS} FROM toolbox_tasks WHERE id = ?`).get(id));
 }
 
-function listTasks(db, { status = '', limit = 30 } = {}) {
-  const max = Math.max(1, Math.min(Number(limit) || 30, 100));
-  if (status) {
-    return db.prepare(`SELECT ${TASK_COLUMNS} FROM toolbox_tasks WHERE status = ? ORDER BY id DESC LIMIT ?`)
-      .all(status, max).map(decodeTask);
+const TASK_STATUSES = ['running', 'completed', 'failed', 'cancelled'];
+
+// 只接受已知状态，避免把查询参数拼进 SQL；未知状态按“全部”处理。
+function taskWhere({ status = '', toolId = '' } = {}) {
+  const clauses = [];
+  const params = [];
+  if (TASK_STATUSES.includes(status)) {
+    clauses.push('status = ?');
+    params.push(status);
   }
-  return db.prepare(`SELECT ${TASK_COLUMNS} FROM toolbox_tasks ORDER BY id DESC LIMIT ?`)
-    .all(max).map(decodeTask);
+  if (toolId) {
+    clauses.push('tool_id = ?');
+    params.push(String(toolId));
+  }
+  return { sql: clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '', params };
+}
+
+function listTasks(db, {
+  status = '', toolId = '', limit = 30, offset = 0, maxLimit = 100,
+} = {}) {
+  const cap = Math.max(1, Math.min(Number(maxLimit) || 100, 500));
+  const max = Math.max(1, Math.min(Number(limit) || 30, cap));
+  const skip = Math.max(0, Number(offset) || 0);
+  const where = taskWhere({ status, toolId });
+  return db.prepare(`SELECT ${TASK_COLUMNS} FROM toolbox_tasks${where.sql} ORDER BY id DESC LIMIT ? OFFSET ?`)
+    .all(...where.params, max, skip).map(decodeTask);
+}
+
+function countTasks(db, { status = '', toolId = '' } = {}) {
+  const where = taskWhere({ status, toolId });
+  const row = db.prepare(`SELECT COUNT(*) AS total FROM toolbox_tasks${where.sql}`).get(...where.params);
+  return Number(row && row.total) || 0;
+}
+
+// 一次 GROUP BY 拿到全部状态计数，供总览接口使用，避免逐状态查询。
+function taskCounts(db, { toolId = '' } = {}) {
+  const where = taskWhere({ toolId });
+  const rows = db.prepare(`SELECT status, COUNT(*) AS total FROM toolbox_tasks${where.sql} GROUP BY status`)
+    .all(...where.params);
+  const counts = { running: 0, completed: 0, failed: 0, cancelled: 0, total: 0 };
+  for (const row of rows) {
+    const key = String(row.status || '');
+    const total = Number(row.total) || 0;
+    if (key in counts) counts[key] = total;
+    counts.total += total;
+  }
+  return counts;
 }
 
 function updateTask(db, id, patch = {}) {
@@ -258,7 +297,8 @@ function deleteArtifactsForTool(db, toolId) {
 
 module.exports = {
   listTools, getTool, insertTool, updateTool, setEnabled, removeTool,
-  createTask, getTask, listTasks, updateTask, finishTask, recoverRunningTasks,
+  createTask, getTask, listTasks, countTasks, taskCounts, updateTask, finishTask, recoverRunningTasks,
+  TASK_STATUSES,
   insertArtifact, getArtifactByPublicId, listArtifactsForTask,
   softDeleteArtifact, deleteArtifactsForTool,
 };

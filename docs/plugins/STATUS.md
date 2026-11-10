@@ -27,8 +27,9 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 2026-11-10 Phase 4C.2：Plugin Center 只读管理 API。新增 `core/plugins/center.js`、`routes.plugins.admin.js`、`core/toolbox/audit.js`；`store.peekIndex()` 只读缓存；任务支持 `tool_id/status/limit/offset` 与计数；`GET /api/plugins/{overview,store/index,store/:id,installed,tasks,tasks/:id,security}`、详情/权限/配置/版本/日志；`/api/plugins/runtime` 追加 `toolbox/security`；Runtime 新增只读 `GET /internal/tool/:id/config`。审计接入安装/更新/回滚/启停/卸载/重启；权限与配置写入仍留 4C.4，商店/安装写入口仍只有 `/api/toolbox/*`。回归：Node 825/825、Runtime 75/75（10 skipped）。设计见 [4C/API-SPEC.md](phase4/4C/API-SPEC.md)。
 2026-11-10 Phase 4C.3：Plugin Center Web UI。新增 `/plugins` 与 `/plugins/:id` 页面（总览/商店/已安装/任务/设置、概览/权限/配置/版本/日志），全部接 4C.2 只读 API；安装/更新/启停/回滚/卸载仍委托 `/api/toolbox/*`；未审查插件不提供绕过安装的按钮；权限与配置页只读，无假保存按钮。同步补导航“插件”、管理页登录守卫与 `overlay.js`（修复顶栏搜索/移动端菜单按钮无响应）。回归：Node 846/846、Python SDK 35/35、Runtime 75/75（10 skipped）；真实登录浏览器验收通过，390px 断点未实测。设计见 [4C/tasks.md](phase4/4C/tasks.md)、[4C/UI-SPEC.md](phase4/4C/UI-SPEC.md)。
 2026-11-10 Phase 4C.4：权限管理、配置管理与审计。新增 `core/toolbox/grants-admin.js`（Manifest 声明校验、scope 校验、原子写 `grants.json`、`if_version` 409、last-good 刷新、审计）与 `core/toolbox/plugin-config.js`（Schema 部分校验、字段级合并、敏感字段掩码/保留/显式清除、版本冲突）；新增 `PUT /api/plugins/:id/permissions`、`PUT /api/plugins/:id/config`；Runtime `InternalConfigHandler` 增加 PUT（进程内锁 + 版本号 + 加密落盘），GET 返回 `version`；详情页权限/配置升级为可保存，日志支持时间范围与操作人/结果。回归：Node 890/890、Python SDK 35/35、Runtime 79 项 OK（10 skipped）、Docker 镜像内 Runtime 79 项 OK（1 skipped）；浏览器真实登录完成授权与配置保存。设计见 [4C/API-SPEC.md](phase4/4C/API-SPEC.md) §15。
+2026-11-10 Phase 4C.4-R：安全修复与专项回归。复现并修复两项 P1：①管理端可把权限 scope 从 Manifest 声明的 `book:1` 扩大到 `*`（新增 `scopeCovers` 资源语义校验，拒绝跨类型/通配扩大/历史越权保留）；②插件子进程可用自己的 runtime-secret 读写其他插件配置（配置桥按启动时 `TOOLBOX_ONLY_TOOL` 绑定身份，跨插件返回 `CROSS_PLUGIN_DENIED`）。P2 修复：配置损坏/密钥不可读不再降级为空配置并按错误码显式失败、密钥改独占创建；首次配置保存版本语义统一（不存在 = 空版本），不再误报 409；权限/配置写入响应携带 `audit.ok`，审计失败显式提示；`array`/`object` 配置字段改为只读展示且永不提交。回归：Node 914/914、Python SDK 35/35、Runtime 95（10 skipped）、Docker 95（1 skipped）；浏览器验收声明范围/越界拒绝/只读字段。独立 UID 因容器缺少 capabilities 未验证。详见 [4C/remediation.md](phase4/4C/remediation.md)。
 未完成：Z-Library 0.1.1 上架前需修复 `entry_url` 保存校验与下载重定向限制（P3-5/P3-6，后者按 P2 处理）；`Plugin`/`route` 装饰器、Bridge v2、4D UI Slot、事件订阅、`source.*` / `book.*` 能力、Phase 4C.5–4F（集成验收）。独立 UID 默认启用、配置历史 diff、Runtime stdout 采集仍未完成。
-4C.3 与 4C.4 改动**尚未提交**（工作区变更，见 `git status`）。
+4C.3、4C.4 与 4C.4-R 改动**尚未提交**（工作区变更，见 `git status`）。
 旧 Toolbox 路由/Bridge/安装包/迁移保持兼容；仅新增可选身份令牌与策略文件。
 
 ## 已完成
@@ -81,6 +82,10 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 | Phase 4C.4 Config Admin | [plugin-config.js](../../src/core/toolbox/plugin-config.js) + [config-schema.js](../../src/core/toolbox/config-schema.js) | Schema 部分校验、字段级合并、掩码/保留/显式清除、版本冲突；配置只经 Runtime | 4C.4 | 未提交 |
 | Phase 4C.4 Config Bridge | [runtime.py](../../toolbox-runtime/runtime.py) + [storage.py](../../toolbox-runtime/webserver/toolbox/storage.py) | `PUT /internal/tool/:id/config`；进程内锁、版本号、AES-256-GCM 原子落盘 | 4C.4 | 未提交 |
 | Phase 4C.4 Config Form | [plugin-config-form.js](../../public/js/plugin-config-form.js) | Schema → 字段模型、类型/范围/枚举校验、保存状态与清除语义 | 4C.4 | 未提交 |
+| Phase 4C.4-R Scope Guard | [grants-admin.js](../../src/core/toolbox/grants-admin.js) · [center.js](../../src/core/plugins/center.js) | `scopeCovers` 资源语义校验；`out_of_range` 视图；拒绝 `book:1 → *` 与跨类型扩大 | 4C.4-R | 未提交 |
+| Phase 4C.4-R Config Identity | [runtime.py](../../toolbox-runtime/runtime.py) | 子进程按 `TOOLBOX_ONLY_TOOL` 绑定；跨插件配置访问返回 `CROSS_PLUGIN_DENIED` | 4C.4-R | 未提交 |
+| Phase 4C.4-R Storage Recovery | [storage.py](../../toolbox-runtime/webserver/toolbox/storage.py) | 损坏/密钥异常显式失败；密钥独占创建；`config_exists` 与首次保存版本语义 | 4C.4-R | 未提交 |
+| Phase 4C.4-R Audit Signal | [plugin-config.js](../../src/core/toolbox/plugin-config.js) · [routes.plugins.admin.js](../../src/http/routes.plugins.admin.js) | 写入响应携带 `audit.ok`；失败路径 `audit_ok`；前端警告 | 4C.4-R | 未提交 |
 
 测试：`test/plugin-*.test.js`、`test/plugins-http.test.js`、`test/metadata-*.test.js`、
 `test/toolbox-access-policy.test.js`、`test/toolbox-grants.test.js`、`test/plugin-descriptor.test.js`、
@@ -88,8 +93,9 @@ Phase 3e 完成：Capability Router（权限 → Provider → 超时 → 输出�
 `test/plugins-admin-api.test.js`、`test/plugins-ui-routes.test.js`、`test/plugins-center-ui.test.js`、
 `test/plugins-permissions-admin.test.js`、`test/plugins-config-admin.test.js`、
 `test/plugins-audit-integration.test.js`、`test/plugins-detail-ui.test.js`、
-`test/plugins-admin-write-api.test.js`。整套 `npm test` 890/890。
-Python：`plugin-sdk/python/tests` 35 项、`toolbox-runtime/tests` 79 项（10 skipped，含配置读写 4 项）；Docker 镜像内 79 项 OK（1 skipped）。
+`test/plugins-admin-write-api.test.js`、`test/plugins-scope-boundary.test.js`、
+`test/plugins-config-first-save.test.js`、`test/plugins-audit-failure.test.js`。整套 `npm test` 914/914。
+Python：`plugin-sdk/python/tests` 35 项、`toolbox-runtime/tests` 95 项（10 skipped，含配置身份 7 项、存储恢复 9 项）；Docker 镜像内 95 项 OK（1 skipped）。
 
 ## 目标文件结构（架构 第十五章）
 

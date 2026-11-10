@@ -27,6 +27,7 @@ const { createConfigService } = require('../toolbox/plugin-config');
 const { compareSemver, TOOL_ID_RE } = require('../toolbox/manifest');
 const { allowUnreviewed } = require('../toolbox/allowlist');
 const { legacyCompatEnabled, pluginAuthOnlyEnabled } = require('../toolbox/access-policy');
+const { RESOURCE_SCOPED } = require('./permissions');
 const audit = require('../toolbox/audit');
 
 const { UNENFORCED_PERMISSIONS } = descriptorApi;
@@ -468,6 +469,12 @@ function createCenter(deps = {}) {
     }
     const grantedNames = new Set(effective.map((item) => item.permission));
     const requested = descriptor.permissions || [];
+    // 已授予但超出 Manifest 声明范围的历史条目：列表展示 + 保存时会清掉。
+    const declaredScope = new Map(requested.map((item) => [item.name, String(item.scope || '').trim() || '*']));
+    const outOfRange = effective
+      .filter((item) => RESOURCE_SCOPED.has(item.permission)
+        && !grantsAdmin.scopeCovers(declaredScope.get(item.permission) || '*', item.scope))
+      .map((item) => (item.scope === '*' ? item.permission : `${item.permission}:${item.scope}`));
     const warnings = [];
     if (policy.state === 'absent') {
       warnings.push('该插件尚未配置 grants.json，Legacy 兼容模式下声明权限不会被裁剪');
@@ -491,6 +498,7 @@ function createCenter(deps = {}) {
       declared_not_granted: requested
         .filter((item) => !grantedNames.has(item.name))
         .map((item) => item.name),
+      out_of_range: outOfRange,
       unenforced: requested
         .filter((item) => UNENFORCED_PERMISSIONS.has(item.name))
         .map((item) => item.name),

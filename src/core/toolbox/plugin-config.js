@@ -95,18 +95,24 @@ function createConfigService(deps = {}) {
     if (!result || !result.ok) {
       const code = result && result.json && result.json.code;
       if (code === 'CONFIG_NOT_FOUND') return { data: {}, version: '' };
+      // 损坏/密钥异常/读取失败都必须显式失败，绝不当成空配置继续保存。
+      const messages = {
+        CONFIG_CORRUPTED: '插件配置文件已损坏，已拒绝读取；请先修复或恢复备份',
+        CONFIG_DECRYPT_FAILED: '插件配置解密失败；配置密钥可能已变化',
+        CONFIG_KEY_UNREADABLE: '配置密钥不可读或已损坏，已拒绝重新生成',
+        CONFIG_READ_FAILED: '插件配置读取失败',
+      };
       throw new ToolboxError(
-        code === 'CONFIG_DECRYPT_FAILED' ? 'CONFIG_UNAVAILABLE' : 'CONFIG_UNAVAILABLE',
-        code === 'CONFIG_DECRYPT_FAILED'
-          ? '插件配置解密失败；配置密钥可能已变化'
-          : '插件配置读取失败',
+        'CONFIG_UNAVAILABLE',
+        messages[code] || '插件配置读取失败',
         502,
       );
     }
     const json = (result && result.json) || {};
     const data = json.config && typeof json.config === 'object' && !Array.isArray(json.config)
       ? json.config : {};
-    const version = typeof json.version === 'string' && json.version ? json.version : versionOf(data);
+    // Runtime 返回的版本是权威来源；仅旧 Runtime 缺字段时才本地兜底。
+    const version = typeof json.version === 'string' ? json.version : versionOf(data);
     return { data, version };
   }
 
@@ -270,32 +276,41 @@ function createConfigService(deps = {}) {
           field: '', code: 'CONFIG_INVALID', message: '配置校验失败',
         }]);
       }
+      const messages = {
+        CONFIG_CORRUPTED: '插件配置文件已损坏，已拒绝覆盖；请先修复或恢复备份',
+        CONFIG_DECRYPT_FAILED: '插件配置解密失败；配置密钥可能已变化',
+        CONFIG_KEY_UNREADABLE: '配置密钥不可读或已损坏，已拒绝重新生成',
+      };
+      if (messages[code]) throw new ToolboxError('CONFIG_UNAVAILABLE', messages[code], 502);
       throw new ToolboxError('CONFIG_SAVE_FAILED', '插件配置保存失败', 502);
     }
 
     const saved = await fetchRaw(id);
+    // 审计与配置写入是两次独立落盘：审计失败不回滚配置，但必须显式上报。
+    const auditResults = [];
     if (changedFields.length) {
-      await auditLog.record({
+      auditResults.push(await auditLog.record({
         action: 'config.update', tool_id: id, result: 'success',
         detail: { changed_fields: changedFields.slice(0, 20) },
-      });
+      }));
     }
     if (clear.length) {
-      await auditLog.record({
+      auditResults.push(await auditLog.record({
         action: 'config.secret.clear', tool_id: id, result: 'success',
         detail: { changed_fields: clear.slice(0, 20) },
-      });
+      }));
     }
     return {
       ...buildView(info, saved.data),
       version: saved.version,
       changed: { fields: changedFields, cleared: clear },
+      audit: { ok: auditResults.every((item) => item !== false), recorded: auditResults.length },
     };
   }
 
   async function recordFailure(id, action, code) {
-    if (!TOOL_ID_RE.test(String(id || ''))) return;
-    await auditLog.record({ action, tool_id: id, result: 'error', error_code: code || 'UNKNOWN' });
+    if (!TOOL_ID_RE.test(String(id || ''))) return false;
+    return auditLog.record({ action, tool_id: id, result: 'error', error_code: code || 'UNKNOWN' });
   }
 
   return { read, save, recordFailure };

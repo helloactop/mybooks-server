@@ -105,23 +105,37 @@ class InternalConfigHandler(tornado.web.RequestHandler):
     写入支持版本校验与字段级合并，避免管理端并发修改互相覆盖。
     """
 
-    def initialize(self, storage_module):
+    def initialize(self, storage_module, bound_tool=""):
         self._storage = storage_module
+        # 插件子进程启动时绑定自己的 tool_id；Supervisor/共享宿主为空（可信管理方）。
+        # 启动时捕获，运行期不受 os.environ 变化影响。
+        self._bound_tool = str(bound_tool or "").strip()
+
+    def _deny_cross_plugin(self, tool_id):
+        """子进程只能访问自己的配置，用自己的 runtime-secret 也不行。"""
+        return bool(self._bound_tool) and tool_id != self._bound_tool
 
     def get(self, tool_id):
         if not runtime_authorized(self):
             return json_response(self, 403, {"ok": False, "error": "forbidden"})
+        if self._deny_cross_plugin(tool_id):
+            return json_response(self, 403, {
+                "ok": False, "code": "CROSS_PLUGIN_DENIED", "error": "插件只能访问自己的配置",
+            })
         data_dir = os.path.join(config.DATA_ROOT, tool_id)
         if not os.path.isdir(data_dir):
             return json_response(self, 404, {
                 "ok": False, "code": "CONFIG_NOT_FOUND", "error": "插件配置目录不存在",
             })
         try:
+            exists = self._storage.config_exists(tool_id)
             data = self._storage.get_config(tool_id)
         except self._storage.StorageError as err:
             LOGGER.warning("[config] read failed tool=%s: %s", tool_id, err)
             return json_response(self, 500, {
-                "ok": False, "code": "CONFIG_DECRYPT_FAILED", "error": str(err),
+                "ok": False,
+                "code": getattr(err, "code", "CONFIG_READ_FAILED"),
+                "error": str(err),
             })
         except Exception:
             LOGGER.exception("[config] unexpected failure tool=%s", tool_id)
@@ -132,7 +146,9 @@ class InternalConfigHandler(tornado.web.RequestHandler):
             "ok": True,
             "tool_id": tool_id,
             "config": data,
-            "version": self._storage.config_version(data),
+            # 文件不存在时版本为空串，与 Node 侧“未建立配置”的语义一致；
+            # 首次保存不会因为空对象哈希不同而被误判成冲突。
+            "version": self._storage.config_version(data) if exists else "",
         })
 
     def put(self, tool_id):
@@ -143,6 +159,10 @@ class InternalConfigHandler(tornado.web.RequestHandler):
         """
         if not runtime_authorized(self):
             return json_response(self, 403, {"ok": False, "error": "forbidden"})
+        if self._deny_cross_plugin(tool_id):
+            return json_response(self, 403, {
+                "ok": False, "code": "CROSS_PLUGIN_DENIED", "error": "插件只能访问自己的配置",
+            })
         try:
             body = json.loads(self.request.body.decode("utf-8") or "{}")
         except (ValueError, UnicodeDecodeError):
@@ -170,13 +190,17 @@ class InternalConfigHandler(tornado.web.RequestHandler):
 
         with _CONFIG_WRITE_LOCK:
             try:
+                exists = self._storage.config_exists(tool_id)
                 current = self._storage.get_config(tool_id)
             except self._storage.StorageError as err:
                 LOGGER.warning("[config] write read failed tool=%s: %s", tool_id, err)
                 return json_response(self, 500, {
-                    "ok": False, "code": "CONFIG_DECRYPT_FAILED", "error": str(err),
+                    "ok": False,
+                    "code": getattr(err, "code", "CONFIG_READ_FAILED"),
+                    "error": str(err),
                 })
-            current_version = self._storage.config_version(current)
+            # 文件不存在时版本为空串；首次保存不会与空对象哈希比较而误判冲突。
+            current_version = self._storage.config_version(current) if exists else ""
             expected = body.get("version")
             if expected is not None and str(expected) != current_version:
                 return json_response(self, 409, {
@@ -405,13 +429,15 @@ class SupervisorToolHandler(tornado.web.RequestHandler):
 
 
 def make_app():
+    # 子进程通过 TOOLBOX_ONLY_TOOL 绑定唯一插件；启动时固化为 handler 参数。
+    bound_tool = (os.environ.get("TOOLBOX_ONLY_TOOL") or "").strip()
     return tornado.web.Application(
         [
             (r"/healthz", HealthHandler),
             (r"/internal/reload", ReloadHandler),
             (r"/internal/busy", BusyHandler),
             (r"/internal/tool/([a-z0-9_]+)/config", InternalConfigHandler,
-             {"storage_module": storage}),
+             {"storage_module": storage, "bound_tool": bound_tool}),
             (r"/tool/([a-z0-9_]+)/(.*)", ToolDispatchHandler),
         ],
         compress_response=True,
@@ -421,6 +447,7 @@ def make_app():
 
 
 def make_supervisor_app(supervisor):
+    # Supervisor 是可信管理方（只代理，不运行插件业务代码），不绑定单一插件。
     return tornado.web.Application(
         [
             (r"/healthz", SupervisorHealthHandler, {"supervisor": supervisor}),
@@ -428,7 +455,7 @@ def make_supervisor_app(supervisor):
             (r"/internal/start/([a-z0-9_]+)", SupervisorStartHandler, {"supervisor": supervisor}),
             (r"/internal/stop/([a-z0-9_]+)", SupervisorStopHandler, {"supervisor": supervisor}),
             (r"/internal/tool/([a-z0-9_]+)/config", InternalConfigHandler,
-             {"storage_module": storage}),
+             {"storage_module": storage, "bound_tool": ""}),
             (r"/tool/([a-z0-9_]+)/(.*)", SupervisorToolHandler, {"supervisor": supervisor}),
         ],
         compress_response=True,

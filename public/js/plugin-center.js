@@ -229,6 +229,30 @@
     ];
   }
 
+  /* ---------------- 纯函数：权限范围 ---------------- */
+
+  function parseScope(scope) {
+    const text = String(scope || '');
+    if (text === '*') return { type: '*', value: '*' };
+    const index = text.indexOf(':');
+    if (index < 0) return { type: '', value: text };
+    return { type: text.slice(0, index), value: text.slice(index + 1) };
+  }
+
+  // 与后端 grants-admin.scopeCovers 保持一致；最终判定仍以服务端为准。
+  function scopeCovers(declared, requested) {
+    const dec = String(declared || '');
+    const req = String(requested || '');
+    if (dec === '*') return true;
+    if (req === '*') return false;
+    if (dec === req) return true;
+    const d = parseScope(dec);
+    const r = parseScope(req);
+    if (!d.type || !r.type) return false;
+    if (d.type !== r.type) return d.type === 'library' && d.value === 'all' && r.type === 'book';
+    return d.value === '*';
+  }
+
   /* ---------------- 纯函数：查询串 ---------------- */
 
   function buildQuery(params) {
@@ -436,6 +460,8 @@
     compatibilityReason,
     overviewMetrics,
     buildQuery,
+    parseScope,
+    scopeCovers,
     request,
     toast,
     errorText,

@@ -510,3 +510,41 @@ X-Mybooks-Runtime-Secret: <runtime-secret>
 - 配置历史版本与 diff 视图；插件自定义配置界面仍走 `/toolbox/tool/:id`。
 - Runtime stdout 仍不提供逐插件捕获。
 - 权限写入不修改 Kernel `GrantStore`（仅 Toolbox `state/grants.json`）。
+
+---
+
+## 16. Phase 4C.4-R 修复（2026-11-10）
+
+详见 [remediation.md](remediation.md)。契约增量：
+
+### 权限
+
+- `GET /api/plugins/:id/permissions` 新增 `out_of_range: string[]`：已授予但超出 Manifest 声明范围的历史条目。
+- `PUT /api/plugins/:id/permissions` 新增校验与错误码：
+
+| 场景 | 结果 |
+| --- | --- |
+| 请求 scope 超出 Manifest 声明（含 `book:1 → *`、`artifact:1 → artifact:*`、跨资源类型） | `400 PERMISSION_SCOPE_OUT_OF_RANGE`，消息含声明范围 |
+| Manifest 未写 scope | 视为 `*`（与历史裸权限条目一致） |
+| 保存成功后 | 响应含 `audit: { ok, recorded }`；`audit.ok=false` 表示业务已写入但审计失败 |
+
+资源包含规则（与 `grants-admin.scopeCovers` 一致）：`*` 覆盖一切；同类型 `type:*` 覆盖同类型值；
+`library:all` 覆盖 `book:<id>` / `book:*`；其余跨类型或无法证明的请求一律拒绝。
+
+### 配置
+
+- `GET /api/plugins/:id/config` 的 `version` 语义：**配置文件不存在时为 `''`**，存在时为内容哈希。
+- `PUT /api/plugins/:id/config` 用同一语义做 `if_version` 比较，首次保存不再返回 409。
+- 配置文件损坏/密钥不可读时返回 `502 CONFIG_UNAVAILABLE`（消息说明原因），不会覆盖原文件，
+  也不会回退为“空配置”。
+- 保存成功后响应含 `audit: { ok, recorded }`。
+
+### 内部桥
+
+```http
+GET/PUT /internal/tool/:id/config
+403 { "code": "CROSS_PLUGIN_DENIED" }   # 插件子进程访问其他插件配置
+```
+
+绑定在应用启动时从 `TOOLBOX_ONLY_TOOL` 固化；Supervisor 与共享宿主不绑定，保持管理能力。
+错误码：`CONFIG_CORRUPTED` / `CONFIG_KEY_UNREADABLE` / `CONFIG_READ_FAILED` / `CONFIG_DECRYPT_FAILED`。

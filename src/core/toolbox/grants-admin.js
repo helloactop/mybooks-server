@@ -88,6 +88,44 @@ function entryName(name, scope) {
   return scope === SCOPE_ALL ? name : `${name}:${scope}`;
 }
 
+// 解析资源范围：`*`、`type:value`。
+function parseScope(scope) {
+  const text = String(scope || '');
+  if (text === SCOPE_ALL) return { type: '*', value: '*' };
+  const index = text.indexOf(':');
+  if (index < 0) return { type: '', value: text };
+  return { type: text.slice(0, index), value: text.slice(index + 1) };
+}
+
+/**
+ * 判断“声明范围”是否覆盖“请求范围”。
+ *
+ * 资源模型（与 internal 路由实际使用的 resource 一致）：
+ *   · library:all —— 整个书库，覆盖 book:<id> / book:*；
+ *   · book:<id> / book:* —— 单本书 / 全部书；
+ *   · artifact:<id> / artifact:* / artifact:create —— 产物，独立于书库；
+ *   · * —— 全部资源。
+ *
+ * 不同资源类型之间没有天然包含关系，一律拒绝；
+ * 无法证明属于声明范围时返回 false（保守拒绝）。
+ */
+function scopeCovers(declared, requested) {
+  const dec = String(declared || '');
+  const req = String(requested || '');
+  if (dec === SCOPE_ALL) return true;
+  if (req === SCOPE_ALL) return false;
+  if (dec === req) return true;
+  const d = parseScope(dec);
+  const r = parseScope(req);
+  if (!d.type || !r.type) return false;
+  if (d.type !== r.type) {
+    // 只有“整个书库”能覆盖书级资源；其余跨类型一律不允许。
+    return d.type === 'library' && d.value === 'all' && r.type === 'book';
+  }
+  if (d.value === SCOPE_ALL) return true;
+  return false;
+}
+
 function currentEntries(policy, id) {
   const map = new Map();
   if (!policy.store) return map;
@@ -105,14 +143,18 @@ function normalizeRequested(permissions, declared, id) {
   if (permissions.length > MAX_PERMISSIONS) {
     throw new ToolboxError('PERMISSIONS_TOO_MANY', '一次提交的权限过多', 400);
   }
-  const declaredNames = new Set((declared || []).map((item) => item.name));
+  // 声明范围：Manifest 未写 scope 视为 “*”（与旧的裸权限条目语义一致）。
+  const declaredScope = new Map();
+  for (const item of declared || []) {
+    declaredScope.set(item.name, String(item.scope || '').trim() || SCOPE_ALL);
+  }
   const seen = new Map();
   for (const raw of permissions) {
     const name = String((raw && raw.name) || '').trim();
     if (!PERMISSION_SET.has(name)) {
       throw new ToolboxError('PERMISSION_INVALID', `未知权限：${name || '(空)'}`, 400);
     }
-    if (!declaredNames.has(name)) {
+    if (!declaredScope.has(name)) {
       // 禁止借管理中心扩大插件能力。
       throw new ToolboxError('PERMISSION_NOT_DECLARED', `权限 ${name} 未在 Manifest 中声明`, 400);
     }
@@ -121,15 +163,24 @@ function normalizeRequested(permissions, declared, id) {
       if (!scope) {
         throw new ToolboxError('PERMISSION_SCOPE_REQUIRED', `权限 ${name} 需要明确资源范围`, 400);
       }
+      try {
+        assertScope(scope);
+      } catch (err) {
+        throw new ToolboxError('PERMISSION_SCOPE_INVALID', `权限 ${name} 的资源范围不合法`, 400);
+      }
+      const allowed = declaredScope.get(name);
+      if (!scopeCovers(allowed, scope)) {
+        // 只做语法校验不够：必须确认实际范围没有超出 Manifest 声明。
+        throw new ToolboxError(
+          'PERMISSION_SCOPE_OUT_OF_RANGE',
+          `权限 ${name} 的范围 ${scope} 超出 Manifest 声明范围 ${allowed}`,
+          400,
+        );
+      }
     } else {
       scope = SCOPE_ALL;
     }
-    try {
-      assertScope(scope);
-    } catch (err) {
-      throw new ToolboxError('PERMISSION_SCOPE_INVALID', `权限 ${name} 的资源范围不合法`, 400);
-    }
-    // 同一权限多个 scope 时合并为一条，保持文件可读。
+    // 同一权限多个 scope 时合并，保持文件可读。
     if (!seen.has(name)) seen.set(name, new Set());
     seen.get(name).add(scope);
   }
@@ -183,8 +234,10 @@ function atomicWrite(document) {
  * 覆盖某个插件的完整授权集合。
  * @param {string} rawId
  * @param {{permissions?: Array, ifVersion?: string}} input
+ * @param {{auditLog?: object}} options 允许注入审计实现（测试审计失败路径）
  */
-async function updatePermissions(rawId, input = {}) {
+async function updatePermissions(rawId, input = {}, options = {}) {
+  const auditLog = options.auditLog || audit;
   const id = toolIdOf(rawId);
   const db = dbSingleton.db;
   const tool = toolboxRepo.getTool(db, id);
@@ -258,32 +311,38 @@ async function updatePermissions(rawId, input = {}) {
       },
     };
   }).then(async (result) => {
-    // 审计放到写入成功之后；失败也在上层捕获后记录。
+    // 审计在写入成功之后进行；两者是独立落盘，失败不回滚权限但必须上报。
+    const events = [];
     if (result.changed.granted.length) {
-      await audit.record({
+      events.push(auditLog.record({
         action: 'permission.grant', tool_id: id, result: 'success',
         detail: { changed_fields: result.changed.granted.slice(0, 20) },
-      });
+      }));
     }
     if (result.changed.revoked.length) {
-      await audit.record({
+      events.push(auditLog.record({
         action: 'permission.revoke', tool_id: id, result: 'success',
         detail: { changed_fields: result.changed.revoked.slice(0, 20) },
-      });
+      }));
     }
     if (result.changed.scope_updated.length) {
-      await audit.record({
+      events.push(auditLog.record({
         action: 'permission.scope.update', tool_id: id, result: 'success',
         detail: { changed_fields: result.changed.scope_updated.slice(0, 20) },
-      });
+      }));
     }
-    return result;
+    const auditResults = await Promise.all(events);
+    return {
+      ...result,
+      audit: { ok: auditResults.every((item) => item !== false), recorded: auditResults.length },
+    };
   });
 }
 
-async function recordFailure(id, action, code) {
-  if (!TOOL_ID_RE.test(String(id || ''))) return;
-  await audit.record({ action, tool_id: id, result: 'error', error_code: code || 'UNKNOWN' });
+async function recordFailure(id, action, code, options = {}) {
+  if (!TOOL_ID_RE.test(String(id || ''))) return false;
+  const auditLog = options.auditLog || audit;
+  return auditLog.record({ action, tool_id: id, result: 'error', error_code: code || 'UNKNOWN' });
 }
 
 module.exports = {
@@ -292,6 +351,8 @@ module.exports = {
   updatePermissions,
   recordFailure,
   normalizeRequested,
+  scopeCovers,
+  parseScope,
   PERMISSION_META,
   MAX_PERMISSIONS,
 };

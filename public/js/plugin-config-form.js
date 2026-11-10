@@ -28,6 +28,12 @@
     return 'string';
   }
 
+  // 本轮只支持标量控件；数组/对象只读展示，绝不伪装成可编辑的字符串。
+  function isUnsupportedType(node) {
+    const type = String((node && node.type) || '').toLowerCase();
+    return type === 'array' || type === 'object';
+  }
+
   /**
    * 由 Schema 生成表单字段。
    * 敏感字段永远不回填原值，只给出 configured 状态。
@@ -40,6 +46,7 @@
     return Object.keys(properties).map((key) => {
       const node = isPlainObject(properties[key]) ? properties[key] : {};
       const type = fieldType(node);
+      const unsupported = isUnsupportedType(node);
       const isSensitive = node['x-sensitive'] === true || flags[key] === true;
       const hasValue = source[key] !== undefined && source[key] !== null;
       // 布尔字段没有“空字符串”概念：未配置即 false，避免一进页面就被判成已修改。
@@ -50,7 +57,8 @@
         key,
         label: String(node.title || key),
         description: String(node.description || ''),
-        type,
+        type: unsupported ? String(node.type).toLowerCase() : type,
+        unsupported,
         required: required.has(key),
         sensitive: isSensitive,
         configured: isSensitive ? !!flags[key] : hasValue,
@@ -83,6 +91,8 @@
   // 返回 '' 表示通过；否则返回可直接展示的中文错误。
   function validateField(field, value) {
     if (!field) return '';
+    // 数组/对象不在本轮可编辑范围内，交给服务端与插件界面处理。
+    if (field.unsupported) return '';
     const empty = value === '' || value === null || value === undefined;
     if (field.required && empty) return '必填项不能为空';
     if (empty) return '';
@@ -126,6 +136,8 @@
     const errors = [];
     for (const field of fields || []) {
       const row = (state && state[field.key]) || { value: field.value, clear: false };
+      // 只读字段永不提交，避免把数组/对象压成字符串覆盖真实配置。
+      if (field.unsupported) continue;
       const raw = row.value;
       if (field.sensitive) {
         if (row.clear) {
@@ -144,6 +156,12 @@
     }
     for (const field of fields || []) {
       const row = (state && state[field.key]) || { value: field.value, clear: false };
+      if (field.unsupported) {
+        if (field.required && !field.configured) {
+          errors.push({ key: field.key, message: '该字段类型暂不支持在管理中心编辑，请先使用插件界面配置' });
+        }
+        continue;
+      }
       if (field.sensitive && row.clear) continue;
       const effective = field.sensitive
         ? (row.value === '' || row.value === null || row.value === undefined ? null : row.value)
@@ -165,6 +183,8 @@
     if (type === 'boolean') return '开关';
     if (type === 'integer') return '整数';
     if (type === 'number') return '数字';
+    if (type === 'array') return '列表（只读）';
+    if (type === 'object') return '对象（只读）';
     return '文本';
   }
 
@@ -175,5 +195,6 @@
     validateField,
     collectChanges,
     labelForType,
+    isUnsupportedType,
   };
 });

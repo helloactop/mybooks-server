@@ -374,13 +374,15 @@
     }
     const draft = new Map();
     for (const permission of data.requested || []) {
-      const scopes = granted.get(permission.name);
-      const fallback = permission.scope
-        || (permission.resource_scoped ? 'library:all' : '*');
+      const declared = String(permission.scope || '').trim() || '*';
+      // 超出 Manifest 声明范围的历史授权不进入草稿：保存即清理，避免悄悄保留。
+      const scopes = (granted.get(permission.name) || []).filter((scope) => P.scopeCovers(declared, scope));
+      const fallback = declared === '*' && permission.resource_scoped ? 'library:all' : declared;
       draft.set(permission.name, {
-        enabled: !!scopes,
-        scope: scopes && scopes.length ? scopes[0] : fallback,
-        grantedScopes: scopes || [],
+        enabled: scopes.length > 0,
+        scope: scopes.length ? scopes[0] : (permission.resource_scoped ? fallback : '*'),
+        grantedScopes: scopes,
+        declared: permission.resource_scoped ? declared : '',
       });
     }
     state.permDraft = { draft, baseline: permSignature(), dirty: false };
@@ -429,6 +431,8 @@
       const meta = catalog.get(permission.name) || { label: permission.name, risk: 'medium', resource_scoped: permission.resource_scoped };
       const risk = RISK_META[meta.risk] || RISK_META.medium;
       const scopeDisabled = !editable || !row.enabled || !meta.resource_scoped;
+      const declared = String(permission.scope || '').trim() || '*';
+      const inRange = !meta.resource_scoped || P.scopeCovers(declared, row.scope || '');
       return `
         <div class="pc-perm-row${row.enabled ? ' is-granted' : ''}" data-perm="${P.escapeHtml(permission.name)}">
           <div class="pc-perm-main">
@@ -445,24 +449,32 @@
                 ${permission.enforced === false ? badge('宿主未强制', 'is-warn') : ''}
               </span>
               <span class="pc-perm-desc">${P.escapeHtml(permission.reason || 'Manifest 未说明申请理由')}</span>
+              ${meta.resource_scoped ? `<span class="pc-perm-declared">Manifest 声明范围：${P.escapeHtml(declared)}</span>` : ''}
             </div>
           </div>
           <div class="pc-perm-scope">
-            <input class="tb-input pc-scope-input" type="text"
+            <input class="tb-input pc-scope-input${inRange ? '' : ' is-invalid'}" type="text"
               data-perm-scope="${P.escapeHtml(permission.name)}"
               value="${P.escapeHtml(row.scope || '')}"
               placeholder="${meta.resource_scoped ? '资源范围，如 library:all / artifact:*' : '该权限不需要资源范围'}"
               aria-label="${P.escapeHtml(permission.name)} 的资源范围"
               ${scopeDisabled ? 'disabled' : ''}>
+            <span class="pc-scope-hint${inRange ? '' : ' is-invalid'}" data-perm-hint="${P.escapeHtml(permission.name)}">
+              ${meta.resource_scoped && !inRange ? '超出 Manifest 声明范围，保存会被服务端拒绝' : ''}
+            </span>
           </div>
         </div>`;
     }).join('');
 
-    const extra = (data.effective || [])
+    const undeclared = (data.effective || [])
       .filter((item) => !declaredNames.has(item.permission))
       .map((item) => (item.scope === '*' ? item.permission : `${item.permission}:${item.scope}`));
-    const extraHtml = extra.length
-      ? `<div class="tb-note is-warn">已授予但 Manifest 未声明的权限：${P.escapeHtml(extra.join('、'))}。保存后这些授权会被撤销。</div>`
+    const outOfRange = data.out_of_range || [];
+    const notices = [];
+    if (undeclared.length) notices.push(`已授予但 Manifest 未声明：${undeclared.join('、')}，保存后会被撤销`);
+    if (outOfRange.length) notices.push(`已授予但超出 Manifest 声明范围：${outOfRange.join('、')}，保存后会被撤销`);
+    const extraHtml = notices.length
+      ? `<div class="tb-note is-warn">${P.escapeHtml(notices.join('；'))}</div>`
       : '';
 
     $id('pdPermList').innerHTML = (rows || '<p class="tb-muted">该插件没有声明任何权限。</p>') + extraHtml;
@@ -514,6 +526,9 @@
       resetPermDraft(state.permissions);
       renderPermissions(state.permissions);
       P.toast('权限已保存，撤销即时生效');
+      if (result.audit && result.audit.ok === false) {
+        P.toast('权限已保存，但审计写入失败；请检查审计日志目录', true);
+      }
     } catch (err) {
       if (err.status === 409) {
         P.toast('权限策略已被其他操作修改，已重新加载，请重试', true);
@@ -596,7 +611,13 @@
       const row = state.configState[field.key];
       const common = `data-config-key="${P.escapeHtml(field.key)}" aria-label="${P.escapeHtml(field.label)}"`;
       let control = '';
-      if (field.type === 'boolean') {
+      if (field.unsupported) {
+        // 数组/对象只读展示：不允许当作字符串保存，也不提供假编辑。
+        const text = field.value === '' || field.value === undefined || field.value === null
+          ? '（未配置）'
+          : JSON.stringify(field.value, null, 2);
+        control = `<pre class="pc-config-json">${P.escapeHtml(String(text).slice(0, 2000))}</pre>`;
+      } else if (field.type === 'boolean') {
         control = `<label class="pc-config-boolean"><input type="checkbox" data-config-key="${P.escapeHtml(field.key)}"
           ${row.value === true ? 'checked' : ''}> <span>${row.value === true ? '已启用' : '已停用'}</span></label>`;
       } else if (field.enumValues.length) {
@@ -613,13 +634,14 @@
         control = `<input class="tb-input pc-config-input" type="text" ${common} value="${P.escapeHtml(row.value)}">`;
       }
       return `
-        <div class="pc-config-row${field.sensitive ? ' is-sensitive' : ''}" data-config-row="${P.escapeHtml(field.key)}">
+        <div class="pc-config-row${field.sensitive ? ' is-sensitive' : ''}${field.unsupported ? ' is-readonly' : ''}" data-config-row="${P.escapeHtml(field.key)}">
           <div class="pc-config-label">
             <span class="pc-config-name">${P.escapeHtml(field.label)}
               ${field.required ? '<span class="pc-required" aria-hidden="true">*</span>' : ''}
             </span>
             <span class="pc-config-key">${P.escapeHtml(field.key)} · ${P.escapeHtml(F.labelForType(field.type))}${field.required ? ' · 必填' : ''}</span>
             ${field.description ? `<span class="pc-config-desc">${P.escapeHtml(field.description)}</span>` : ''}
+            ${field.unsupported ? '<span class="pc-config-desc">该类型暂不支持在管理中心编辑，请使用插件界面配置。</span>' : ''}
           </div>
           <div class="pc-config-value">
             ${control}
@@ -655,6 +677,7 @@
 
   function syncConfigStateFromDom() {
     for (const field of state.configFields) {
+      if (field.unsupported) continue;
       const row = state.configState[field.key];
       if (field.type === 'boolean') {
         const input = document.querySelector(`input[type="checkbox"][data-config-key="${field.key}"]`);
@@ -708,6 +731,9 @@
       P.toast(result.changed && result.changed.fields.length
         ? `已保存 ${result.changed.fields.length} 个字段`
         : '配置未发生变化');
+      if (result.audit && result.audit.ok === false) {
+        P.toast('配置已保存，但审计写入失败；请检查审计日志目录', true);
+      }
     } catch (err) {
       if (err.status === 409 || err.code === 'CONFIG_VERSION_CONFLICT') {
         P.toast('配置已被其他操作修改，已重新加载，请重试', true);
@@ -950,9 +976,19 @@
     $id('pdPermList').addEventListener('input', (event) => {
       const input = event.target.closest('[data-perm-scope]');
       if (!input || !state.permDraft) return;
-      const row = state.permDraft.draft.get(input.dataset.permScope);
+      const name = input.dataset.permScope;
+      const row = state.permDraft.draft.get(name);
       if (!row) return;
       row.scope = input.value;
+      // 本地提示只是体验优化，保存时仍由服务端做最终范围判定。
+      const declared = row.declared || '*';
+      const inRange = P.scopeCovers(declared, String(input.value).trim());
+      input.classList.toggle('is-invalid', !inRange);
+      const hint = document.querySelector(`[data-perm-hint="${name}"]`);
+      if (hint) {
+        hint.textContent = inRange ? '' : '超出 Manifest 声明范围，保存会被服务端拒绝';
+        hint.classList.toggle('is-invalid', !inRange);
+      }
       updatePermBar();
     });
     $id('pdPermSave').addEventListener('click', savePermissions);

@@ -142,6 +142,36 @@ test('collectChanges：本地校验错误会阻止提交', () => {
   assert.equal(result.changed, 1);
 });
 
+test('数组/对象字段只读且永不提交', () => {
+  const schema = {
+    type: 'object',
+    properties: {
+      tags: { type: 'array', items: { type: 'string' }, title: '标签' },
+      meta: { type: 'object' },
+    },
+  };
+  const fields = F.buildFields(schema, { tags: ['a'], meta: { x: 1 } }, {});
+  assert.equal(fields[0].unsupported, true);
+  assert.equal(fields[0].type, 'array');
+  assert.equal(fields[1].unsupported, true);
+  assert.equal(F.labelForType('array'), '列表（只读）');
+  assert.equal(F.labelForType('object'), '对象（只读）');
+  assert.equal(F.isUnsupportedType({ type: 'array' }), true);
+
+  const result = F.collectChanges(fields, { tags: { value: '[a]' }, meta: { value: '{}' } });
+  assert.deepEqual(result.values, {});
+  assert.deepEqual(result.clear, []);
+  assert.equal(result.changed, 0);
+});
+
+test('必填的数组/对象字段未配置时阻止保存', () => {
+  const schema = { type: 'object', properties: { tags: { type: 'array' } }, required: ['tags'] };
+  const fields = F.buildFields(schema, {}, {});
+  const result = F.collectChanges(fields, {});
+  assert.ok(result.errors.some((item) => item.key === 'tags' && /暂不支持/.test(item.message)));
+  assert.equal(result.changed, 0);
+});
+
 test('labelForType 覆盖四种受支持类型', () => {
   assert.equal(F.labelForType('string'), '文本');
   assert.equal(F.labelForType('integer'), '整数');

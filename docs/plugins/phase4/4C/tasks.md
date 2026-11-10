@@ -251,6 +251,25 @@ Docker 镜像内 Runtime 79 项 OK（1 skipped），并真实调用容器 `PUT/G
 
 未完成：配置历史/diff 视图；运行时 stdout 采集；`network.*` 等未强制权限仍只做展示。
 
+### 4C.4-R 安全修复（2026-11-10）
+
+详情见 [remediation.md](remediation.md)。摘要：
+
+- P1-1：权限写入增加 Manifest scope 语义校验（`scopeCovers`），拒绝 `book:1 → *`、
+  `artifact:1 → artifact:*`、跨资源类型与历史越权保留；权限视图新增 `out_of_range`。
+- P1-2：Runtime 配置桥按启动时绑定的插件身份拒绝跨插件 GET/PUT（`CROSS_PLUGIN_DENIED`），
+  Supervisor/宿主路径不受影响。
+- P2-1：配置损坏/密钥不可读显式失败，不再降级为空对象；密钥创建改为独占创建。
+- P2-2：配置文件不存在时 GET/PUT 版本统一为空串，首次保存不再 409。
+- P2-3：权限/配置写入响应携带 `audit.ok`，审计失败显式提示且不回滚业务写入。
+- P2-4：`array`/`object` 字段只读展示，永不提交为字符串。
+
+新增测试：`plugins-scope-boundary`（9）、`plugins-config-first-save`（8）、
+`plugins-audit-failure`（5）、`plugins-detail-ui`（+2）、`test_config_identity.py`（7）、
+`test_storage_recovery.py`（9）。
+
+实测：Node 914/914；Python SDK 35/35；Runtime 95（10 skipped）；Docker 95（1 skipped）。
+
 ---
 
 ## 4C.5 集成与验收

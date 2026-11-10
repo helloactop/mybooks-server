@@ -252,6 +252,8 @@ SDK 是可选依赖；旧插件移除 import 即可恢复 CoreAPI 调用。内�
 ## 4C：插件商店与宿主管理 UI
 
 > 状态：4C.1–4C.4 已实施（2026-11-10）：只读 API、`/plugins` 页面、权限写入、配置写入与审计。
+> 4C.4-R 已完成安全修复与专项回归（scope 越权、跨插件配置访问、配置损坏降级、首次保存、
+> 审计可见性、Schema 类型一致性），结论 PASS，详见 [4C/remediation.md](4C/remediation.md)。
 > 4C.5 集成验收未完成。详见 [4C/tasks.md](4C/tasks.md)、[4C/API-SPEC.md](4C/API-SPEC.md)。
 > 改动尚未提交。
 

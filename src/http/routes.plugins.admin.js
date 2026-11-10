@@ -30,6 +30,7 @@ function fail(res, err) {
   const message = known ? err.message : '插件管理请求失败';
   const body = { error: { code, message }, code, message };
   if (known && err.details !== undefined) body.details = err.details;
+  if (known && err.audit_recorded !== undefined) body.audit_ok = !!err.audit_recorded;
   return res.status(status).json(body);
 }
 
@@ -197,7 +198,8 @@ router.put('/api/plugins/:id/permissions', async (req, res) => {
     });
     res.json({ ...result, permissions: await center.permissions(id) });
   } catch (err) {
-    await grantsAdmin.recordFailure(id, 'permission.update', err && err.code);
+    const recorded = await grantsAdmin.recordFailure(id, 'permission.update', err && err.code);
+    if (err && typeof err === 'object') err.audit_recorded = recorded;
     fail(res, err);
   }
 });
@@ -214,7 +216,8 @@ router.put('/api/plugins/:id/config', async (req, res) => {
       ifVersion: body.if_version,
     }));
   } catch (err) {
-    await configService.recordFailure(id, 'config.update', err && err.code);
+    const recorded = await configService.recordFailure(id, 'config.update', err && err.code);
+    if (err && typeof err === 'object') err.audit_recorded = recorded;
     fail(res, err);
   }
 });
